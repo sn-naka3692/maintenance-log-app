@@ -169,7 +169,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       r.endTime = end;
       r.workContent = _workContentCtrl.text.trim();
       r.equipmentModel = _equipmentModelCtrl.text.trim();
-      r.responseTypeIndex = _responseType.index;
+      r.responseType = _responseType;
       r.partsUsed = _parts;
       r.photoPaths = _photoPaths;
       r.notes = _notesCtrl.text.trim();
@@ -190,7 +190,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         endTime: end,
         workContent: _workContentCtrl.text.trim(),
         equipmentModel: _equipmentModelCtrl.text.trim(),
-        responseTypeIndex: _responseType.index,
+        responseType: _responseType,
         partsUsed: _parts,
         photoPaths: _photoPaths,
         notes: _notesCtrl.text.trim(),

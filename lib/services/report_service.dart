@@ -1,83 +1,66 @@
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/work_report.dart';
-import '../models/part_used.dart';
 import '../models/user.dart';
 
-/// 日報・ユーザーデータの永続化を担当するサービス
+/// 日報・ユーザーデータの永続化を担当するサービス(Firestore)
 class ReportService {
-  static const String reportBoxName = 'work_reports';
-  static const String userBoxName = 'app_users';
   static const String currentUserKey = 'current_user_id';
-  static const String settingsBoxName = 'app_settings';
 
   static final ReportService instance = ReportService._internal();
   ReportService._internal();
 
-  late Box<WorkReport> _reportBox;
-  late Box<AppUser> _userBox;
-  late Box _settingsBox;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
   final _uuid = const Uuid();
 
+  CollectionReference<Map<String, dynamic>> get _usersCol =>
+      _db.collection('users');
+  CollectionReference<Map<String, dynamic>> get _reportsCol =>
+      _db.collection('work_reports');
+
+  List<AppUser> _usersCache = [];
+  List<WorkReport> _reportsCache = [];
+
   Future<void> init() async {
-    await Hive.initFlutter();
-    Hive.registerAdapter(AppUserAdapter());
-    Hive.registerAdapter(PartUsedAdapter());
-    Hive.registerAdapter(WorkReportAdapter());
-
-    _reportBox = await Hive.openBox<WorkReport>(reportBoxName);
-    _userBox = await Hive.openBox<AppUser>(userBoxName);
-    _settingsBox = await Hive.openBox(settingsBoxName);
-
-    await _seedInitialData();
+    await _refreshUsersCache();
+    await _refreshReportsCache();
   }
 
-  Future<void> _seedInitialData() async {
-    if (_userBox.isEmpty) {
-      final admin = AppUser(
-        id: _uuid.v4(),
-        name: '管理者(店長)',
-        employeeCode: 'A001',
-        roleIndex: UserRole.admin.index,
-        department: '本社管理部',
-        createdAt: DateTime.now(),
-      );
-      final staffNames = [
-        ['佐藤 太郎', 'S001', '冷凍機部門'],
-        ['鈴木 一郎', 'S002', '空調部門'],
-        ['高橋 次郎', 'S003', '冷凍機部門'],
-      ];
-      await _userBox.put(admin.id, admin);
-      for (final s in staffNames) {
-        final u = AppUser(
-          id: _uuid.v4(),
-          name: s[0],
-          employeeCode: s[1],
-          roleIndex: UserRole.staff.index,
-          department: s[2],
-          createdAt: DateTime.now(),
-        );
-        await _userBox.put(u.id, u);
-      }
-      await _settingsBox.put(currentUserKey, admin.id);
-    }
+  Future<void> _refreshUsersCache() async {
+    final snap = await _usersCol.get();
+    _usersCache = snap.docs
+        .map((d) => AppUser.fromMap(d.id, d.data()))
+        .toList();
+  }
+
+  Future<void> _refreshReportsCache() async {
+    final snap = await _reportsCol.get();
+    _reportsCache = snap.docs
+        .map((d) => WorkReport.fromMap(d.id, d.data()))
+        .toList();
+    _reportsCache.sort((a, b) => b.visitDate.compareTo(a.visitDate));
   }
 
   // ------------ User ------------
-  List<AppUser> getAllUsers() => _userBox.values.toList();
+  List<AppUser> getAllUsers() => _usersCache;
 
-  AppUser? getCurrentUser() {
-    final id = _settingsBox.get(currentUserKey);
-    if (id == null) return null;
+  Future<AppUser?> getCurrentUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = prefs.getString(currentUserKey);
+    if (id == null) {
+      return _usersCache.isNotEmpty ? _usersCache.first : null;
+    }
     try {
-      return _userBox.values.firstWhere((u) => u.id == id);
+      return _usersCache.firstWhere((u) => u.id == id);
     } catch (_) {
-      return _userBox.values.isNotEmpty ? _userBox.values.first : null;
+      return _usersCache.isNotEmpty ? _usersCache.first : null;
     }
   }
 
   Future<void> setCurrentUser(String userId) async {
-    await _settingsBox.put(currentUserKey, userId);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(currentUserKey, userId);
   }
 
   Future<AppUser> addUser({
@@ -86,54 +69,60 @@ class ReportService {
     required UserRole role,
     required String department,
   }) async {
+    final id = _uuid.v4();
     final u = AppUser(
-      id: _uuid.v4(),
+      id: id,
       name: name,
       employeeCode: employeeCode,
-      roleIndex: role.index,
+      role: role,
       department: department,
       createdAt: DateTime.now(),
     );
-    await _userBox.put(u.id, u);
+    await _usersCol.doc(id).set(u.toMap());
+    await _refreshUsersCache();
     return u;
   }
 
   // ------------ Report ------------
-  List<WorkReport> getAllReports() {
-    final list = _reportBox.values.toList();
-    list.sort((a, b) => b.visitDate.compareTo(a.visitDate));
-    return list;
-  }
+  List<WorkReport> getAllReports() => _reportsCache;
 
   List<WorkReport> getReportsByAuthor(String authorId) {
-    return getAllReports().where((r) => r.authorId == authorId).toList();
+    return _reportsCache.where((r) => r.authorId == authorId).toList();
   }
 
   WorkReport? getReportById(String id) {
     try {
-      return _reportBox.values.firstWhere((r) => r.id == id);
+      return _reportsCache.firstWhere((r) => r.id == id);
     } catch (_) {
       return null;
     }
   }
 
   Future<WorkReport> createReport(WorkReport report) async {
-    await _reportBox.put(report.id, report);
+    await _reportsCol.doc(report.id).set(report.toMap());
+    await _refreshReportsCache();
     return report;
   }
 
   Future<void> updateReport(WorkReport report) async {
     report.updatedAt = DateTime.now();
-    await _reportBox.put(report.id, report);
+    await _reportsCol.doc(report.id).update(report.toMap());
+    await _refreshReportsCache();
   }
 
   Future<void> deleteReport(String id) async {
-    await _reportBox.delete(id);
+    await _reportsCol.doc(id).delete();
+    await _refreshReportsCache();
   }
 
   String newId() => _uuid.v4();
 
-  // ------------ Search / Filter ------------
+  Future<void> refreshAll() async {
+    await _refreshUsersCache();
+    await _refreshReportsCache();
+  }
+
+  // ------------ Search / Filter (in-memory, avoids Firestore composite index issues) ------------
   List<WorkReport> search({
     String? keyword,
     String? authorId,
@@ -143,7 +132,7 @@ class ReportService {
     bool onlySuccess = false,
     bool onlyIssues = false,
   }) {
-    var list = getAllReports();
+    var list = List<WorkReport>.from(_reportsCache);
 
     if (authorId != null && authorId.isNotEmpty) {
       list = list.where((r) => r.authorId == authorId).toList();

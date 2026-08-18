@@ -18,7 +18,47 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = context.watch<AppState>().isAdmin;
+    final appState = context.watch<AppState>();
+
+    if (appState.isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('データを読み込んでいます...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (appState.error != null) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+                const SizedBox(height: 16),
+                Text(appState.error!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => appState.init(),
+                  child: const Text('再試行'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final isAdmin = appState.isAdmin;
 
     final pages = [
       const HomeScreen(),

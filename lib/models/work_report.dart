@@ -1,7 +1,4 @@
-import 'package:hive/hive.dart';
 import 'part_used.dart';
-
-part 'work_report.g.dart';
 
 /// 対応区分
 enum ResponseType {
@@ -27,68 +24,50 @@ extension ResponseTypeLabel on ResponseType {
         return 'その他';
     }
   }
+
+  String get value {
+    switch (this) {
+      case ResponseType.regularInspection:
+        return 'regularInspection';
+      case ResponseType.breakdown:
+        return 'breakdown';
+      case ResponseType.repair:
+        return 'repair';
+      case ResponseType.installation:
+        return 'installation';
+      case ResponseType.other:
+        return 'other';
+    }
+  }
+
+  static ResponseType fromValue(String value) {
+    return ResponseType.values.firstWhere(
+      (t) => t.value == value,
+      orElse: () => ResponseType.other,
+    );
+  }
 }
 
-@HiveType(typeId: 2)
-class WorkReport extends HiveObject {
-  @HiveField(0)
+class WorkReport {
   String id;
-
-  @HiveField(1)
   String authorId;
-
-  @HiveField(2)
   String authorName;
-
-  @HiveField(3)
   String clientName; // 訪問先(顧客名)
-
-  @HiveField(4)
   DateTime visitDate; // 訪問日
-
-  @HiveField(5)
   DateTime startTime; // 作業開始時刻
-
-  @HiveField(6)
   DateTime endTime; // 作業終了時刻
-
-  @HiveField(7)
   String workContent; // 作業内容
-
-  @HiveField(8)
   String equipmentModel; // 機器型番(プロワン参照用)
-
-  @HiveField(9)
-  int responseTypeIndex; // 対応区分
-
-  @HiveField(10)
+  ResponseType responseType; // 対応区分
   List<PartUsed> partsUsed; // 使用部品
-
-  @HiveField(11)
-  List<String> photoPaths; // 写真パス(ローカル)
-
-  @HiveField(12)
+  List<String> photoPaths; // 写真パス(ローカル/URL)
   String notes; // 備考
-
-  @HiveField(13)
   String successPoints; // うまくいったこと(ナレッジ共有)
-
-  @HiveField(14)
   String issuesPoints; // 課題・失敗・改善点(ナレッジ共有)
-
-  @HiveField(15)
   List<String> tags; // タグ(症状/機種/対応区分など自由入力)
-
-  @HiveField(16)
   String proWanRefNumber; // プロワン管理番号(参照用・将来API連携)
-
-  @HiveField(17)
   String storeSystemReportCopy; // コンビニ側システム入力内容の控え(社内保存用)
-
-  @HiveField(18)
   DateTime createdAt;
-
-  @HiveField(19)
   DateTime updatedAt;
 
   WorkReport({
@@ -101,7 +80,7 @@ class WorkReport extends HiveObject {
     required this.endTime,
     required this.workContent,
     this.equipmentModel = '',
-    this.responseTypeIndex = 0,
+    this.responseType = ResponseType.regularInspection,
     List<PartUsed>? partsUsed,
     List<String>? photoPaths,
     this.notes = '',
@@ -116,10 +95,75 @@ class WorkReport extends HiveObject {
        photoPaths = photoPaths ?? [],
        tags = tags ?? [];
 
-  ResponseType get responseType => ResponseType.values[responseTypeIndex];
-
   Duration get workDuration => endTime.difference(startTime);
 
   bool get hasIssues => issuesPoints.trim().isNotEmpty;
   bool get hasSuccess => successPoints.trim().isNotEmpty;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'author_id': authorId,
+      'author_name': authorName,
+      'client_name': clientName,
+      'visit_date': visitDate,
+      'start_time': startTime,
+      'end_time': endTime,
+      'work_content': workContent,
+      'equipment_model': equipmentModel,
+      'response_type': responseType.value,
+      'parts_used': partsUsed.map((p) => p.toMap()).toList(),
+      'photo_paths': photoPaths,
+      'notes': notes,
+      'success_points': successPoints,
+      'issues_points': issuesPoints,
+      'tags': tags,
+      'pro_wan_ref_number': proWanRefNumber,
+      'store_system_report_copy': storeSystemReportCopy,
+      'created_at': createdAt,
+      'updated_at': updatedAt,
+    };
+  }
+
+  factory WorkReport.fromMap(String id, Map<String, dynamic> map) {
+    return WorkReport(
+      id: id,
+      authorId: map['author_id'] as String? ?? '',
+      authorName: map['author_name'] as String? ?? '',
+      clientName: map['client_name'] as String? ?? '',
+      visitDate: _parseDate(map['visit_date']),
+      startTime: _parseDate(map['start_time']),
+      endTime: _parseDate(map['end_time']),
+      workContent: map['work_content'] as String? ?? '',
+      equipmentModel: map['equipment_model'] as String? ?? '',
+      responseType: ResponseTypeLabel.fromValue(
+        map['response_type'] as String? ?? '',
+      ),
+      partsUsed: (map['parts_used'] as List<dynamic>? ?? [])
+          .map((e) => PartUsed.fromMap(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      photoPaths: (map['photo_paths'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      notes: map['notes'] as String? ?? '',
+      successPoints: map['success_points'] as String? ?? '',
+      issuesPoints: map['issues_points'] as String? ?? '',
+      tags: (map['tags'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      proWanRefNumber: map['pro_wan_ref_number'] as String? ?? '',
+      storeSystemReportCopy: map['store_system_report_copy'] as String? ?? '',
+      createdAt: _parseDate(map['created_at']),
+      updatedAt: _parseDate(map['updated_at']),
+    );
+  }
+
+  static DateTime _parseDate(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    try {
+      return (value as dynamic).toDate() as DateTime;
+    } catch (_) {
+      return DateTime.now();
+    }
+  }
 }

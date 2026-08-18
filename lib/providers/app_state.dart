@@ -15,14 +15,32 @@ class AppState extends ChangeNotifier {
   List<WorkReport> _reports = [];
   List<WorkReport> get reports => _reports;
 
+  bool _isLoading = true;
+  bool get isLoading => _isLoading;
+
+  String? _error;
+  String? get error => _error;
+
   Future<void> init() async {
-    _users = _service.getAllUsers();
-    _currentUser = _service.getCurrentUser();
-    refreshReports();
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _service.init();
+      _users = _service.getAllUsers();
+      _currentUser = await _service.getCurrentUser();
+      _reports = _service.getAllReports();
+      _error = null;
+    } catch (e) {
+      _error = 'データの読み込みに失敗しました: $e';
+    }
+    _isLoading = false;
+    notifyListeners();
   }
 
-  void refreshReports() {
+  Future<void> refreshReports() async {
+    await _service.refreshAll();
     _reports = _service.getAllReports();
+    _users = _service.getAllUsers();
     notifyListeners();
   }
 
@@ -36,22 +54,25 @@ class AppState extends ChangeNotifier {
   Future<void> switchUser(String userId) async {
     await _service.setCurrentUser(userId);
     _currentUser = _users.firstWhere((u) => u.id == userId);
-    refreshReports();
+    notifyListeners();
   }
 
   Future<void> addReport(WorkReport report) async {
     await _service.createReport(report);
-    refreshReports();
+    _reports = _service.getAllReports();
+    notifyListeners();
   }
 
   Future<void> updateReport(WorkReport report) async {
     await _service.updateReport(report);
-    refreshReports();
+    _reports = _service.getAllReports();
+    notifyListeners();
   }
 
   Future<void> deleteReport(String id) async {
     await _service.deleteReport(id);
-    refreshReports();
+    _reports = _service.getAllReports();
+    notifyListeners();
   }
 
   Future<AppUser> addUser({

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "924627646300",
+    "project_id": "sn-report",
+    "storage_bucket": "sn-report.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:924627646300:android:e58c46a5c18572c9943399",
+        "android_client_info": {
+          "package_name": "com.maintenancelog.log"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYFHqFn38F5qOCAbOBghkh207NT2-itzA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
