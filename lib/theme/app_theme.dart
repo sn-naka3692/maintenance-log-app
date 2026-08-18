@@ -116,6 +116,12 @@ Color responseTypeColor(String label) {
       return AppColors.warning;
     case '新設・設置':
       return AppColors.primary;
+    case '事務':
+      return const Color(0xFF7B5EC5); // 紫系(バックオフィス)
+    case '現場事務':
+      return const Color(0xFF8D6E63); // ブラウン系(バックオフィス)
+    case '倉庫作業':
+      return const Color(0xFF546E7A); // ブルーグレー系(バックオフィス)
     default:
       return AppColors.textSecondary;
   }

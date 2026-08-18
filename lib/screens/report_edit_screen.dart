@@ -228,10 +228,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             const SizedBox(height: 8),
             _buildField(
               controller: _clientNameCtrl,
-              label: '訪問先(顧客名)',
-              icon: Icons.storefront,
+              label: _responseType.isBackOffice ? '対象・場所(任意)' : '訪問先(顧客名)',
+              icon: _responseType.isBackOffice
+                  ? Icons.apartment
+                  : Icons.storefront,
               validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? '必須項目です' : null,
+                  (!_responseType.isBackOffice &&
+                      (v == null || v.trim().isEmpty))
+                  ? '必須項目です'
+                  : null,
             ),
             const SizedBox(height: 12),
             InkWell(
@@ -285,14 +290,40 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 prefixIcon: Icon(Icons.category),
               ),
               items: ResponseType.values
-                  .map((t) => DropdownMenuItem(value: t, child: Text(t.label)))
+                  .map(
+                    (t) => DropdownMenuItem(
+                      value: t,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            t.isBackOffice
+                                ? Icons.apartment
+                                : Icons.build_circle_outlined,
+                            size: 16,
+                            color: responseTypeColor(t.label),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(t.label),
+                        ],
+                      ),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) => setState(() => _responseType = v!),
             ),
+            if (_responseType.isBackOffice)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'バックオフィス業務は機器型番・プロワン管理番号の入力は不要です(任意)。',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ),
             const SizedBox(height: 12),
             _buildField(
               controller: _equipmentModelCtrl,
-              label: '機器型番(プロワン参照)',
+              label: _responseType.isBackOffice ? '機器型番(任意)' : '機器型番(プロワン参照)',
               icon: Icons.qr_code,
               hint: '例: 冷凍機型番 XR-500',
             ),
@@ -305,11 +336,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             ),
 
             const SizedBox(height: 20),
-            _SectionTitle('作業内容'),
+            _SectionTitle(_responseType.isBackOffice ? '業務内容' : '作業内容'),
             const SizedBox(height: 8),
             _buildField(
               controller: _workContentCtrl,
-              label: '作業内容',
+              label: _responseType.isBackOffice ? '業務内容' : '作業内容',
               icon: Icons.build,
               maxLines: 4,
               validator: (v) =>

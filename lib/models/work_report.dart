@@ -6,6 +6,9 @@ enum ResponseType {
   breakdown, // 故障対応
   repair, // 修理
   installation, // 新設・設置
+  officeWork, // 事務
+  fieldOffice, // 現場事務
+  warehouseWork, // 倉庫作業
   other, // その他
 }
 
@@ -20,8 +23,26 @@ extension ResponseTypeLabel on ResponseType {
         return '修理';
       case ResponseType.installation:
         return '新設・設置';
+      case ResponseType.officeWork:
+        return '事務';
+      case ResponseType.fieldOffice:
+        return '現場事務';
+      case ResponseType.warehouseWork:
+        return '倉庫作業';
       case ResponseType.other:
         return 'その他';
+    }
+  }
+
+  /// バックオフィス系区分かどうか(現場作業と区別してUI表示等に使える)
+  bool get isBackOffice {
+    switch (this) {
+      case ResponseType.officeWork:
+      case ResponseType.fieldOffice:
+      case ResponseType.warehouseWork:
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -35,6 +56,12 @@ extension ResponseTypeLabel on ResponseType {
         return 'repair';
       case ResponseType.installation:
         return 'installation';
+      case ResponseType.officeWork:
+        return 'officeWork';
+      case ResponseType.fieldOffice:
+        return 'fieldOffice';
+      case ResponseType.warehouseWork:
+        return 'warehouseWork';
       case ResponseType.other:
         return 'other';
     }

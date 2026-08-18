@@ -107,7 +107,9 @@ class ReportDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            report.clientName,
+            report.clientName.isNotEmpty
+                ? report.clientName
+                : report.responseType.label,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 4),

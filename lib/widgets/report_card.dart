@@ -62,7 +62,9 @@ class ReportCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                report.clientName,
+                report.clientName.isNotEmpty
+                    ? report.clientName
+                    : report.responseType.label,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
