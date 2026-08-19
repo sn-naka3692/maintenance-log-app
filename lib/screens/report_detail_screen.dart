@@ -139,6 +139,29 @@ class ReportDetailScreen extends StatelessWidget {
               ),
             ],
           ),
+          if (report.coWorkerIds.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.groups_outlined,
+                  size: 16,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '共同作業者: ${report.coWorkerIds.map((id) {
+                      final u = appState.users.where((u) => u.id == id).firstOrNull;
+                      return u?.name ?? '(不明)';
+                    }).join('、')}',
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const Divider(height: 32),
 
           if (report.equipmentModel.isNotEmpty)
@@ -285,7 +308,6 @@ class _StoreSystemReportView extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <MapEntry<String, String>>[
       MapEntry('弊社受付No.', data.receiptNumber),
-      MapEntry('作業者2', data.secondWorkerName),
       MapEntry('冷媒種類', data.refrigerantType),
       MapEntry('充填量', data.refrigerantAmount),
       MapEntry('依頼内容', data.requestContent),

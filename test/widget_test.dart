@@ -28,6 +28,7 @@ void main() {
         id: 'test-id',
         authorId: 'user-1',
         authorName: 'テスト太郎',
+        coWorkerIds: const ['user-2', 'user-3'],
         clientName: 'テスト商店',
         visitDate: now,
         startTime: now,
@@ -55,6 +56,7 @@ void main() {
       expect(restored.partsUsed.first.name, 'フィルター');
       expect(restored.tags, contains('冷蔵庫'));
       expect(restored.storeSystemReportCopy.receiptNumber, 'R-001');
+      expect(restored.coWorkerIds, ['user-2', 'user-3']);
     });
   });
 

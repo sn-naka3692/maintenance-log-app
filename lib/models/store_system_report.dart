@@ -6,7 +6,6 @@
 /// 自由記述だと項目の記入漏れが起きやすいため、項目ごとに入力欄を分ける。
 class StoreSystemReport {
   String receiptNumber; // 弊社受付No.
-  String secondWorkerName; // 作業者2(担当者以外にもう一名作業した場合)
   String refrigerantType; // 冷媒種類
   String refrigerantAmount; // 充填量
   String requestContent; // 依頼内容
@@ -29,7 +28,6 @@ class StoreSystemReport {
 
   StoreSystemReport({
     this.receiptNumber = '',
-    this.secondWorkerName = '',
     this.refrigerantType = '',
     this.refrigerantAmount = '',
     this.requestContent = '',
@@ -54,7 +52,6 @@ class StoreSystemReport {
   /// すべての項目が空かどうか(未入力判定用)
   bool get isEmpty =>
       receiptNumber.isEmpty &&
-      secondWorkerName.isEmpty &&
       refrigerantType.isEmpty &&
       refrigerantAmount.isEmpty &&
       requestContent.isEmpty &&
@@ -78,7 +75,6 @@ class StoreSystemReport {
   Map<String, dynamic> toMap() {
     return {
       'receipt_number': receiptNumber,
-      'second_worker_name': secondWorkerName,
       'refrigerant_type': refrigerantType,
       'refrigerant_amount': refrigerantAmount,
       'request_content': requestContent,
@@ -105,7 +101,6 @@ class StoreSystemReport {
     if (map == null) return StoreSystemReport();
     return StoreSystemReport(
       receiptNumber: map['receipt_number'] as String? ?? '',
-      secondWorkerName: map['second_worker_name'] as String? ?? '',
       refrigerantType: map['refrigerant_type'] as String? ?? '',
       refrigerantAmount: map['refrigerant_amount'] as String? ?? '',
       requestContent: map['request_content'] as String? ?? '',

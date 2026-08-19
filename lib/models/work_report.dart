@@ -86,6 +86,7 @@ class WorkReport {
   String id;
   String authorId;
   String authorName;
+  List<String> coWorkerIds; // 共同作業者ID(従業員マスタ参照、複数可)
   String? storeId; // 店舗マスタID(選択した場合のみ)
   String clientName; // 訪問先(顧客名・店舗マスタ選択時は自動セット、リスト外は自由入力)
   DateTime visitDate; // 訪問日
@@ -109,6 +110,7 @@ class WorkReport {
     required this.id,
     required this.authorId,
     required this.authorName,
+    List<String>? coWorkerIds,
     this.storeId,
     required this.clientName,
     required this.visitDate,
@@ -130,6 +132,7 @@ class WorkReport {
   }) : partsUsed = partsUsed ?? [],
        photoPaths = photoPaths ?? [],
        tags = tags ?? [],
+       coWorkerIds = coWorkerIds ?? [],
        storeSystemReportCopy = storeSystemReportCopy ?? StoreSystemReport();
 
   Duration get workDuration => endTime.difference(startTime);
@@ -141,6 +144,7 @@ class WorkReport {
     return {
       'author_id': authorId,
       'author_name': authorName,
+      'co_worker_ids': coWorkerIds,
       'store_id': storeId,
       'client_name': clientName,
       'visit_date': visitDate,
@@ -167,6 +171,9 @@ class WorkReport {
       id: id,
       authorId: map['author_id'] as String? ?? '',
       authorName: map['author_name'] as String? ?? '',
+      coWorkerIds: (map['co_worker_ids'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
       storeId: map['store_id'] as String?,
       clientName: map['client_name'] as String? ?? '',
       visitDate: _parseDate(map['visit_date']),

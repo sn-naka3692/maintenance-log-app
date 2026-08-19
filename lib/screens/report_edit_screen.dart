@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/part_used.dart';
 import '../models/store.dart';
 import '../models/store_system_report.dart';
+import '../models/user.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
@@ -34,6 +35,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   late TextEditingController _tagInputCtrl;
 
   String? _selectedStoreId;
+  final List<String> _selectedCoWorkerIds = [];
   DateTime _visitDate = DateTime.now();
   TimeOfDay _startTime = TimeOfDay.now();
   TimeOfDay _endTime = TimeOfDay.now();
@@ -63,7 +65,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     final ss = e?.storeSystemReportCopy ?? StoreSystemReport();
     _ssCtrls = {
       'receiptNumber': TextEditingController(text: ss.receiptNumber),
-      'secondWorkerName': TextEditingController(text: ss.secondWorkerName),
       'refrigerantType': TextEditingController(text: ss.refrigerantType),
       'refrigerantAmount': TextEditingController(text: ss.refrigerantAmount),
       'requestContent': TextEditingController(text: ss.requestContent),
@@ -94,6 +95,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       _parts.addAll(e.partsUsed);
       _tags.addAll(e.tags);
       _photoPaths.addAll(e.photoPaths);
+      _selectedCoWorkerIds.addAll(e.coWorkerIds);
     }
   }
 
@@ -166,7 +168,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   StoreSystemReport _buildStoreSystemReport() {
     return StoreSystemReport(
       receiptNumber: _ssCtrls['receiptNumber']!.text.trim(),
-      secondWorkerName: _ssCtrls['secondWorkerName']!.text.trim(),
       refrigerantType: _ssCtrls['refrigerantType']!.text.trim(),
       refrigerantAmount: _ssCtrls['refrigerantAmount']!.text.trim(),
       requestContent: _ssCtrls['requestContent']!.text.trim(),
@@ -237,6 +238,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
     if (isEditing) {
       final r = widget.existing!;
+      r.coWorkerIds = List<String>.from(_selectedCoWorkerIds);
       r.storeId = _selectedStoreId;
       r.clientName = resolvedClientName;
       r.visitDate = _visitDate;
@@ -259,6 +261,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         id: appState.newId(),
         authorId: user.id,
         authorName: user.name,
+        coWorkerIds: List<String>.from(_selectedCoWorkerIds),
         storeId: _selectedStoreId,
         clientName: resolvedClientName,
         visitDate: _visitDate,
@@ -422,6 +425,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               icon: Icons.numbers,
               hint: 'プロワン側で管理している案件番号',
             ),
+            const SizedBox(height: 12),
+            _buildCoWorkerField(),
 
             const SizedBox(height: 20),
             _SectionTitle(_responseType.isBackOffice ? '業務内容' : '作業内容'),
@@ -617,12 +622,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               controller: _ssCtrls['receiptNumber']!,
               label: '弊社受付No.',
               icon: Icons.confirmation_number_outlined,
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _ssCtrls['secondWorkerName']!,
-              label: '作業者2(任意・応援者等がいる場合)',
-              icon: Icons.person_add_alt_1,
             ),
             const SizedBox(height: 16),
             Text(
@@ -848,6 +847,107 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         alignLabelWithHint: maxLines > 1,
       ),
     );
+  }
+
+  /// 共同作業者(複数選択)フィールド
+  /// 従業員マスタ(appState.users)から選択する。自由記述は表記ゆれの原因になるため使用しない。
+  Widget _buildCoWorkerField() {
+    final appState = context.watch<AppState>();
+    final currentUserId = appState.currentUser?.id;
+    // 主担当者(現在のユーザー)以外の従業員一覧から選択できるようにする
+    final candidates = appState.users
+        .where((u) => u.id != currentUserId)
+        .toList();
+    final selectedNames = _selectedCoWorkerIds
+        .map((id) {
+          final u = appState.users.where((u) => u.id == id).firstOrNull;
+          return u?.name;
+        })
+        .whereType<String>()
+        .toList();
+
+    return InkWell(
+      onTap: () => _pickCoWorkers(candidates),
+      borderRadius: BorderRadius.circular(12),
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: '共同作業者(任意・複数選択可)',
+          prefixIcon: Icon(Icons.groups_outlined),
+        ),
+        child: selectedNames.isEmpty
+            ? Text(
+                '担当者以外に作業した人がいれば選択してください',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+              )
+            : Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: selectedNames
+                    .map((n) => Chip(label: Text(n), visualDensity: VisualDensity.compact))
+                    .toList(),
+              ),
+      ),
+    );
+  }
+
+  Future<void> _pickCoWorkers(List<AppUser> candidates) async {
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (context) {
+        final tempSelected = List<String>.from(_selectedCoWorkerIds);
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('共同作業者を選択'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: candidates.isEmpty
+                    ? const Text('選択可能な従業員がいません')
+                    : ListView(
+                        shrinkWrap: true,
+                        children: candidates.map((u) {
+                          final checked = tempSelected.contains(u.id);
+                          return CheckboxListTile(
+                            value: checked,
+                            title: Text(u.name),
+                            subtitle: Text(
+                              '${u.department} ・ ${u.employeeCode}',
+                            ),
+                            onChanged: (v) {
+                              setDialogState(() {
+                                if (v == true) {
+                                  tempSelected.add(u.id);
+                                } else {
+                                  tempSelected.remove(u.id);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('キャンセル'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(tempSelected),
+                  child: const Text('決定'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (result != null) {
+      setState(() {
+        _selectedCoWorkerIds
+          ..clear()
+          ..addAll(result);
+      });
+    }
   }
 }
 
