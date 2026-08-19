@@ -21,7 +21,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => AppState()..init(),
+      // Firestoreはログイン済みユーザーのみ読み書き可能なため、
+      // ここでは即時initを呼ばず、AuthGateがログイン確認後にinit()を呼び出す。
+      create: (_) => AppState(),
       child: MaterialApp(
         title: '札幌中野冷機 日報アプリ',
         debugShowCheckedModeBanner: false,

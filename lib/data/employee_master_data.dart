@@ -1,14 +1,17 @@
 // 従業員マスタデータ(初期データ)
 // 従業員リスト.xlsx より抽出した実在の従業員29名。
 // 部門・社員番号は未設定のため、必要に応じてプロフィール画面等から編集してください。
+//
+// 注記: e001(中野誠一郎)・e005(仲千代子)は運用対象外のため削除済み。
+// このファイルはアプリ起動時にFirestoreへ「不足分のみ」再投入する仕組みのため、
+// 削除した従業員をここに残すと、Firestoreから削除しても自動的に復活してしまう。
+// 退職・対象外にする従業員は必ずこのリストからも削除すること。
 import '../models/user.dart';
 
 final List<AppUser> initialEmployeeMasterData = [
-  AppUser(id: 'e001', name: '中野 誠一郎', employeeCode: 'E001', role: UserRole.staff, department: '', createdAt: DateTime(2026, 1, 1)),
   AppUser(id: 'e002', name: '天満 伸一', employeeCode: 'E002', role: UserRole.staff, department: '', createdAt: DateTime(2026, 1, 1)),
   AppUser(id: 'e003', name: '高橋 雅史', employeeCode: 'E003', role: UserRole.staff, department: '', createdAt: DateTime(2026, 1, 1)),
   AppUser(id: 'e004', name: '勅使川原 雅英', employeeCode: 'E004', role: UserRole.staff, department: '', createdAt: DateTime(2026, 1, 1)),
-  AppUser(id: 'e005', name: '仲 千代子', employeeCode: 'E005', role: UserRole.staff, department: '', createdAt: DateTime(2026, 1, 1)),
   AppUser(id: 'e006', name: '大塚 春江', employeeCode: 'E006', role: UserRole.staff, department: '', createdAt: DateTime(2026, 1, 1)),
   AppUser(id: 'e007', name: '中野 剛', employeeCode: 'E007', role: UserRole.staff, department: '', createdAt: DateTime(2026, 1, 1)),
   AppUser(id: 'e008', name: '仲 宏和', employeeCode: 'E008', role: UserRole.staff, department: '', createdAt: DateTime(2026, 1, 1)),

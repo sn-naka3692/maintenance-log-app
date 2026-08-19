@@ -7,6 +7,10 @@ import 'main_navigation.dart';
 
 /// Firebase Authenticationのログイン状態に応じて
 /// ログイン画面またはメイン画面を表示する。
+///
+/// 重要: Firestoreのセキュリティルールはログイン済みユーザーのみ
+/// アクセス可能なため、AppState.init()(Firestore読み込み)は
+/// ログイン確認が取れてから呼び出す(未ログイン時に呼ぶと権限エラーになる)。
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
@@ -15,7 +19,7 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
-  String? _reloadedForUid;
+  String? _initializedForUid;
 
   @override
   Widget build(BuildContext context) {
@@ -30,18 +34,16 @@ class _AuthGateState extends State<AuthGate> {
 
         final fbUser = snapshot.data;
         if (fbUser == null) {
-          _reloadedForUid = null;
+          _initializedForUid = null;
           return const LoginScreen();
         }
 
         final appState = context.watch<AppState>();
 
-        // ログイン済みだが、AppState側のcurrentUserがまだ
-        // Firestoreユーザー情報と紐付いていない場合は一度だけ再読込する。
-        if (!appState.isLoading &&
-            appState.currentUser == null &&
-            _reloadedForUid != fbUser.uid) {
-          _reloadedForUid = fbUser.uid;
+        // ログインを確認できたので、このユーザーに対してまだデータ読み込みを
+        // 行っていない場合は一度だけ init() を呼び出す。
+        if (_initializedForUid != fbUser.uid) {
+          _initializedForUid = fbUser.uid;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             appState.init();
           });
@@ -56,8 +58,7 @@ class _AuthGateState extends State<AuthGate> {
           );
         }
 
-        if (appState.currentUser == null) {
-          // Firestoreに対応するユーザー情報が見つからない場合。
+        if (appState.error != null) {
           return Scaffold(
             body: Center(
               child: Padding(
@@ -65,7 +66,41 @@ class _AuthGateState extends State<AuthGate> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+                    const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    Text(appState.error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => appState.init(),
+                      child: const Text('再試行'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => appState.signOut(),
+                      child: const Text('ログアウト'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (appState.currentUser == null) {
+          // ログインには成功したが、Firestoreに対応するユーザー情報が
+          // 見つからない場合(例: 社員マスタに未登録)。
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(height: 16),
                     const Text(
                       'ユーザー情報が見つかりません。\n管理者にお問い合わせください。',
