@@ -1,4 +1,6 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../providers/app_state.dart';
@@ -76,6 +78,15 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.password),
+              title: const Text('パスワードを変更する'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showChangePasswordDialog(context),
+            ),
+          ),
           const SizedBox(height: 20),
           if (appState.isAdmin)
             OutlinedButton.icon(
@@ -126,11 +137,136 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  // ------------------------------------------------------------------
+  // パスワード変更
+  // ------------------------------------------------------------------
+  void _showChangePasswordDialog(BuildContext context) {
+    final newPwCtrl = TextEditingController();
+    final confirmPwCtrl = TextEditingController();
+    bool obscure = true;
+    bool loading = false;
+    String? error;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('パスワードを変更'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '新しいパスワード(6文字以上)を入力してください。',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: newPwCtrl,
+                  obscureText: obscure,
+                  decoration: InputDecoration(
+                    labelText: '新しいパスワード',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscure
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: () => setState(() => obscure = !obscure),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: confirmPwCtrl,
+                  obscureText: obscure,
+                  decoration: const InputDecoration(labelText: '新しいパスワード(確認)'),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    error!,
+                    style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: loading ? null : () => Navigator.pop(ctx),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: loading
+                  ? null
+                  : () async {
+                      final pw = newPwCtrl.text;
+                      if (pw.length < 6) {
+                        setState(() => error = 'パスワードは6文字以上で入力してください。');
+                        return;
+                      }
+                      if (pw != confirmPwCtrl.text) {
+                        setState(() => error = '確認用パスワードが一致しません。');
+                        return;
+                      }
+                      setState(() {
+                        loading = true;
+                        error = null;
+                      });
+                      try {
+                        await ctx.read<AppState>().changePassword(pw);
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('パスワードを変更しました。')),
+                          );
+                        }
+                      } on FirebaseAuthException catch (e) {
+                        setState(() {
+                          loading = false;
+                          if (e.code == 'requires-recent-login') {
+                            error = 'セキュリティのため、再度ログインしてからお試しください。';
+                          } else {
+                            error = 'パスワードの変更に失敗しました。';
+                          }
+                        });
+                      } catch (_) {
+                        setState(() {
+                          loading = false;
+                          error = 'パスワードの変更に失敗しました。';
+                        });
+                      }
+                    },
+              child: loading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('変更する'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 社員追加(Firebase Authアカウントも同時作成)
+  // ------------------------------------------------------------------
   void _showAddUserDialog(BuildContext context) {
     final nameCtrl = TextEditingController();
     final codeCtrl = TextEditingController();
     final deptCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
     UserRole role = UserRole.staff;
+    // 'paper' = 画面表示して紙等で伝達、'email' = 本人にパスワード設定メールを送信
+    String deliveryMethod = 'paper';
+    bool loading = false;
+    String? error;
 
     showDialog(
       context: context,
@@ -140,20 +276,37 @@ class ProfileScreen extends StatelessWidget {
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: '氏名'),
+                  decoration: const InputDecoration(labelText: '氏名 *'),
                 ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: codeCtrl,
-                  decoration: const InputDecoration(labelText: '社員番号'),
+                  decoration: const InputDecoration(labelText: '社員番号 *'),
                 ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: deptCtrl,
                   decoration: const InputDecoration(labelText: '所属部門'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'メールアドレス(ログイン用) *',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: '電話番号(初期パスワード生成に使用・任意)',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<UserRole>(
@@ -168,29 +321,234 @@ class ProfileScreen extends StatelessWidget {
                   ],
                   onChanged: (v) => setState(() => role = v!),
                 ),
+                const SizedBox(height: 16),
+                const Text(
+                  '初期パスワードの伝え方',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                RadioListTile<String>(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: 'paper',
+                  groupValue: deliveryMethod,
+                  title: const Text('画面に表示する(紙などで手渡し)'),
+                  subtitle: const Text(
+                    '社員番号と電話番号下4桁からパスワードを自動生成し、この場で表示します。',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  onChanged: (v) => setState(() => deliveryMethod = v!),
+                ),
+                RadioListTile<String>(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: 'email',
+                  groupValue: deliveryMethod,
+                  title: const Text('本人にメールで送信する'),
+                  subtitle: const Text(
+                    'ランダムなパスワードを設定し、パスワード設定用のリンクを本人のメールに送信します。',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  onChanged: (v) => setState(() => deliveryMethod = v!),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    error!,
+                    style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                  ),
+                ],
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: loading ? null : () => Navigator.pop(ctx),
               child: const Text('キャンセル'),
             ),
             FilledButton(
-              onPressed: () {
-                if (nameCtrl.text.trim().isEmpty) return;
-                ctx.read<AppState>().addUser(
-                  name: nameCtrl.text.trim(),
-                  employeeCode: codeCtrl.text.trim(),
-                  role: role,
-                  department: deptCtrl.text.trim(),
-                );
-                Navigator.pop(ctx);
-              },
-              child: const Text('追加'),
+              onPressed: loading
+                  ? null
+                  : () async {
+                      final name = nameCtrl.text.trim();
+                      final code = codeCtrl.text.trim();
+                      final email = emailCtrl.text.trim();
+                      final phone = phoneCtrl.text.trim();
+                      if (name.isEmpty || code.isEmpty || email.isEmpty) {
+                        setState(() {
+                          error = '氏名・社員番号・メールアドレスは必須です。';
+                        });
+                        return;
+                      }
+
+                      setState(() {
+                        loading = true;
+                        error = null;
+                      });
+
+                      final digits = phone.replaceAll(RegExp(r'\D'), '');
+                      final last4 = digits.length >= 4
+                          ? digits.substring(digits.length - 4)
+                          : _randomDigits(4);
+                      final generatedPassword = deliveryMethod == 'paper'
+                          ? '$code$last4'
+                          : _randomPassword();
+
+                      try {
+                        await ctx.read<AppState>().addUser(
+                          name: name,
+                          employeeCode: code,
+                          role: role,
+                          department: deptCtrl.text.trim(),
+                          email: email,
+                          initialPassword: generatedPassword,
+                          phone: phone,
+                        );
+
+                        if (deliveryMethod == 'email') {
+                          await ctx
+                              .read<AppState>()
+                              .sendPasswordResetEmail(email);
+                        }
+
+                        if (ctx.mounted) Navigator.pop(ctx);
+
+                        if (context.mounted) {
+                          if (deliveryMethod == 'paper') {
+                            _showGeneratedPasswordDialog(
+                              context,
+                              name: name,
+                              email: email,
+                              password: generatedPassword,
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '$name さんを追加しました。パスワード設定メールを $email に送信しました。',
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      } on FirebaseAuthException catch (e) {
+                        setState(() {
+                          loading = false;
+                          if (e.code == 'email-already-in-use') {
+                            error = 'このメールアドレスは既に使用されています。';
+                          } else if (e.code == 'weak-password') {
+                            error = 'パスワードが弱すぎます(内部エラー)。もう一度お試しください。';
+                          } else {
+                            error = '社員の追加に失敗しました: ${e.message ?? e.code}';
+                          }
+                        });
+                      } catch (e) {
+                        setState(() {
+                          loading = false;
+                          error = '社員の追加に失敗しました: $e';
+                        });
+                      }
+                    },
+              child: loading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('追加'),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showGeneratedPasswordDialog(
+    BuildContext context, {
+    required String name,
+    required String email,
+    required String password,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('社員を追加しました'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$name さんのログイン情報です。紙などで安全にお渡しください。'),
+            const SizedBox(height: 16),
+            _CopyableRow(label: 'メールアドレス', value: email),
+            const SizedBox(height: 8),
+            _CopyableRow(label: '初期パスワード', value: password),
+            const SizedBox(height: 12),
+            const Text(
+              '※初回ログイン後、本人にパスワード変更を推奨してください。',
+              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _randomDigits(int length) {
+    final rnd = Random.secure();
+    return List.generate(length, (_) => rnd.nextInt(10)).join();
+  }
+
+  static String _randomPassword() {
+    const chars =
+        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    final rnd = Random.secure();
+    return List.generate(12, (_) => chars[rnd.nextInt(chars.length)]).join();
+  }
+}
+
+class _CopyableRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _CopyableRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

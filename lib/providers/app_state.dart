@@ -140,17 +140,28 @@ class AppState extends ChangeNotifier {
     required String employeeCode,
     required UserRole role,
     required String department,
+    required String email,
+    required String initialPassword,
+    String phone = '',
   }) async {
     final u = await _service.addUser(
       name: name,
       employeeCode: employeeCode,
       role: role,
       department: department,
+      email: email,
+      initialPassword: initialPassword,
+      phone: phone,
     );
     _users = _service.getAllUsers();
     notifyListeners();
     return u;
   }
+
+  Future<void> changePassword(String newPassword) => _service.changePassword(newPassword);
+
+  Future<void> sendPasswordResetEmail(String email) =>
+      _service.sendPasswordResetEmail(email);
 
   List<WorkReport> search({
     String? keyword,

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:uuid/uuid.dart';
 import '../models/work_report.dart';
 import '../models/user.dart';
@@ -98,22 +99,79 @@ class ReportService {
     await _auth.signOut();
   }
 
+  /// パスワードを変更する(本人がログイン中に呼び出す)。
+  /// 再認証が必要な場合(セッションが古い等)は re-login を促すため
+  /// FirebaseAuthExceptionをそのままthrowする。
+  Future<void> changePassword(String newPassword) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'ログインしていません。',
+      );
+    }
+    await user.updatePassword(newPassword);
+  }
+
+  /// パスワード再設定メールを送信する。
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  /// 社員を追加し、同時にFirebase Authenticationのログインアカウントも作成する。
+  ///
+  /// Firebase Authでユーザーを新規作成すると、クライアントSDKの仕様上
+  /// 「作成した瞬間そのユーザーでログイン状態になる」ため、管理者自身が
+  /// ログアウトされてしまう問題がある。これを避けるため、一時的な
+  /// セカンダリのFirebaseAppインスタンス上でユーザー作成を行い、
+  /// 管理者の現在のログインセッションには影響を与えないようにする。
+  ///
+  /// [initialPassword] は呼び出し元(画面)が生成した初期パスワード。
+  /// 戻り値の [AppUser.id] はFirebase AuthのUIDと一致する(現行ユーザーと同じ設計)。
   Future<AppUser> addUser({
     required String name,
     required String employeeCode,
     required UserRole role,
     required String department,
+    required String email,
+    required String initialPassword,
+    String phone = '',
   }) async {
-    final id = _uuid.v4();
+    final trimmedEmail = email.trim();
+    if (trimmedEmail.isEmpty) {
+      throw ArgumentError('メールアドレスは必須です');
+    }
+
+    // セカンダリアプリで新規ユーザーを作成(現在の管理者セッションを維持するため)
+    final secondaryApp = await Firebase.initializeApp(
+      name: 'secondaryAuth_${DateTime.now().microsecondsSinceEpoch}',
+      options: Firebase.app().options,
+    );
+    String uid;
+    try {
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      final cred = await secondaryAuth.createUserWithEmailAndPassword(
+        email: trimmedEmail,
+        password: initialPassword,
+      );
+      await cred.user?.updateDisplayName(name);
+      uid = cred.user!.uid;
+      await secondaryAuth.signOut();
+    } finally {
+      await secondaryApp.delete();
+    }
+
     final u = AppUser(
-      id: id,
+      id: uid,
       name: name,
       employeeCode: employeeCode,
       role: role,
       department: department,
       createdAt: DateTime.now(),
+      email: trimmedEmail,
+      phone: phone,
     );
-    await _usersCol.doc(id).set(u.toMap());
+    await _usersCol.doc(uid).set(u.toMap());
     await _refreshUsersCache();
     return u;
   }

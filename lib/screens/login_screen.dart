@@ -50,6 +50,103 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _showResetPasswordDialog() {
+    final emailCtrl = TextEditingController(text: _emailCtrl.text);
+    bool loading = false;
+    String? message;
+    bool isError = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('パスワード再設定'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '登録済みのメールアドレスを入力してください。パスワード再設定用のメールを送信します。',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'メールアドレス'),
+              ),
+              if (message != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  message!,
+                  style: TextStyle(
+                    color: isError ? AppColors.danger : AppColors.success,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: loading ? null : () => Navigator.pop(ctx),
+              child: const Text('閉じる'),
+            ),
+            FilledButton(
+              onPressed: loading
+                  ? null
+                  : () async {
+                      final email = emailCtrl.text.trim();
+                      if (email.isEmpty) {
+                        setState(() {
+                          message = 'メールアドレスを入力してください。';
+                          isError = true;
+                        });
+                        return;
+                      }
+                      setState(() {
+                        loading = true;
+                        message = null;
+                      });
+                      try {
+                        await context.read<AppState>().sendPasswordResetEmail(
+                          email,
+                        );
+                        setState(() {
+                          loading = false;
+                          isError = false;
+                          message = '再設定用メールを送信しました。メールをご確認ください。';
+                        });
+                      } on FirebaseAuthException catch (e) {
+                        setState(() {
+                          loading = false;
+                          isError = true;
+                          message = e.code == 'user-not-found'
+                              ? 'このメールアドレスは登録されていません。'
+                              : '送信に失敗しました。しばらくしてから再度お試しください。';
+                        });
+                      } catch (_) {
+                        setState(() {
+                          loading = false;
+                          isError = true;
+                          message = '送信に失敗しました。しばらくしてから再度お試しください。';
+                        });
+                      }
+                    },
+              child: loading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('送信する'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _messageForError(String code) {
     switch (code) {
       case 'user-not-found':
@@ -178,7 +275,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             )
                           : const Text('ログイン'),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _loading ? null : _showResetPasswordDialog,
+                      child: const Text('パスワードをお忘れの方'),
+                    ),
+                    const SizedBox(height: 8),
                     const Text(
                       'ログイン情報がわからない場合は管理者にお問い合わせください。',
                       textAlign: TextAlign.center,
