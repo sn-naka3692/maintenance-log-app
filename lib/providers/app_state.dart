@@ -142,7 +142,7 @@ class AppState extends ChangeNotifier {
     required String department,
     required String email,
     required String initialPassword,
-    String phone = '',
+    required String phone,
   }) async {
     final u = await _service.addUser(
       name: name,

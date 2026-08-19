@@ -305,7 +305,7 @@ class ProfileScreen extends StatelessWidget {
                   controller: phoneCtrl,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(
-                    labelText: '電話番号(初期パスワード生成に使用・任意)',
+                    labelText: '電話番号 *(初期パスワード生成に使用)',
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -374,9 +374,22 @@ class ProfileScreen extends StatelessWidget {
                       final code = codeCtrl.text.trim();
                       final email = emailCtrl.text.trim();
                       final phone = phoneCtrl.text.trim();
-                      if (name.isEmpty || code.isEmpty || email.isEmpty) {
+                      if (name.isEmpty ||
+                          code.isEmpty ||
+                          email.isEmpty ||
+                          phone.isEmpty) {
                         setState(() {
-                          error = '氏名・社員番号・メールアドレスは必須です。';
+                          error = '氏名・社員番号・メールアドレス・電話番号は必須です。';
+                        });
+                        return;
+                      }
+                      final phoneDigitsCheck = phone.replaceAll(
+                        RegExp(r'\D'),
+                        '',
+                      );
+                      if (phoneDigitsCheck.length < 4) {
+                        setState(() {
+                          error = '電話番号は数字4桁以上で入力してください。';
                         });
                         return;
                       }
@@ -386,10 +399,8 @@ class ProfileScreen extends StatelessWidget {
                         error = null;
                       });
 
-                      final digits = phone.replaceAll(RegExp(r'\D'), '');
-                      final last4 = digits.length >= 4
-                          ? digits.substring(digits.length - 4)
-                          : _randomDigits(4);
+                      final digits = phoneDigitsCheck;
+                      final last4 = digits.substring(digits.length - 4);
                       final generatedPassword = deliveryMethod == 'paper'
                           ? '$code$last4'
                           : _randomPassword();
@@ -497,11 +508,6 @@ class ProfileScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  static String _randomDigits(int length) {
-    final rnd = Random.secure();
-    return List.generate(length, (_) => rnd.nextInt(10)).join();
   }
 
   static String _randomPassword() {

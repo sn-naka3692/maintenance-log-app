@@ -135,11 +135,14 @@ class ReportService {
     required String department,
     required String email,
     required String initialPassword,
-    String phone = '',
+    required String phone,
   }) async {
     final trimmedEmail = email.trim();
     if (trimmedEmail.isEmpty) {
       throw ArgumentError('メールアドレスは必須です');
+    }
+    if (phone.trim().isEmpty) {
+      throw ArgumentError('電話番号は必須です');
     }
 
     // セカンダリアプリで新規ユーザーを作成(現在の管理者セッションを維持するため)
