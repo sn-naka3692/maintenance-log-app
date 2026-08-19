@@ -3,8 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/work_report.dart';
 import '../models/user.dart';
+import '../data/employee_master_data.dart';
 
 /// 日報・ユーザーデータの永続化を担当するサービス(Firestore)
+///
+/// 初回起動時、従業員マスタ(employee_master_data.dart、実在の従業員29名)が
+/// まだ登録されていなければ自動投入する。既存のユーザーデータは維持する。
 class ReportService {
   static const String currentUserKey = 'current_user_id';
 
@@ -24,7 +28,26 @@ class ReportService {
 
   Future<void> init() async {
     await _refreshUsersCache();
+    await _seedEmployeeMasterIfNeeded();
     await _refreshReportsCache();
+  }
+
+  /// 従業員マスタ(実データ29名)がまだ登録されていない場合のみ自動投入する。
+  /// 既存のユーザー(テストデータ等)は削除せず維持する(重複はidで防止)。
+  Future<void> _seedEmployeeMasterIfNeeded() async {
+    final existingIds = _usersCache.map((u) => u.id).toSet();
+    final missing = initialEmployeeMasterData
+        .where((u) => !existingIds.contains(u.id))
+        .toList();
+    if (missing.isEmpty) return;
+
+    final batch = _db.batch();
+    for (final u in missing) {
+      final ref = _usersCol.doc(u.id);
+      batch.set(ref, u.toMap());
+    }
+    await batch.commit();
+    await _refreshUsersCache();
   }
 
   Future<void> _refreshUsersCache() async {
