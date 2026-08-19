@@ -66,43 +66,52 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 20),
-          const Text(
-            'ユーザー切り替え(デモ用)',
-            style: TextStyle(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '※実運用ではログイン認証に置き換え予定です',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-          ),
-          const SizedBox(height: 10),
-          ...appState.users.map((u) {
-            final selected = u.id == user?.id;
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              color: selected
-                  ? AppColors.primary.withValues(alpha: 0.08)
-                  : null,
+          if (user != null && user.email.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Card(
               child: ListTile(
-                leading: Icon(
-                  u.isAdmin ? Icons.admin_panel_settings : Icons.person,
-                  color: selected ? AppColors.primary : Colors.grey.shade600,
-                ),
-                title: Text(u.name),
-                subtitle: Text('${u.department} ・ ${u.employeeCode}'),
-                trailing: selected
-                    ? const Icon(Icons.check_circle, color: AppColors.primary)
-                    : null,
-                onTap: () => appState.switchUser(u.id),
+                leading: const Icon(Icons.mail_outline),
+                title: const Text('メールアドレス'),
+                subtitle: Text(user.email),
               ),
-            );
-          }),
+            ),
+          ],
           const SizedBox(height: 20),
+          if (appState.isAdmin)
+            OutlinedButton.icon(
+              onPressed: () => _showAddUserDialog(context),
+              icon: const Icon(Icons.person_add),
+              label: const Text('社員を追加する'),
+            ),
+          const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: () => _showAddUserDialog(context),
-            icon: const Icon(Icons.person_add),
-            label: const Text('社員を追加する'),
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('ログアウトしますか?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('キャンセル'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('ログアウト'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await context.read<AppState>().signOut();
+              }
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.danger,
+              side: const BorderSide(color: AppColors.danger),
+            ),
+            icon: const Icon(Icons.logout),
+            label: const Text('ログアウト'),
           ),
           const SizedBox(height: 30),
           Center(

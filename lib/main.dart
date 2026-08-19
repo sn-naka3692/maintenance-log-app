@@ -5,7 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'providers/app_state.dart';
-import 'screens/main_navigation.dart';
+import 'screens/auth_gate.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -33,7 +33,7 @@ class MyApp extends StatelessWidget {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: const MainNavigation(),
+        home: const AuthGate(),
       ),
     );
   }

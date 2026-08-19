@@ -31,6 +31,7 @@ class ReportDetailScreen extends StatelessWidget {
     final dateFmt = DateFormat('yyyy年M月d日 (E)', 'ja_JP');
     final timeFmt = DateFormat('HH:mm');
     final canEdit = report.authorId == appState.currentUser?.id;
+    final canDelete = canEdit || appState.isAdmin;
     final typeColor = responseTypeColor(report.responseType.label);
 
     return Scaffold(
@@ -48,7 +49,7 @@ class ReportDetailScreen extends StatelessWidget {
                 );
               },
             ),
-          if (canEdit)
+          if (canDelete)
             IconButton(
               icon: const Icon(Icons.delete_outline),
               onPressed: () async {
@@ -56,7 +57,11 @@ class ReportDetailScreen extends StatelessWidget {
                   context: context,
                   builder: (_) => AlertDialog(
                     title: const Text('日報を削除しますか?'),
-                    content: const Text('この操作は取り消せません。'),
+                    content: Text(
+                      canEdit
+                          ? 'この操作は取り消せません。'
+                          : '管理者権限でこの日報を削除します。この操作は取り消せません。',
+                    ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context, false),

@@ -34,7 +34,7 @@ class AppState extends ChangeNotifier {
       await _service.init();
       await _storeService.init();
       _users = _service.getAllUsers();
-      _currentUser = await _service.getCurrentUser();
+      _currentUser = _service.getCurrentUser();
       _reports = _service.getAllReports();
       _stores = _storeService.getAll();
       _error = null;
@@ -42,6 +42,26 @@ class AppState extends ChangeNotifier {
       _error = 'データの読み込みに失敗しました: $e';
     }
     _isLoading = false;
+    notifyListeners();
+  }
+
+  bool get isSignedIn => _service.isSignedIn;
+
+  /// メールアドレス・パスワードでログインする。失敗時は例外をthrowする。
+  Future<void> signIn(String email, String password) async {
+    await _service.signInWithEmail(email, password);
+    _users = _service.getAllUsers();
+    _currentUser = _service.getCurrentUser();
+    if (_currentUser != null) {
+      _reports = _service.getAllReports();
+      _stores = _storeService.getAll();
+    }
+    notifyListeners();
+  }
+
+  Future<void> signOut() async {
+    await _service.signOut();
+    _currentUser = null;
     notifyListeners();
   }
 
@@ -96,12 +116,6 @@ class AppState extends ChangeNotifier {
   }
 
   bool get isAdmin => _currentUser?.isAdmin ?? false;
-
-  Future<void> switchUser(String userId) async {
-    await _service.setCurrentUser(userId);
-    _currentUser = _users.firstWhere((u) => u.id == userId);
-    notifyListeners();
-  }
 
   Future<void> addReport(WorkReport report) async {
     await _service.createReport(report);

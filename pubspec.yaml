@@ -46,6 +46,7 @@ dependencies:
   # Firebase (クラウド共有データベース)
   firebase_core: 3.6.0
   cloud_firestore: 5.4.3
+  firebase_auth: 5.3.1
 
   # Utilities
   intl: ^0.20.2

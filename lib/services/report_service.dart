@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 import '../models/work_report.dart';
 import '../models/user.dart';
@@ -10,12 +10,11 @@ import '../data/employee_master_data.dart';
 /// 初回起動時、従業員マスタ(employee_master_data.dart、実在の従業員29名)が
 /// まだ登録されていなければ自動投入する。既存のユーザーデータは維持する。
 class ReportService {
-  static const String currentUserKey = 'current_user_id';
-
   static final ReportService instance = ReportService._internal();
   ReportService._internal();
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final _uuid = const Uuid();
 
   CollectionReference<Map<String, dynamic>> get _usersCol =>
@@ -68,22 +67,35 @@ class ReportService {
   // ------------ User ------------
   List<AppUser> getAllUsers() => _usersCache;
 
-  Future<AppUser?> getCurrentUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getString(currentUserKey);
-    if (id == null) {
-      return _usersCache.isNotEmpty ? _usersCache.first : null;
-    }
+  /// Firebase Authenticationでログイン中のユーザーに対応する
+  /// Firestore上のユーザー情報を返す(UID = Firestoreドキュメントid で対応)。
+  /// 未ログイン、またはFirestore側にユーザー情報が見つからない場合はnull。
+  AppUser? getCurrentUser() {
+    final fbUser = _auth.currentUser;
+    if (fbUser == null) return null;
     try {
-      return _usersCache.firstWhere((u) => u.id == id);
+      return _usersCache.firstWhere((u) => u.id == fbUser.uid);
     } catch (_) {
-      return _usersCache.isNotEmpty ? _usersCache.first : null;
+      return null;
     }
   }
 
-  Future<void> setCurrentUser(String userId) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(currentUserKey, userId);
+  bool get isSignedIn => _auth.currentUser != null;
+
+  Stream<User?> authStateChanges() => _auth.authStateChanges();
+
+  /// メールアドレス・パスワードでログインする。
+  Future<AppUser?> signInWithEmail(String email, String password) async {
+    await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+    await _refreshUsersCache();
+    return getCurrentUser();
+  }
+
+  Future<void> signOut() async {
+    await _auth.signOut();
   }
 
   Future<AppUser> addUser({

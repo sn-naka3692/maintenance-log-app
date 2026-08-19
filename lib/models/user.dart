@@ -11,6 +11,8 @@ class AppUser {
   UserRole role;
   String department; // 所属(例: 冷凍機部門、空調部門)
   DateTime createdAt;
+  String email; // ログイン用メールアドレス
+  String phone; // 電話番号
 
   AppUser({
     required this.id,
@@ -19,6 +21,8 @@ class AppUser {
     required this.role,
     required this.department,
     required this.createdAt,
+    this.email = '',
+    this.phone = '',
   });
 
   bool get isAdmin => role == UserRole.admin;
@@ -30,6 +34,8 @@ class AppUser {
       'role': role == UserRole.admin ? 'admin' : 'staff',
       'department': department,
       'created_at': createdAt,
+      'email': email,
+      'phone': phone,
     };
   }
 
@@ -43,6 +49,8 @@ class AppUser {
           : UserRole.staff,
       department: map['department'] as String? ?? '',
       createdAt: _parseDate(map['created_at']),
+      email: map['email'] as String? ?? '',
+      phone: map['phone'] as String? ?? '',
     );
   }
 
