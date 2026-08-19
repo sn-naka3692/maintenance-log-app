@@ -122,6 +122,8 @@ Color responseTypeColor(String label) {
       return const Color(0xFF8D6E63); // ブラウン系(バックオフィス)
     case '倉庫作業':
       return const Color(0xFF546E7A); // ブルーグレー系(バックオフィス)
+    case '環境整備':
+      return const Color(0xFF4CAF50); // グリーン系(環境整備・清掃)
     default:
       return AppColors.textSecondary;
   }

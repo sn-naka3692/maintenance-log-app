@@ -9,6 +9,7 @@ enum ResponseType {
   officeWork, // 事務
   fieldOffice, // 現場事務
   warehouseWork, // 倉庫作業
+  environmentalMaintenance, // 環境整備(清掃・整理整頓・草刈り等)
   other, // その他
 }
 
@@ -29,6 +30,8 @@ extension ResponseTypeLabel on ResponseType {
         return '現場事務';
       case ResponseType.warehouseWork:
         return '倉庫作業';
+      case ResponseType.environmentalMaintenance:
+        return '環境整備';
       case ResponseType.other:
         return 'その他';
     }
@@ -40,6 +43,7 @@ extension ResponseTypeLabel on ResponseType {
       case ResponseType.officeWork:
       case ResponseType.fieldOffice:
       case ResponseType.warehouseWork:
+      case ResponseType.environmentalMaintenance:
         return true;
       default:
         return false;
@@ -62,6 +66,8 @@ extension ResponseTypeLabel on ResponseType {
         return 'fieldOffice';
       case ResponseType.warehouseWork:
         return 'warehouseWork';
+      case ResponseType.environmentalMaintenance:
+        return 'environmentalMaintenance';
       case ResponseType.other:
         return 'other';
     }

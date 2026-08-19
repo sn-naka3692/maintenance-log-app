@@ -297,7 +297,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            t.isBackOffice
+                            t == ResponseType.environmentalMaintenance
+                                ? Icons.cleaning_services
+                                : t.isBackOffice
                                 ? Icons.apartment
                                 : Icons.build_circle_outlined,
                             size: 16,
