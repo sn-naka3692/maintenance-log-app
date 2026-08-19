@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../models/store_system_report.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
@@ -217,11 +218,11 @@ class ReportDetailScreen extends StatelessWidget {
               ),
             ),
 
-          if (report.storeSystemReportCopy.isNotEmpty)
+          if (!report.storeSystemReportCopy.isEmpty)
             _SectionCard(
               title: 'コンビニ側システム入力控え',
               icon: Icons.receipt_long,
-              child: Text(report.storeSystemReportCopy),
+              child: _StoreSystemReportView(report.storeSystemReportCopy),
             ),
 
           if (report.notes.isNotEmpty)
@@ -272,6 +273,77 @@ class _InfoRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _StoreSystemReportView extends StatelessWidget {
+  final StoreSystemReport data;
+  const _StoreSystemReportView(this.data);
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <MapEntry<String, String>>[
+      MapEntry('弊社受付No.', data.receiptNumber),
+      MapEntry('作業者2', data.secondWorkerName),
+      MapEntry('冷媒種類', data.refrigerantType),
+      MapEntry('充填量', data.refrigerantAmount),
+      MapEntry('依頼内容', data.requestContent),
+      MapEntry('設備名称', data.equipmentName),
+      MapEntry('メーカー', data.maker),
+      MapEntry('型式', data.modelNumber),
+      MapEntry('部位', data.part),
+      MapEntry('詳細部位', data.detailPart),
+      MapEntry('事象', data.phenomenon),
+      MapEntry('事象補足', data.phenomenonNote),
+      MapEntry('原因', data.cause),
+      MapEntry('処置内容', data.treatmentContent),
+      MapEntry('処置内容2', data.treatmentContent2),
+      MapEntry('部品1', data.part1),
+      MapEntry('部品2', data.part2),
+      MapEntry('部品3', data.part3),
+      MapEntry('部品4', data.part4),
+      MapEntry('部品5', data.part5),
+      MapEntry('備考', data.remarks),
+    ].where((e) => e.value.isNotEmpty).toList();
+
+    if (rows.isEmpty) {
+      return Text(
+        '(未記入)',
+        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows
+          .map(
+            (e) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 92,
+                    child: Text(
+                      e.key,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      e.value,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 }

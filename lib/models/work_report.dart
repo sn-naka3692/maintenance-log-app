@@ -1,4 +1,5 @@
 import 'part_used.dart';
+import 'store_system_report.dart';
 
 /// 対応区分
 enum ResponseType {
@@ -100,7 +101,7 @@ class WorkReport {
   String issuesPoints; // 課題・失敗・改善点(ナレッジ共有)
   List<String> tags; // タグ(症状/機種/対応区分など自由入力)
   String proWanRefNumber; // プロワン管理番号(参照用・将来API連携)
-  String storeSystemReportCopy; // コンビニ側システム入力内容の控え(社内保存用)
+  StoreSystemReport storeSystemReportCopy; // コンビニ側システム入力内容の控え(社内保存用・構造化フォーム)
   DateTime createdAt;
   DateTime updatedAt;
 
@@ -123,12 +124,13 @@ class WorkReport {
     this.issuesPoints = '',
     List<String>? tags,
     this.proWanRefNumber = '',
-    this.storeSystemReportCopy = '',
+    StoreSystemReport? storeSystemReportCopy,
     required this.createdAt,
     required this.updatedAt,
   }) : partsUsed = partsUsed ?? [],
        photoPaths = photoPaths ?? [],
-       tags = tags ?? [];
+       tags = tags ?? [],
+       storeSystemReportCopy = storeSystemReportCopy ?? StoreSystemReport();
 
   Duration get workDuration => endTime.difference(startTime);
 
@@ -154,7 +156,7 @@ class WorkReport {
       'issues_points': issuesPoints,
       'tags': tags,
       'pro_wan_ref_number': proWanRefNumber,
-      'store_system_report_copy': storeSystemReportCopy,
+      'store_system_report': storeSystemReportCopy.toMap(),
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
@@ -188,7 +190,9 @@ class WorkReport {
           .map((e) => e.toString())
           .toList(),
       proWanRefNumber: map['pro_wan_ref_number'] as String? ?? '',
-      storeSystemReportCopy: map['store_system_report_copy'] as String? ?? '',
+      storeSystemReportCopy: StoreSystemReport.fromMap(
+        map['store_system_report'] as Map<String, dynamic>?,
+      ),
       createdAt: _parseDate(map['created_at']),
       updatedAt: _parseDate(map['updated_at']),
     );

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_app/models/work_report.dart';
 import 'package:flutter_app/models/part_used.dart';
+import 'package:flutter_app/models/store_system_report.dart';
 import 'package:flutter_app/models/user.dart';
 
 void main() {
@@ -41,7 +42,7 @@ void main() {
         issuesPoints: '',
         tags: const ['冷蔵庫'],
         proWanRefNumber: 'PW-001',
-        storeSystemReportCopy: '',
+        storeSystemReportCopy: StoreSystemReport(receiptNumber: 'R-001'),
         createdAt: now,
         updatedAt: now,
       );
@@ -53,6 +54,7 @@ void main() {
       expect(restored.responseType, report.responseType);
       expect(restored.partsUsed.first.name, 'フィルター');
       expect(restored.tags, contains('冷蔵庫'));
+      expect(restored.storeSystemReportCopy.receiptNumber, 'R-001');
     });
   });
 
