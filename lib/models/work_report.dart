@@ -85,7 +85,8 @@ class WorkReport {
   String id;
   String authorId;
   String authorName;
-  String clientName; // 訪問先(顧客名)
+  String? storeId; // 店舗マスタID(選択した場合のみ)
+  String clientName; // 訪問先(顧客名・店舗マスタ選択時は自動セット、リスト外は自由入力)
   DateTime visitDate; // 訪問日
   DateTime startTime; // 作業開始時刻
   DateTime endTime; // 作業終了時刻
@@ -107,6 +108,7 @@ class WorkReport {
     required this.id,
     required this.authorId,
     required this.authorName,
+    this.storeId,
     required this.clientName,
     required this.visitDate,
     required this.startTime,
@@ -137,6 +139,7 @@ class WorkReport {
     return {
       'author_id': authorId,
       'author_name': authorName,
+      'store_id': storeId,
       'client_name': clientName,
       'visit_date': visitDate,
       'start_time': startTime,
@@ -162,6 +165,7 @@ class WorkReport {
       id: id,
       authorId: map['author_id'] as String? ?? '',
       authorName: map['author_name'] as String? ?? '',
+      storeId: map['store_id'] as String?,
       clientName: map['client_name'] as String? ?? '',
       visitDate: _parseDate(map['visit_date']),
       startTime: _parseDate(map['start_time']),

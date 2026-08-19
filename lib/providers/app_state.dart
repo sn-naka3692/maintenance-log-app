@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import '../models/store.dart';
 import '../models/user.dart';
 import '../models/work_report.dart';
 import '../services/report_service.dart';
+import '../services/store_service.dart';
 
 class AppState extends ChangeNotifier {
   final ReportService _service = ReportService.instance;
+  final StoreService _storeService = StoreService.instance;
 
   AppUser? _currentUser;
   AppUser? get currentUser => _currentUser;
@@ -14,6 +17,9 @@ class AppState extends ChangeNotifier {
 
   List<WorkReport> _reports = [];
   List<WorkReport> get reports => _reports;
+
+  List<Store> _stores = [];
+  List<Store> get stores => _stores;
 
   bool _isLoading = true;
   bool get isLoading => _isLoading;
@@ -26,9 +32,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await _service.init();
+      await _storeService.init();
       _users = _service.getAllUsers();
       _currentUser = await _service.getCurrentUser();
       _reports = _service.getAllReports();
+      _stores = _storeService.getAll();
       _error = null;
     } catch (e) {
       _error = 'データの読み込みに失敗しました: $e';
@@ -41,6 +49,44 @@ class AppState extends ChangeNotifier {
     await _service.refreshAll();
     _reports = _service.getAllReports();
     _users = _service.getAllUsers();
+    notifyListeners();
+  }
+
+  // ------------ Store ------------
+  List<Store> searchStores(String keyword) => _storeService.search(keyword);
+
+  Store? getStoreById(String id) => _storeService.getById(id);
+
+  Future<Store> addStore({
+    required String name,
+    String phone = '',
+    String zipCode = '',
+    String address = '',
+    String keyLocation = '',
+    String note = '',
+  }) async {
+    final s = await _storeService.addStore(
+      name: name,
+      phone: phone,
+      zipCode: zipCode,
+      address: address,
+      keyLocation: keyLocation,
+      note: note,
+    );
+    _stores = _storeService.getAll();
+    notifyListeners();
+    return s;
+  }
+
+  Future<void> updateStore(Store store) async {
+    await _storeService.updateStore(store);
+    _stores = _storeService.getAll();
+    notifyListeners();
+  }
+
+  Future<void> deleteStore(String id) async {
+    await _storeService.deleteStore(id);
+    _stores = _storeService.getAll();
     notifyListeners();
   }
 

@@ -5,6 +5,7 @@ import '../providers/app_state.dart';
 import '../widgets/report_card.dart';
 import 'report_detail_screen.dart';
 import 'report_edit_screen.dart';
+import 'store_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -32,7 +33,20 @@ class HomeScreen extends StatelessWidget {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('札幌中野冷機 日報')),
+      appBar: AppBar(
+        title: const Text('札幌中野冷機 日報'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.storefront_outlined),
+            tooltip: '店舗マスタ',
+            onPressed: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const StoreListScreen()));
+            },
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () async => appState.refreshReports(),
         child: CustomScrollView(

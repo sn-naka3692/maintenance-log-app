@@ -3,9 +3,11 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/part_used.dart';
+import '../models/store.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/store_picker_field.dart';
 
 class ReportEditScreen extends StatefulWidget {
   final WorkReport? existing;
@@ -20,6 +22,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController _clientNameCtrl;
+  late TextEditingController _storeFreeTextCtrl;
   late TextEditingController _workContentCtrl;
   late TextEditingController _equipmentModelCtrl;
   late TextEditingController _notesCtrl;
@@ -29,6 +32,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   late TextEditingController _storeSystemCtrl;
   late TextEditingController _tagInputCtrl;
 
+  String? _selectedStoreId;
   DateTime _visitDate = DateTime.now();
   TimeOfDay _startTime = TimeOfDay.now();
   TimeOfDay _endTime = TimeOfDay.now();
@@ -43,7 +47,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   void initState() {
     super.initState();
     final e = widget.existing;
+    _selectedStoreId = e?.storeId;
     _clientNameCtrl = TextEditingController(text: e?.clientName ?? '');
+    // storeIdが設定されている場合、自由入力欄は空。それ以外はclientNameを自由入力の初期値とする
+    _storeFreeTextCtrl = TextEditingController(
+      text: (e?.storeId == null) ? (e?.clientName ?? '') : '',
+    );
     _workContentCtrl = TextEditingController(text: e?.workContent ?? '');
     _equipmentModelCtrl = TextEditingController(text: e?.equipmentModel ?? '');
     _notesCtrl = TextEditingController(text: e?.notes ?? '');
@@ -69,6 +78,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   @override
   void dispose() {
     _clientNameCtrl.dispose();
+    _storeFreeTextCtrl.dispose();
     _workContentCtrl.dispose();
     _equipmentModelCtrl.dispose();
     _notesCtrl.dispose();
@@ -161,9 +171,24 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       end = end.add(const Duration(days: 1));
     }
 
+    // 店舗マスタから選択されていればその店名、なければ自由入力欄の値をclientNameとする
+    final resolvedClientName = _selectedStoreId != null
+        ? (appState.getStoreById(_selectedStoreId!)?.name ?? '')
+        : _storeFreeTextCtrl.text.trim();
+
+    if (!_responseType.isBackOffice &&
+        _selectedStoreId == null &&
+        resolvedClientName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('店舗をリストから選択するか、店舗名を自由入力してください')),
+      );
+      return;
+    }
+
     if (isEditing) {
       final r = widget.existing!;
-      r.clientName = _clientNameCtrl.text.trim();
+      r.storeId = _selectedStoreId;
+      r.clientName = resolvedClientName;
       r.visitDate = _visitDate;
       r.startTime = start;
       r.endTime = end;
@@ -184,7 +209,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         id: appState.newId(),
         authorId: user.id,
         authorName: user.name,
-        clientName: _clientNameCtrl.text.trim(),
+        storeId: _selectedStoreId,
+        clientName: resolvedClientName,
         visitDate: _visitDate,
         startTime: start,
         endTime: end,
@@ -226,18 +252,28 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           children: [
             _SectionTitle('基本情報'),
             const SizedBox(height: 8),
-            _buildField(
-              controller: _clientNameCtrl,
-              label: _responseType.isBackOffice ? '対象・場所(任意)' : '訪問先(顧客名)',
-              icon: _responseType.isBackOffice
-                  ? Icons.apartment
-                  : Icons.storefront,
-              validator: (v) =>
-                  (!_responseType.isBackOffice &&
-                      (v == null || v.trim().isEmpty))
-                  ? '必須項目です'
-                  : null,
-            ),
+            if (_responseType.isBackOffice)
+              _buildField(
+                controller: _clientNameCtrl,
+                label: '対象・場所(任意)',
+                icon: Icons.apartment,
+              )
+            else
+              StorePickerField(
+                selectedStoreId: _selectedStoreId,
+                freeTextController: _storeFreeTextCtrl,
+                onStoreSelected: (Store s) {
+                  setState(() {
+                    _selectedStoreId = s.id;
+                    _storeFreeTextCtrl.clear();
+                  });
+                },
+                onFreeTextChanged: (v) {
+                  setState(() {
+                    if (v.trim().isNotEmpty) _selectedStoreId = null;
+                  });
+                },
+              ),
             const SizedBox(height: 12),
             InkWell(
               onTap: _pickDate,
