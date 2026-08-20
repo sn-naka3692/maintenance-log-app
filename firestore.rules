@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ログイン中ユーザー自身のユーザードキュメントから role を取得し、
+    // 管理者かどうかを判定するヘルパー。
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ------------------------------------------------------------
+    // users: 社員マスタ(氏名・社員番号・役割など)
+    // - 読み取り: ログイン済みなら誰でも可(日報の作成者名表示・管理画面の社員一覧に必要)
+    // - 作成/更新/削除: 管理者のみ(社員追加・役割変更はUI上も管理者限定のため一致させる)
+    // ------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------
+    // work_reports: 日報
+    // - 読み取り: ログイン済みなら誰でも可(検索・管理ダッシュボードに必要)
+    // - 作成: 本人の日報としてのみ作成可(author_id が自分のuidであること)
+    // - 更新/削除: 本人 または 管理者のみ
+    // ------------------------------------------------------------
+    match /work_reports/{reportId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.author_id == request.auth.uid;
+      allow update, delete: if isSignedIn() &&
+        (resource.data.author_id == request.auth.uid || isAdmin());
+    }
+
+    // ------------------------------------------------------------
+    // stores: 店舗マスタ
+    // - 管理者/一般作業員問わず全員が閲覧・編集可能(意図的な仕様)
+    // ------------------------------------------------------------
+    match /stores/{storeId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // その他の未定義コレクションはデフォルトで拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
