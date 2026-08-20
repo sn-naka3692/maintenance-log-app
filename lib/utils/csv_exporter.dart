@@ -16,7 +16,10 @@ class CsvExporter {
   /// 1つのフィールド値をCSV仕様に沿ってエスケープする。
   static String _escape(Object? value) {
     final s = (value ?? '').toString();
-    if (s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r')) {
+    if (s.contains(',') ||
+        s.contains('"') ||
+        s.contains('\n') ||
+        s.contains('\r')) {
       return '"${s.replaceAll('"', '""')}"';
     }
     return s;
@@ -72,6 +75,9 @@ class CsvExporter {
       'SE:部品4',
       'SE:部品5',
       'SE:備考',
+      // プロワン管轄案件(SE店舗以外)専用・請求業務用
+      '冷媒種類(プロワン案件)',
+      '冷媒量kg(プロワン案件)',
       '作成日時',
       '更新日時',
     ];
@@ -80,9 +86,11 @@ class CsvExporter {
     for (final r in reports) {
       final ssr = r.storeSystemReportCopy;
       final partsText = r.partsUsed
-          .map((p) => p.note != null && p.note!.trim().isNotEmpty
-              ? '${p.name}×${p.quantity}(${p.note})'
-              : '${p.name}×${p.quantity}')
+          .map(
+            (p) => p.note != null && p.note!.trim().isNotEmpty
+                ? '${p.name}×${p.quantity}(${p.note})'
+                : '${p.name}×${p.quantity}',
+          )
           .join(' / ');
 
       final row = <Object?>[
@@ -124,6 +132,8 @@ class CsvExporter {
         ssr.part4,
         ssr.part5,
         ssr.remarks,
+        r.nonSeRefrigerantType,
+        r.nonSeRefrigerantAmountKg,
         _dateTimeFmt.format(r.createdAt),
         _dateTimeFmt.format(r.updatedAt),
       ];
@@ -152,13 +162,7 @@ class CsvExporter {
 
     await SharePlus.instance.share(
       ShareParams(
-        files: [
-          XFile.fromData(
-            bytes,
-            name: fileName,
-            mimeType: 'text/csv',
-          ),
-        ],
+        files: [XFile.fromData(bytes, name: fileName, mimeType: 'text/csv')],
         fileNameOverrides: [fileName],
         subject: fileNamePrefix,
       ),

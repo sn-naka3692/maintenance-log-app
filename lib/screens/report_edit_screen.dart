@@ -38,6 +38,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   late TextEditingController _proWanCtrl;
   late Map<String, TextEditingController> _ssCtrls;
   late TextEditingController _tagInputCtrl;
+  late TextEditingController _nonSeRefrigerantTypeCtrl;
+  late TextEditingController _nonSeRefrigerantAmountCtrl;
 
   String? _selectedStoreId;
   final List<String> _selectedCoWorkerIds = [];
@@ -73,6 +75,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     _successCtrl = TextEditingController(text: e?.successPoints ?? '');
     _issuesCtrl = TextEditingController(text: e?.issuesPoints ?? '');
     _proWanCtrl = TextEditingController(text: e?.proWanRefNumber ?? '');
+    _nonSeRefrigerantTypeCtrl = TextEditingController(
+      text: e?.nonSeRefrigerantType ?? '',
+    );
+    _nonSeRefrigerantAmountCtrl = TextEditingController(
+      text: e?.nonSeRefrigerantAmountKg ?? '',
+    );
     final ss = e?.storeSystemReportCopy ?? StoreSystemReport();
     _ssCtrls = {
       'receiptNumber': TextEditingController(text: ss.receiptNumber),
@@ -121,6 +129,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     _successCtrl.dispose();
     _issuesCtrl.dispose();
     _proWanCtrl.dispose();
+    _nonSeRefrigerantTypeCtrl.dispose();
+    _nonSeRefrigerantAmountCtrl.dispose();
     for (final c in _ssCtrls.values) {
       c.dispose();
     }
@@ -336,6 +346,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       r.tags = _tags;
       r.proWanRefNumber = _proWanCtrl.text.trim();
       r.storeSystemReportCopy = _buildStoreSystemReport();
+      r.nonSeRefrigerantType = _nonSeRefrigerantTypeCtrl.text.trim();
+      r.nonSeRefrigerantAmountKg = _nonSeRefrigerantAmountCtrl.text.trim();
       await appState.updateReport(r);
     } else {
       final report = WorkReport(
@@ -359,6 +371,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         tags: _tags,
         proWanRefNumber: _proWanCtrl.text.trim(),
         storeSystemReportCopy: _buildStoreSystemReport(),
+        nonSeRefrigerantType: _nonSeRefrigerantTypeCtrl.text.trim(),
+        nonSeRefrigerantAmountKg: _nonSeRefrigerantAmountCtrl.text.trim(),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -386,6 +400,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         isSEStore &&
         (_responseType == ResponseType.repair ||
             _responseType == ResponseType.breakdown);
+    // プロワン管轄案件(SE店舗以外)の現場作業では、請求業務効率化のため
+    // 冷媒種類・冷媒量の入力を必須とする(バックオフィス業務は対象外)。
+    final showNonSeRefrigerantSection =
+        !isSEStore && !_responseType.isBackOffice;
 
     return Scaffold(
       appBar: AppBar(title: Text(isEditing ? '日報編集' : '日報作成')),
@@ -534,6 +552,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             if (!_responseType.isBackOffice)
               _buildWorkContentSupport(isSEStore),
             const SizedBox(height: 12),
+
+            if (showNonSeRefrigerantSection) _buildNonSeRefrigerantSection(),
 
             // 使用部品
             Row(
@@ -698,233 +718,241 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               ),
 
             if (showStoreSystemSection) ...[
-            const SizedBox(height: 20),
-            _SectionTitle('コンビニ側システム入力控え'),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.all(10),
-              margin: const EdgeInsets.only(bottom: 4),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
+              const SizedBox(height: 20),
+              _SectionTitle('コンビニ側システム入力控え'),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(bottom: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.storefront,
+                      size: 16,
+                      color: Colors.orange.shade800,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'SE店舗(コンビニ)の修理・故障対応のため、この入力控えは必須です。コンビニ側の業務システムはデータ抽出ができないため、社内保管用にここへ同じ内容を項目ごとに控えとして記録してください。',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange.shade900,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 8),
+              Text(
+                '受付情報',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildField(
+                controller: _ssCtrls['receiptNumber']!,
+                label: '弊社受付No.',
+                icon: Icons.confirmation_number_outlined,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '冷媒情報',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
                 children: [
-                  Icon(Icons.storefront, size: 16, color: Colors.orange.shade800),
-                  const SizedBox(width: 6),
                   Expanded(
-                    child: Text(
-                      'SE店舗(コンビニ)の修理・故障対応のため、この入力控えは必須です。コンビニ側の業務システムはデータ抽出ができないため、社内保管用にここへ同じ内容を項目ごとに控えとして記録してください。',
-                      style: TextStyle(fontSize: 12, color: Colors.orange.shade900, height: 1.4),
+                    child: _buildField(
+                      controller: _ssCtrls['refrigerantType']!,
+                      label: '冷媒種類',
+                      icon: Icons.ac_unit,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['refrigerantAmount']!,
+                      label: '充填量',
+                      icon: Icons.opacity,
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '受付情報',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.grey.shade700,
+              const SizedBox(height: 16),
+              Text(
+                '依頼・設備情報',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade700,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            _buildField(
-              controller: _ssCtrls['receiptNumber']!,
-              label: '弊社受付No.',
-              icon: Icons.confirmation_number_outlined,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '冷媒情報',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.grey.shade700,
+              const SizedBox(height: 8),
+              _buildField(
+                controller: _ssCtrls['requestContent']!,
+                label: '依頼内容',
+                icon: Icons.assignment_outlined,
+                maxLines: 2,
+                enableVoice: true,
               ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildField(
-                    controller: _ssCtrls['refrigerantType']!,
-                    label: '冷媒種類',
-                    icon: Icons.ac_unit,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildField(
-                    controller: _ssCtrls['refrigerantAmount']!,
-                    label: '充填量',
-                    icon: Icons.opacity,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '依頼・設備情報',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.grey.shade700,
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['equipmentName']!,
+                label: '設備名称',
+                icon: Icons.kitchen,
               ),
-            ),
-            const SizedBox(height: 8),
-            _buildField(
-              controller: _ssCtrls['requestContent']!,
-              label: '依頼内容',
-              icon: Icons.assignment_outlined,
-              maxLines: 2,
-              enableVoice: true,
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _ssCtrls['equipmentName']!,
-              label: '設備名称',
-              icon: Icons.kitchen,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildField(
-                    controller: _ssCtrls['maker']!,
-                    label: 'メーカー',
-                    icon: Icons.factory_outlined,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['maker']!,
+                      label: 'メーカー',
+                      icon: Icons.factory_outlined,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildField(
-                    controller: _ssCtrls['modelNumber']!,
-                    label: '型式',
-                    icon: Icons.qr_code_2,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['modelNumber']!,
+                      label: '型式',
+                      icon: Icons.qr_code_2,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '事象・原因・処置',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.grey.shade700,
+                ],
               ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildField(
-                    controller: _ssCtrls['part']!,
-                    label: '部位',
-                    icon: Icons.build_circle_outlined,
-                  ),
+              const SizedBox(height: 16),
+              Text(
+                '事象・原因・処置',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade700,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildField(
-                    controller: _ssCtrls['detailPart']!,
-                    label: '詳細部位',
-                    icon: Icons.build_circle_outlined,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _ssCtrls['phenomenon']!,
-              label: '事象',
-              icon: Icons.report_gmailerrorred_outlined,
-              maxLines: 2,
-              enableVoice: true,
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _ssCtrls['phenomenonNote']!,
-              label: '事象補足',
-              icon: Icons.notes_outlined,
-              maxLines: 2,
-              enableVoice: true,
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _ssCtrls['cause']!,
-              label: '原因',
-              icon: Icons.psychology_alt_outlined,
-              maxLines: 2,
-              enableVoice: true,
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _ssCtrls['treatmentContent']!,
-              label: '処置内容',
-              icon: Icons.handyman_outlined,
-              maxLines: 2,
-              enableVoice: true,
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _ssCtrls['treatmentContent2']!,
-              label: '処置内容2(任意)',
-              icon: Icons.handyman_outlined,
-              maxLines: 2,
-              enableVoice: true,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '交換部品(コンビニ側システム登録用・任意)',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.grey.shade700,
               ),
-            ),
-            const SizedBox(height: 8),
-            _buildField(
-              controller: _ssCtrls['part1']!,
-              label: '部品1',
-              icon: Icons.inventory_2_outlined,
-            ),
-            const SizedBox(height: 10),
-            _buildField(
-              controller: _ssCtrls['part2']!,
-              label: '部品2',
-              icon: Icons.inventory_2_outlined,
-            ),
-            const SizedBox(height: 10),
-            _buildField(
-              controller: _ssCtrls['part3']!,
-              label: '部品3',
-              icon: Icons.inventory_2_outlined,
-            ),
-            const SizedBox(height: 10),
-            _buildField(
-              controller: _ssCtrls['part4']!,
-              label: '部品4',
-              icon: Icons.inventory_2_outlined,
-            ),
-            const SizedBox(height: 10),
-            _buildField(
-              controller: _ssCtrls['part5']!,
-              label: '部品5',
-              icon: Icons.inventory_2_outlined,
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _ssCtrls['remarks']!,
-              label: '備考(コンビニ側システム用)',
-              icon: Icons.sticky_note_2_outlined,
-              maxLines: 2,
-              enableVoice: true,
-            ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['part']!,
+                      label: '部位',
+                      icon: Icons.build_circle_outlined,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['detailPart']!,
+                      label: '詳細部位',
+                      icon: Icons.build_circle_outlined,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['phenomenon']!,
+                label: '事象',
+                icon: Icons.report_gmailerrorred_outlined,
+                maxLines: 2,
+                enableVoice: true,
+              ),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['phenomenonNote']!,
+                label: '事象補足',
+                icon: Icons.notes_outlined,
+                maxLines: 2,
+                enableVoice: true,
+              ),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['cause']!,
+                label: '原因',
+                icon: Icons.psychology_alt_outlined,
+                maxLines: 2,
+                enableVoice: true,
+              ),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['treatmentContent']!,
+                label: '処置内容',
+                icon: Icons.handyman_outlined,
+                maxLines: 2,
+                enableVoice: true,
+              ),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['treatmentContent2']!,
+                label: '処置内容2(任意)',
+                icon: Icons.handyman_outlined,
+                maxLines: 2,
+                enableVoice: true,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '交換部品(コンビニ側システム登録用・任意)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildField(
+                controller: _ssCtrls['part1']!,
+                label: '部品1',
+                icon: Icons.inventory_2_outlined,
+              ),
+              const SizedBox(height: 10),
+              _buildField(
+                controller: _ssCtrls['part2']!,
+                label: '部品2',
+                icon: Icons.inventory_2_outlined,
+              ),
+              const SizedBox(height: 10),
+              _buildField(
+                controller: _ssCtrls['part3']!,
+                label: '部品3',
+                icon: Icons.inventory_2_outlined,
+              ),
+              const SizedBox(height: 10),
+              _buildField(
+                controller: _ssCtrls['part4']!,
+                label: '部品4',
+                icon: Icons.inventory_2_outlined,
+              ),
+              const SizedBox(height: 10),
+              _buildField(
+                controller: _ssCtrls['part5']!,
+                label: '部品5',
+                icon: Icons.inventory_2_outlined,
+              ),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['remarks']!,
+                label: '備考(コンビニ側システム用)',
+                icon: Icons.sticky_note_2_outlined,
+                maxLines: 2,
+                enableVoice: true,
+              ),
             ], // showStoreSystemSection
 
             const SizedBox(height: 20),
@@ -983,6 +1011,82 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     );
   }
 
+  /// プロワン管轄案件(SE店舗以外)専用の冷媒種類・冷媒量入力セクション。
+  /// 請求業務効率化のため事務からの要望で追加。充填有無に関わらず必須入力
+  /// (未充填時は種類「なし」・量「0」を入力してもらう運用)。
+  Widget _buildNonSeRefrigerantSection() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.teal.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.teal.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.ac_unit, size: 16, color: Colors.teal.shade800),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '冷媒情報(請求業務用・必須)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.teal.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '充填していない場合は「冷媒種類」に「なし」、「冷媒量」に「0」と入力してください。'
+            '充填有無に関わらず両方の入力が必須です。',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.teal.shade900,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildField(
+                  controller: _nonSeRefrigerantTypeCtrl,
+                  label: '冷媒種類',
+                  icon: Icons.ac_unit,
+                  hint: '例: R410A / なし',
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? '必須項目です(未充填時は「なし」)'
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildField(
+                  controller: _nonSeRefrigerantAmountCtrl,
+                  label: '冷媒量(kg)',
+                  icon: Icons.opacity,
+                  hint: '例: 1.5 / 0',
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? '必須項目です(未充填時は「0」)'
+                      : null,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 作業内容欄の記入サポート(ナレガレ共有の前提となる必要情報のもれないチェッキリスト)。
   /// 店舗区分(SE/プロワン)と対応区分に応じて内容を切り替え、他セレクションとの重複を避ける。
   Widget _buildWorkContentSupport(bool isSEStore) {
@@ -1006,8 +1110,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         break;
       case _WorkSupportMode.seOther:
         title = '記入サポート(SE店舗・点検など)';
-        note =
-            '点検などSE店舗対応の場合、コンビニ側システムへの入力控えは不要です。作業内容欄に必要な情報を記載してください。';
+        note = '点検などSE店舗対応の場合、コンビニ側システムへの入力控えは不要です。作業内容欄に必要な情報を記載してください。';
         color = Colors.blue;
         items = [
           '点検・確認した設備・箇所',
@@ -1059,7 +1162,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           const SizedBox(height: 6),
           Text(
             note,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.4),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade700,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 8),
           ...items.map(
@@ -1068,9 +1175,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.check_circle_outline, size: 14, color: color.shade700),
+                  Icon(
+                    Icons.check_circle_outline,
+                    size: 14,
+                    color: color.shade700,
+                  ),
                   const SizedBox(width: 6),
-                  Expanded(child: Text(it, style: const TextStyle(fontSize: 12))),
+                  Expanded(
+                    child: Text(it, style: const TextStyle(fontSize: 12)),
+                  ),
                 ],
               ),
             ),
@@ -1114,7 +1227,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 spacing: 6,
                 runSpacing: 6,
                 children: selectedNames
-                    .map((n) => Chip(label: Text(n), visualDensity: VisualDensity.compact))
+                    .map(
+                      (n) => Chip(
+                        label: Text(n),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    )
                     .toList(),
               ),
       ),

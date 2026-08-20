@@ -103,6 +103,11 @@ class WorkReport {
   List<String> tags; // タグ(症状/機種/対応区分など自由入力)
   String proWanRefNumber; // プロワン管理番号(参照用・将来API連携)
   StoreSystemReport storeSystemReportCopy; // コンビニ側システム入力内容の控え(社内保存用・構造化フォーム)
+  // プロワン管轄案件(SE店舗以外)専用: 請求業務効率化のため事務から要望。
+  // 充填していない場合は種類「なし」・量「0」を入力する運用(空欄は不可)。
+  // ※SE店舗用のStoreSystemReport.refrigerantType/refrigerantAmountとは別物。
+  String nonSeRefrigerantType; // 冷媒種類(プロワン管轄案件)
+  String nonSeRefrigerantAmountKg; // 冷媒量・kg単位(プロワン管轄案件)
   DateTime createdAt;
   DateTime updatedAt;
 
@@ -127,6 +132,8 @@ class WorkReport {
     List<String>? tags,
     this.proWanRefNumber = '',
     StoreSystemReport? storeSystemReportCopy,
+    this.nonSeRefrigerantType = '',
+    this.nonSeRefrigerantAmountKg = '',
     required this.createdAt,
     required this.updatedAt,
   }) : partsUsed = partsUsed ?? [],
@@ -161,6 +168,8 @@ class WorkReport {
       'tags': tags,
       'pro_wan_ref_number': proWanRefNumber,
       'store_system_report': storeSystemReportCopy.toMap(),
+      'non_se_refrigerant_type': nonSeRefrigerantType,
+      'non_se_refrigerant_amount_kg': nonSeRefrigerantAmountKg,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
@@ -200,6 +209,9 @@ class WorkReport {
       storeSystemReportCopy: StoreSystemReport.fromMap(
         map['store_system_report'] as Map<String, dynamic>?,
       ),
+      nonSeRefrigerantType: map['non_se_refrigerant_type'] as String? ?? '',
+      nonSeRefrigerantAmountKg:
+          map['non_se_refrigerant_amount_kg'] as String? ?? '',
       createdAt: _parseDate(map['created_at']),
       updatedAt: _parseDate(map['updated_at']),
     );

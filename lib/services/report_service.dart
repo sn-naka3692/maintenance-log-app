@@ -222,6 +222,8 @@ class ReportService {
   List<WorkReport> search({
     String? keyword,
     String? authorId,
+    String? storeId,
+    String? clientName,
     ResponseType? responseType,
     DateTime? from,
     DateTime? to,
@@ -232,6 +234,15 @@ class ReportService {
 
     if (authorId != null && authorId.isNotEmpty) {
       list = list.where((r) => r.authorId == authorId).toList();
+    }
+    if (storeId != null && storeId.isNotEmpty) {
+      list = list.where((r) => r.storeId == storeId).toList();
+    }
+    if (clientName != null && clientName.trim().isNotEmpty) {
+      final cn = clientName.trim().toLowerCase();
+      list = list
+          .where((r) => r.clientName.toLowerCase().contains(cn))
+          .toList();
     }
     if (responseType != null) {
       list = list.where((r) => r.responseType == responseType).toList();

@@ -160,7 +160,8 @@ class AppState extends ChangeNotifier {
     return u;
   }
 
-  Future<void> changePassword(String newPassword) => _service.changePassword(newPassword);
+  Future<void> changePassword(String newPassword) =>
+      _service.changePassword(newPassword);
 
   Future<void> sendPasswordResetEmail(String email) =>
       _service.sendPasswordResetEmail(email);
@@ -168,6 +169,8 @@ class AppState extends ChangeNotifier {
   List<WorkReport> search({
     String? keyword,
     String? authorId,
+    String? storeId,
+    String? clientName,
     ResponseType? responseType,
     DateTime? from,
     DateTime? to,
@@ -177,6 +180,8 @@ class AppState extends ChangeNotifier {
     return _service.search(
       keyword: keyword,
       authorId: authorId,
+      storeId: storeId,
+      clientName: clientName,
       responseType: responseType,
       from: from,
       to: to,

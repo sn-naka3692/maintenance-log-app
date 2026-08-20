@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../models/store.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../widgets/report_card.dart';
@@ -20,6 +21,7 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _onlyIssues = false;
   DateTime? _from;
   DateTime? _to;
+  String? _filterStoreId;
 
   List<WorkReport> _results = [];
 
@@ -34,6 +36,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _results = appState.search(
         keyword: _keywordCtrl.text,
+        storeId: _filterStoreId,
         responseType: _filterType,
         from: _from,
         to: _to,
@@ -89,6 +92,39 @@ class _SearchScreenState extends State<SearchScreen> {
                         : null,
                   ),
                   onChanged: (_) => _runSearch(),
+                ),
+                const SizedBox(height: 10),
+                Consumer<AppState>(
+                  builder: (context, appState, _) {
+                    final stores = List<Store>.from(appState.stores)
+                      ..sort((a, b) => a.name.compareTo(b.name));
+                    return DropdownButtonFormField<String?>(
+                      initialValue: _filterStoreId,
+                      decoration: const InputDecoration(
+                        labelText: '店舗名で絞り込み',
+                        prefixIcon: Icon(Icons.storefront_outlined),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('すべての店舗'),
+                        ),
+                        ...stores.map(
+                          (s) => DropdownMenuItem<String?>(
+                            value: s.id,
+                            child: Text(
+                              s.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        setState(() => _filterStoreId = v);
+                        _runSearch();
+                      },
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
                 SingleChildScrollView(
