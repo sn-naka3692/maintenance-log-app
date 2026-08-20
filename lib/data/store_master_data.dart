@@ -77,7 +77,7 @@ final List<Store> initialStoreMasterData = [
   Store(id: 's072', name: 'ラッキー　シティわっかない店', phone: '', zipCode: '', address: '', keyLocation: '', note: '住所要確認(データ不完全)', isSE: false),
   Store(id: 's073', name: 'ラッキー本部', phone: '011-558-7000', zipCode: '', address: '', keyLocation: '', note: '', isSE: false),
   Store(id: 's074', name: 'ラッキー星置駅前', phone: '', zipCode: '', address: '', keyLocation: '', note: '住所・電話番号は後日確認して入力', isSE: false),
-  Store(id: 's075', name: 'SEKOYO江別市立病院', phone: '', zipCode: '', address: '', keyLocation: '', note: '', isSE: false),
+  Store(id: 's075', name: 'SEKOYO江別市立病院', phone: '', zipCode: '', address: '', keyLocation: '', note: '', isSE: true),
   Store(id: 's076', name: 'SE三笠いちきしり', phone: '', zipCode: '', address: '', keyLocation: '', note: '', isSE: true),
   Store(id: 's077', name: 'SE仁木北町', phone: '', zipCode: '', address: '', keyLocation: '', note: '', isSE: true),
   Store(id: 's078', name: 'SE余市大川', phone: '', zipCode: '', address: '', keyLocation: '', note: '', isSE: true),
