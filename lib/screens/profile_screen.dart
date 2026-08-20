@@ -2,9 +2,12 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+import '../data/changelog_data.dart';
 import '../models/user.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
+import 'changelog_screen.dart';
+import 'manual_screen.dart';
 import 'user_management_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -91,6 +94,47 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
+          Text(
+            'アプリ情報',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.system_update,
+                    color: AppColors.primary,
+                  ),
+                  title: const Text('更新履歴'),
+                  subtitle: const Text('アプリの変更内容をここで確認できます'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ChangelogScreen()),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(
+                    Icons.menu_book_outlined,
+                    color: AppColors.primary,
+                  ),
+                  title: const Text('入力マニュアル'),
+                  subtitle: const Text('日報の入力ルールを確認できます'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ManualScreen()),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
           if (appState.isAdmin)
             OutlinedButton.icon(
               onPressed: () => _showAddUserDialog(context),
@@ -140,7 +184,7 @@ class ProfileScreen extends StatelessWidget {
           const SizedBox(height: 30),
           Center(
             child: Text(
-              '札幌中野冷機 業務日報アプリ\nバージョン 1.0.0',
+              '札幌中野冷機 業務日報アプリ\nバージョン ${changelogEntries.first.version}',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
             ),

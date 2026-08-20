@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -410,6 +411,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
+          // 注意: ListViewは既定では画面外の子要素を遅延構築するため、
+          // スクロールして隠れているTextFormFieldがForm.validate()実行時に
+          // まだビルドされておらず、必須バリデーションが素通りしてしまう不具合があった。
+          // cacheExtentを大きく設定し全フィールドを事前構築することで、
+          // 保存時に全項目のバリデーションが確実に実行されるようにする。
+          cacheExtent: 5000,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
             _SectionTitle('基本情報'),
@@ -774,6 +781,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   color: Colors.grey.shade700,
                 ),
               ),
+              const SizedBox(height: 4),
+              Text(
+                '半角英数で入力してください(充填していない場合は「NONE」、充填量は「0」)。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  height: 1.4,
+                ),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -782,6 +798,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['refrigerantType']!,
                       label: '冷媒種類',
                       icon: Icons.ac_unit,
+                      hint: '例: R410A',
+                      inputFormatters: [_halfWidthAlphaNumFormatter],
+                      validator: _halfWidthAlphaNumValidator,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -790,6 +809,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['refrigerantAmount']!,
                       label: '充填量',
                       icon: Icons.opacity,
+                      hint: '例: 1.5',
+                      inputFormatters: [_halfWidthAlphaNumFormatter],
+                      validator: _halfWidthAlphaNumValidator,
                     ),
                   ),
                 ],
@@ -986,12 +1008,14 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     Color? iconColor,
     String? Function(String?)? validator,
     bool enableVoice = false,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     final isListening = _activeListenController == controller;
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
       validator: validator,
+      inputFormatters: inputFormatters,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -1009,6 +1033,23 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             : null,
       ),
     );
+  }
+
+  /// 半角英数のみ許可する入力フォーマッタ(コンビニ側システム入力控えの
+  /// 冷媒種類・充填量用。コンビニ側の業務システム入力ルールに準拠するため
+  /// 全角文字や記号・スペースの混入を防ぐ)。
+  static final _halfWidthAlphaNumFormatter = FilteringTextInputFormatter.allow(
+    RegExp(r'[A-Za-z0-9.]'),
+  );
+
+  String? _halfWidthAlphaNumValidator(String? v) {
+    if (v == null || v.trim().isEmpty) {
+      return '必須項目です(半角英数で入力してください)';
+    }
+    if (!RegExp(r'^[A-Za-z0-9.]+$').hasMatch(v.trim())) {
+      return '半角英数で入力してください';
+    }
+    return null;
   }
 
   /// プロワン管轄案件(SE店舗以外)専用の冷媒種類・冷媒量入力セクション。
