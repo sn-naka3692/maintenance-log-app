@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>札幌中野冷機 業務日報アプリ 操作マニュアル</title>
+<style>
+  :root {
+    --primary: #1565ef;
+    --bg: #f4f7fb;
+    --text: #1a1a1a;
+    --muted: #667085;
+    --border: #e3e8ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    line-height: 1.75;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; }
+  header.hero {
+    background: linear-gradient(135deg, var(--primary), #3b82f6);
+    color: #fff;
+    border-radius: 16px;
+    padding: 28px 24px;
+    margin-bottom: 24px;
+  }
+  header.hero h1 { margin: 0 0 6px; font-size: 20px; }
+  header.hero p { margin: 0; font-size: 13px; opacity: 0.92; }
+  .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 999px;
+    padding: 3px 12px;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  section {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+  }
+  h2 {
+    font-size: 16px;
+    margin: 0 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--primary);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h2 .num {
+    background: var(--primary);
+    color: #fff;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 13.5px; margin: 16px 0 6px; color: #333; }
+  p { font-size: 13.5px; margin: 6px 0; }
+  ol, ul { font-size: 13.5px; padding-left: 22px; margin: 8px 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }
+  th { background: #eef3fc; color: var(--primary); }
+  .note {
+    background: #fff8e6;
+    border: 1px solid #f5d78e;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12.5px;
+    color: #6b5300;
+    margin-top: 10px;
+  }
+  .important {
+    background: #fdecec;
+    border: 1px solid #f3b4b4;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #8a1f1f;
+    margin-bottom: 10px;
+  }
+  .access-box {
+    background: #e8f0fe;
+    border: 2px solid var(--primary);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 10px 0 14px;
+  }
+  .access-box .label {
+    font-size: 12px;
+    color: #555;
+    margin-bottom: 6px;
+  }
+  .access-box a {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary);
+    word-break: break-all;
+    text-decoration: none;
+    padding: 8px 10px;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .access-box a:active { opacity: 0.7; }
+  .access-box .hint {
+    font-size: 11.5px;
+    color: #666;
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+  .qa {
+    background: #f7f9fc;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .qa .q { font-weight: 700; color: var(--primary); font-size: 13px; }
+  .qa .a { font-size: 13px; color: #333; margin-top: 4px; }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps li {
+    position: relative;
+    padding-left: 30px;
+    margin-bottom: 10px;
+  }
+  .steps li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0;
+    background: var(--primary);
+    color: #fff;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  footer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 28px;
+  }
+  .tag-list span {
+    display: inline-block;
+    background: #eef3fc;
+    color: var(--primary);
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: 12px;
+    margin: 2px 3px 2px 0;
+  }
+  .flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 16px 0 6px;
+  }
+  .flow-row {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .flow-box {
+    border: 1.5px solid var(--primary);
+    background: #eef3fc;
+    color: var(--primary);
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-align: center;
+    min-width: 120px;
+  }
+  .flow-box.leaf {
+    background: #fff;
+    color: var(--text);
+    font-weight: 400;
+    border-color: var(--border);
+    font-size: 12px;
+    min-width: 150px;
+  }
+  .flow-box.goal {
+    background: #eafaf0;
+    color: #16794f;
+    border-color: #9fe0bc;
+  }
+  .flow-arrow {
+    font-size: 16px;
+    color: var(--primary);
+    line-height: 1;
+    margin: 2px 0;
+  }
+  .flow-branch {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    width: 100%;
+    margin-top: 2px;
+  }
+  .flow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  @media print {
+    body { background: #fff; }
+    section { break-inside: avoid; border: 1px solid #ccc; }
+    header.hero { background: var(--primary) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="badge">試験運用版・3名様向け</span>
+    <h1>❄️ 札幌中野冷機 業務日報アプリ<br>操作マニュアル</h1>
+    <p>使ってみて分かりにくい点・改善したい点があれば、遠慮なく仲までお知らせください。</p>
+  </header>
+
+  <section>
+    <h2><span class="num">1</span>はじめに</h2>
+    <p>このアプリは、これまで紙やメールで行っていた日報の作成・共有を、スマートフォン・パソコンから直接行えるようにするものです。</p>
+    <ul>
+      <li>訪問先・作業内容・使用部品・写真などをその場で記録できます</li>
+      <li>過去の日報を検索し、うまくいった対応事例や、注意すべき失敗事例を確認できます</li>
+      <li>管理者は全員分の日報を確認・管理できます</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span>ログイン方法</h2>
+
+    <div class="access-box">
+      <div class="label">📱 アプリのアクセスURL</div>
+      <a href="https://5060-ipg4738ox8g3eisajroli-18e660f9.sandbox.novita.ai/" target="_blank">https://5060-ipg4738ox8g3eisajroli-18e660f9.sandbox.novita.ai/</a>
+      <div class="hint">
+        スマートフォンでご利用の場合は、上記URLをホーム画面にブックマーク(またはショートカット追加)しておくと、次回から簡単にアクセスできます。<br>
+        ※ このURLは試験運用用の一時アドレスです。今後正式なURLに変更される場合は、別途ご案内します。
+      </div>
+      <div class="hint" style="margin-top:10px;">
+        📄 このマニュアルは <a href="日報アプリ操作マニュアル.pdf" target="_blank" style="display:inline; padding:0; border:none; background:none; font-weight:700;">PDF版はこちら</a> からもダウンロードできます(印刷・保存用)。
+      </div>
+    </div>
+
+    <ol class="steps">
+      <li>上記URLをブラウザ(スマホ・PCどちらでも可)で開きます</li>
+      <li>「メールアドレス」欄に、ご自身に割り当てられたメールアドレスを入力します</li>
+      <li>「パスワード」欄に、お伝えした初期パスワードを入力します</li>
+      <li>「ログイン」ボタンを押します</li>
+    </ol>
+    <div class="note">ログインできない場合は、メールアドレス・パスワードに余分な空白が入っていないかご確認ください。解決しない場合は仲までご連絡ください。</div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span>【重要】初回ログイン後のパスワード変更</h2>
+    <div class="important">
+      初期パスワードは全員が推測しやすい形式(社員番号+電話番号の一部)になっているため、セキュリティ上、<strong>初回ログイン後に必ずご自身のパスワードへ変更</strong>してください。
+    </div>
+    <h3>変更手順</h3>
+    <ol class="steps">
+      <li>画面下の「プロフィール」タブを開く</li>
+      <li>「パスワードを変更する」を選択</li>
+      <li>新しいパスワード(6文字以上)を入力し、確認用にもう一度入力</li>
+      <li>「変更する」を押す</li>
+    </ol>
+    <p>パスワードは他人に推測されにくいもの(誕生日や電話番号そのままは避ける)にしてください。</p>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span>画面の基本構成</h2>
+    <p>画面下部にタブがあります(管理者は4つ、一般の方は3つ表示されます)。</p>
+    <table>
+      <tr><th>タブ</th><th>内容</th></tr>
+      <tr><td>ホーム</td><td>本日・今月の日報件数、最近の日報一覧、日報作成ボタン</td></tr>
+      <tr><td>検索</td><td>過去の日報をキーワードや事例の種類で検索</td></tr>
+      <tr><td>管理(管理者のみ)</td><td>社員一覧・全日報の管理</td></tr>
+      <tr><td>プロフィール</td><td>自分の情報確認、パスワード変更、ログアウト</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span>SE店舗とプロワン案件の入力ルールについて</h2>
+    <p>現場は大きく「SE店舗(コンビニ)」と「SE以外のプロワン管轄案件」に分かれ、<strong>対応区分によって入力する内容が変わります。</strong>誤った入力方法だと社内データとして正しく蓄積されませんので、必ず以下のルールに従って入力してください。</p>
+
+    <h3>なぜ入力方法が分かれているのか</h3>
+    <ul>
+      <li>SE店舗の報告書の提出先は、幹事会社が指定するコンビニ側の業務システムです。</li>
+      <li>そのコンビニ側システムはデータを外部に抽出できないため、修理対応の内容を社内にも残すために、本アプリに「コンビニ側システム入力控え」として同じ内容を項目別に記録する設計にしています。</li>
+      <li>点検作業や、SE以外のプロワン管轄案件は、コンビニ側システムへの入力対象ではないため、基本情報の入力のみで完了します。</li>
+    </ul>
+
+    <h3>入力ルール(フロー)</h3>
+    <div class="flow">
+      <div class="flow-box">対応する現場は?</div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-branch">
+        <div class="flow-col">
+          <div class="flow-box">SE店舗(コンビニ)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-box">対応区分は?</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-branch" style="gap:16px;">
+            <div class="flow-col">
+              <div class="flow-box leaf">定期点検</div>
+              <div class="flow-arrow">↓</div>
+              <div class="flow-box leaf">基本情報のみ入力<br>(控え不要)</div>
+            </div>
+            <div class="flow-col">
+              <div class="flow-box leaf">修理・故障対応</div>
+              <div class="flow-arrow">↓</div>
+              <div class="flow-box leaf">基本情報 +<br>コンビニ側システム<br>入力控え(必須)</div>
+            </div>
+          </div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-box goal">【目的】データ収集 + ナレッジ共有</div>
+        </div>
+        <div class="flow-col">
+          <div class="flow-box">SE以外<br>(プロワン管轄案件)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-box leaf">基本情報のみ入力<br>(コンビニ側入力控え 不要)</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-box goal">【目的】ナレッジ共有</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>まとめ表</h3>
+    <table>
+      <tr><th>対象</th><th>対応区分</th><th>入力内容</th><th>目的</th></tr>
+      <tr><td>SE店舗</td><td>修理・故障対応</td><td>基本情報 ＋ コンビニ側システム入力控え(必須)</td><td>データ収集 + ナレッジ共有</td></tr>
+      <tr><td>SE店舗</td><td>定期点検</td><td>基本情報のみ</td><td>データ収集 + ナレッジ共有</td></tr>
+      <tr><td>SE以外(プロワン管轄)</td><td>すべて</td><td>基本情報のみ</td><td>ナレッジ共有</td></tr>
+    </table>
+    <div class="note">「コンビニ側システム入力控え」は、日報作成画面の下部に表示される専用の入力欄です。受付No.・冷媒種類・処置内容・部品など、コンビニ側システムの入力項目と同じ項目に分かれているので、自由記述ではなく該当する欄にそのまま入力してください。</div>
+
+    <h3>入力画面は自動で切り替わります</h3>
+    <p>店舗を選択すると、その店舗が「SE店舗(コンビニ)」か「プロワン管轄案件」かが画面上部にバッジ(色つきのお知らせ表示)で自動的に表示されます。</p>
+    <ul>
+      <li>🟧 オレンジのバッジ「SE店舗(コンビニ) − 修理・故障対応はコンビニ側入力控えが必須です」</li>
+      <li>🟦 青灰のバッジ「プロワン管轄案件 − 基本情報のみで入力完了します」</li>
+    </ul>
+    <p>さらに、対応区分を「修理」または「故障対応」に変更すると、SE店舗の場合のみ「コンビニ側システム入力控え」セクションが自動的に表示されます。それ以外の対応区分(定期点検など)や、SE以外の店舗を選んだ場合は表示されません。</p>
+    <div class="note">表示・非表示はシステムが自動判定します。どちらのケースか迷った場合は画面の表示に従ってください。</div>
+  </section>
+
+  <section>
+    <h2><span class="num">6</span>日報を作成する</h2>
+    <ol class="steps">
+      <li>「ホーム」タブ右下の「日報作成」ボタンを押します</li>
+      <li>下記の項目を入力します</li>
+    </ol>
+
+    <h3>基本情報</h3>
+    <ul>
+      <li>店舗・訪問先(一覧から選択、または直接入力)</li>
+      <li>訪問日 / 開始時刻・終了時刻</li>
+      <li>対応区分:
+        <div class="tag-list">
+          <span>定期点検</span><span>故障対応</span><span>修理</span><span>新設・設置</span>
+          <span>事務</span><span>現場事務</span><span>倉庫作業</span><span>環境整備</span><span>その他</span>
+        </div>
+      </li>
+      <li>機器型番(プロワン参照・分かる範囲で)</li>
+      <li>プロワン管理番号(任意)</li>
+      <li>共同作業者(一緒に対応した人がいれば選択)</li>
+    </ul>
+
+    <h3>作業内容</h3>
+    <ul>
+      <li><strong>作業内容(★必須)</strong>:何を行ったか具体的に記入</li>
+      <li>使用部品:「追加」ボタンで部品名・数量・型番等を記録</li>
+      <li>写真:「追加」ボタンで現場写真を添付</li>
+    </ul>
+
+    <h3>コンビニ側システム入力控え(SE店舗の修理・故障対応のみ・必須)</h3>
+    <ul>
+      <li>前セクション「5. SE店舗とプロワン案件の入力ルールについて」の通り、SE店舗の修理・故障対応の場合のみ入力してください。</li>
+      <li>弊社受付No.・冷媒種類・充填量・依頼内容・設備名称・メーカー・型式・処置内容・部位・詳細部位・事象・原因・交換部品(最大5点)・備考の各項目に分けて入力します。</li>
+    </ul>
+
+    <h3>ナレッジ共有(社内の知識として蓄積する項目)</h3>
+    <ul>
+      <li>うまくいったこと・工夫した点</li>
+      <li>課題・失敗・改善点</li>
+      <li>タグ(症状・機種名など、後で検索しやすいキーワード)</li>
+    </ul>
+    <div class="note">「うまくいったこと」「課題・失敗」の欄は、社内のノウハウ共有・マニュアル改善のために活用されます。些細なことでも構いませんので、気づいた点を記録していただけると助かります。</div>
+
+    <h3>「記入サポート」で入力もれを防止</h3>
+    <p>作業内容欄の下に、ナレッジ共有に必要な情報が抜けないようチェックリスト形式の「記入サポート」が自動で表示されます。<strong>店舗区分・対応区分によって内容が変わり、他の欄と重複する項目は表示されません。</strong></p>
+    <table>
+      <tr><th>ケース</th><th>表示される記入サポート</th><th>ポイント</th></tr>
+      <tr><td>プロワン管轄案件(SE以外)</td><td>記入サポート(プロワン管轄案件)</td><td>修理・故障の詳細はプロワン側システムに記録済みのため、状況の概要・判断ポイント・引き継ぎ事項など気づきを中心に記載</td></tr>
+      <tr><td>SE店舗・修理・故障対応</td><td>記入サポート(SE店舗・修理・故障対応)</td><td>事象・原因・処置は下の「コンビニ側システム入力控え」に書くため、対応中に気づいたこと・工夫・アドバイスを中心に記載</td></tr>
+      <tr><td>SE店舗・点検など</td><td>記入サポート(SE店舗・点検など)</td><td>点検箇所・状態確認結果・気になった点・引き継ぎ事項を記載</td></tr>
+    </table>
+    <div class="note">「すでに他の欄・他システムに書く内容」は記入サポートには出てきません。表示されている項目を参考に、抜けなく記入してください。</div>
+
+    <h3>音声入力(マイクボタン)で入力を効率化</h3>
+    <p>作業内容、うまくいったこと、課題・失敗、コンビニ側システム入力控えの各欄には、右側に🎤(マイク)アイコンが付いています。タップすると音声入力が始まり、話した内容がそのまま文字として入力されます。もう一度タップすると停止します。</p>
+    <div class="note">端末やブラウザによっては音声入力が利用できない場合があります。その場合は「この端末・ブラウザでは音声入力がご利用いただけません」と表示されますので、通常のキーボード入力をご利用ください。</div>
+  </section>
+
+  <section>
+    <h2><span class="num">7</span>日報を見る・編集する・削除する</h2>
+    <ul>
+      <li>「ホーム」または「検索」から一覧を開き、日報をタップすると詳細が見られます</li>
+      <li><strong>自分が作成した日報</strong>は編集・削除ができます</li>
+      <li>管理者は、必要に応じて他の人が作成した日報も削除できます(内容の編集は本人のみ)</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="num">8</span>日報を検索する</h2>
+    <p>「検索」タブから、キーワード検索に加えて次の絞り込みができます。</p>
+    <ul>
+      <li>「うまくいった事例」だけを見る</li>
+      <li>「失敗・課題事例」だけを見る</li>
+    </ul>
+    <p>過去に似たトラブルがあったかどうかを調べる際にご活用ください。</p>
+  </section>
+
+  <section>
+    <h2><span class="num">9</span>困ったときは</h2>
+    <div class="qa">
+      <div class="q">Q. パスワードを忘れてしまった</div>
+      <div class="a">A. ログイン画面の「パスワードをお忘れの方」を押し、登録メールアドレスを入力してください。パスワード再設定用のメールが届きます。</div>
+    </div>
+    <div class="qa">
+      <div class="q">Q. 「ログインに失敗しました」と表示される</div>
+      <div class="a">A. メールアドレス・パスワードに誤りがないか再度ご確認ください。解決しない場合は、仲までご連絡ください。</div>
+    </div>
+    <div class="qa">
+      <div class="q">Q. アプリの動きがおかしい・エラーが出る</div>
+      <div class="a">A. 一度ブラウザを閉じて再度開き直してみてください。それでも解決しない場合は、画面のスクリーンショットを添えて仲までご連絡ください。</div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">10</span>試験運用にご協力いただいた皆様へ</h2>
+    <p>今回は最初の試験運用として、3名の方にお試しいただいています。使いやすさ・分かりにくい表現・欲しい機能などがあれば、些細なことでも構いませんのでぜひフィードバックをお願いいたします。皆様のご意見を反映した上で、全社展開を予定しています。</p>
+    <p>ご協力よろしくお願いいたします。</p>
+  </section>
+
+  <div class="access-box">
+    <div class="label">📱 アプリのアクセスURL(再掲)</div>
+    <a href="https://5060-ipg4738ox8g3eisajroli-18e660f9.sandbox.novita.ai/" target="_blank">https://5060-ipg4738ox8g3eisajroli-18e660f9.sandbox.novita.ai/</a>
+  </div>
+
+  <footer>札幌中野冷機 &nbsp;|&nbsp; 業務日報アプリ 操作マニュアル(試験運用版)</footer>
+</div>
+</body>
+</html>
