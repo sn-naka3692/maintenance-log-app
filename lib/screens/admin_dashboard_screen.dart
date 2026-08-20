@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_card.dart';
+import '../utils/csv_exporter.dart';
 import 'report_detail_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -15,6 +16,31 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   String? _selectedAuthorId;
+  bool _isExporting = false;
+
+  Future<void> _exportCsv(List filtered, {required bool isAll}) async {
+    if (filtered.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('エクスポート対象の日報がありません')),
+      );
+      return;
+    }
+    setState(() => _isExporting = true);
+    try {
+      await CsvExporter.exportAndShare(
+        filtered.cast(),
+        fileNamePrefix: isAll ? '日報データ_全社員' : '日報データ_絞り込み',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('CSV出力に失敗しました: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -211,6 +237,67 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
             ],
           ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.table_chart_outlined,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '蓄積された日報データをCSVファイルで出力できます',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _isExporting
+                      ? null
+                      : () => _exportCsv(allReports, isAll: true),
+                  icon: const Icon(Icons.download, size: 18),
+                  label: Text('全件(${allReports.length}件)をCSV出力'),
+                ),
+              ),
+              if (_selectedAuthorId != null) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isExporting
+                        ? null
+                        : () => _exportCsv(filtered, isAll: false),
+                    icon: const Icon(Icons.download, size: 18),
+                    label: Text('絞り込み(${filtered.length}件)を出力'),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(),
+            ),
           const SizedBox(height: 8),
           if (filtered.isEmpty)
             Padding(
