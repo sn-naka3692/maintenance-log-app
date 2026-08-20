@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <application
-        android:label="日報アプリ"
+        android:label="Maintenance Log"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -53,3 +53,4 @@
         </intent>
     </queries>
 </manifest>
+
