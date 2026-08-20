@@ -119,6 +119,10 @@ class AppState extends ChangeNotifier {
 
   bool get isAdmin => _currentUser?.isAdmin ?? false;
 
+  /// 最高管理者かどうか(役割変更・社員削除など、事故防止のため
+  /// 制限された操作を実行できるのは最高管理者のみ)
+  bool get isSuperAdmin => _currentUser?.isSuperAdmin ?? false;
+
   Future<void> addReport(WorkReport report) async {
     await _service.createReport(report);
     _reports = _service.getAllReports();
@@ -158,6 +162,25 @@ class AppState extends ChangeNotifier {
     _users = _service.getAllUsers();
     notifyListeners();
     return u;
+  }
+
+  /// 社員の役割を変更する。事故防止のガード(自己変更禁止・最後の最高管理者の
+  /// 降格禁止・最高管理者以外は実行不可)は ReportService 側で最終チェックされる。
+  Future<void> updateUserRole({
+    required String targetUserId,
+    required UserRole newRole,
+  }) async {
+    await _service.updateUserRole(targetUserId: targetUserId, newRole: newRole);
+    _users = _service.getAllUsers();
+    notifyListeners();
+  }
+
+  /// 社員を削除する。事故防止のガード(自己削除禁止・最後の最高管理者の
+  /// 削除禁止・最高管理者以外は実行不可)は ReportService 側で最終チェックされる。
+  Future<void> deleteUser(String targetUserId) async {
+    await _service.deleteUser(targetUserId);
+    _users = _service.getAllUsers();
+    notifyListeners();
   }
 
   Future<void> changePassword(String newPassword) =>

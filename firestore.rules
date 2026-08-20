@@ -9,19 +9,33 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // 管理者権限は「一般管理者(admin)」「最高管理者(super_admin)」の2階層。
+    // isAdmin(): どちらでも true(閲覧系の権限判定用)
+    // isSuperAdmin(): 最高管理者のみ true(役割変更・削除など事故防止のため制限された操作用)
     function isAdmin() {
       return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'];
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
     }
 
     // ------------------------------------------------------------
     // users: 社員マスタ(氏名・社員番号・役割など)
     // - 読み取り: ログイン済みなら誰でも可(日報の作成者名表示・管理画面の社員一覧に必要)
-    // - 作成/更新/削除: 管理者のみ(社員追加・役割変更はUI上も管理者限定のため一致させる)
+    // - 作成: 管理者(一般/最高)が可能。ただし一般管理者は"一般作業員(staff)"としてのみ
+    //   新規社員を作成できる。管理者権限を持つ社員の新規作成は最高管理者のみ
+    //   (一般管理者が他人に管理者権限を付与できてしまう事故を防止)。
+    // - 更新/削除: 最高管理者のみ(役割変更・社員削除による事故を防止するため、
+    //   一般管理者には許可しない)。
     // ------------------------------------------------------------
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin() &&
+        (request.resource.data.role == 'staff' || isSuperAdmin());
+      allow update, delete: if isSuperAdmin();
     }
 
     // ------------------------------------------------------------

@@ -179,6 +179,73 @@ class ReportService {
     return u;
   }
 
+  /// 社員の役割を変更する(事故防止ガードは AppState 側で先に判定済みだが、
+  /// サービス層でも最終防衛線として同じチェックを行う)。
+  ///
+  /// - 最高管理者(super_admin)のみが役割変更を実行できる。
+  /// - 自分自身の役割は変更できない(誤操作による自己ロックアウト防止)。
+  /// - 最高管理者が1人だけの場合、その人を降格させることはできない
+  ///   (管理者が誰もいなくなる事故防止)。
+  Future<void> updateUserRole({
+    required String targetUserId,
+    required UserRole newRole,
+  }) async {
+    final actor = getCurrentUser();
+    if (actor == null || !actor.isSuperAdmin) {
+      throw StateError('役割の変更は最高管理者のみ実行できます。');
+    }
+    if (actor.id == targetUserId) {
+      throw StateError('自分自身の役割は変更できません。');
+    }
+    final target = _usersCache.firstWhere(
+      (u) => u.id == targetUserId,
+      orElse: () => throw StateError('対象の社員が見つかりません。'),
+    );
+    if (target.isSuperAdmin && newRole != UserRole.superAdmin) {
+      final superAdminCount = _usersCache
+          .where((u) => u.role == UserRole.superAdmin)
+          .length;
+      if (superAdminCount <= 1) {
+        throw StateError('最後の最高管理者は降格できません。');
+      }
+    }
+    await _usersCol.doc(targetUserId).update({
+      'role': AppUser.roleToStr(newRole),
+    });
+    await _refreshUsersCache();
+  }
+
+  /// 社員を削除する(Firestore上のユーザードキュメントのみ削除。
+  /// Firebase Authenticationアカウント自体はクライアントSDKからは削除できないため、
+  /// 併せて手動でのアカウント無効化を管理者に案内する運用とする)。
+  ///
+  /// - 最高管理者(super_admin)のみが削除を実行できる。
+  /// - 自分自身は削除できない。
+  /// - 最後の最高管理者は削除できない。
+  Future<void> deleteUser(String targetUserId) async {
+    final actor = getCurrentUser();
+    if (actor == null || !actor.isSuperAdmin) {
+      throw StateError('社員の削除は最高管理者のみ実行できます。');
+    }
+    if (actor.id == targetUserId) {
+      throw StateError('自分自身を削除することはできません。');
+    }
+    final target = _usersCache.firstWhere(
+      (u) => u.id == targetUserId,
+      orElse: () => throw StateError('対象の社員が見つかりません。'),
+    );
+    if (target.isSuperAdmin) {
+      final superAdminCount = _usersCache
+          .where((u) => u.role == UserRole.superAdmin)
+          .length;
+      if (superAdminCount <= 1) {
+        throw StateError('最後の最高管理者は削除できません。');
+      }
+    }
+    await _usersCol.doc(targetUserId).delete();
+    await _refreshUsersCache();
+  }
+
   // ------------ Report ------------
   List<WorkReport> getAllReports() => _reportsCache;
 

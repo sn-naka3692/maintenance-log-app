@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
+import 'user_management_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -56,9 +57,11 @@ class ProfileScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Chip(
-                        label: Text(user?.isAdmin == true ? '管理者' : '一般作業員'),
+                        label: Text(AppUser.roleLabel(user?.role)),
                         visualDensity: VisualDensity.compact,
-                        backgroundColor: user?.isAdmin == true
+                        backgroundColor: user?.isSuperAdmin == true
+                            ? AppColors.danger.withValues(alpha: 0.12)
+                            : user?.isAdmin == true
                             ? AppColors.primary.withValues(alpha: 0.15)
                             : Colors.grey.shade200,
                       ),
@@ -94,6 +97,16 @@ class ProfileScreen extends StatelessWidget {
               icon: const Icon(Icons.person_add),
               label: const Text('社員を追加する'),
             ),
+          if (appState.isSuperAdmin) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const UserManagementScreen()),
+              ),
+              icon: const Icon(Icons.admin_panel_settings_outlined),
+              label: const Text('社員の権限・登録を管理する'),
+            ),
+          ],
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: () async {
@@ -159,7 +172,10 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 const Text(
                   '新しいパスワード(6文字以上)を入力してください。',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -187,7 +203,10 @@ class ProfileScreen extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     error!,
-                    style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                    style: const TextStyle(
+                      color: AppColors.danger,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ],
@@ -255,8 +274,13 @@ class ProfileScreen extends StatelessWidget {
 
   // ------------------------------------------------------------------
   // 社員追加(Firebase Authアカウントも同時作成)
+  //
+  // 事故防止: 一般管理者は「一般作業員」としてのみ新規社員を追加できる。
+  // 管理者権限(一般管理者/最高管理者)を持つ社員の新規作成は最高管理者のみ可能
+  // (一般管理者が他人に管理者権限を付与してしまう事故を防止するため)。
   // ------------------------------------------------------------------
   void _showAddUserDialog(BuildContext context) {
+    final isSuperAdmin = context.read<AppState>().isSuperAdmin;
     final nameCtrl = TextEditingController();
     final codeCtrl = TextEditingController();
     final deptCtrl = TextEditingController();
@@ -312,15 +336,31 @@ class ProfileScreen extends StatelessWidget {
                 DropdownButtonFormField<UserRole>(
                   initialValue: role,
                   decoration: const InputDecoration(labelText: '役割'),
-                  items: const [
-                    DropdownMenuItem(
+                  items: [
+                    const DropdownMenuItem(
                       value: UserRole.staff,
                       child: Text('一般作業員'),
                     ),
-                    DropdownMenuItem(value: UserRole.admin, child: Text('管理者')),
+                    if (isSuperAdmin) ...const [
+                      DropdownMenuItem(
+                        value: UserRole.admin,
+                        child: Text('一般管理者'),
+                      ),
+                      DropdownMenuItem(
+                        value: UserRole.superAdmin,
+                        child: Text('最高管理者'),
+                      ),
+                    ],
                   ],
                   onChanged: (v) => setState(() => role = v!),
                 ),
+                if (!isSuperAdmin) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '※ 管理者権限を持つ社員の追加は最高管理者のみ行えます。',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 const Text(
                   '初期パスワードの伝え方',
@@ -355,7 +395,10 @@ class ProfileScreen extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     error!,
-                    style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                    style: const TextStyle(
+                      color: AppColors.danger,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ],
@@ -417,9 +460,9 @@ class ProfileScreen extends StatelessWidget {
                         );
 
                         if (deliveryMethod == 'email') {
-                          await ctx
-                              .read<AppState>()
-                              .sendPasswordResetEmail(email);
+                          await ctx.read<AppState>().sendPasswordResetEmail(
+                            email,
+                          );
                         }
 
                         if (ctx.mounted) Navigator.pop(ctx);
@@ -511,8 +554,7 @@ class ProfileScreen extends StatelessWidget {
   }
 
   static String _randomPassword() {
-    const chars =
-        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
     final rnd = Random.secure();
     return List.generate(12, (_) => chars[rnd.nextInt(chars.length)]).join();
   }
