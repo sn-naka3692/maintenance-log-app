@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../models/part_used.dart';
 import '../models/store.dart';
 import '../models/store_system_report.dart';
@@ -10,6 +11,10 @@ import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/store_picker_field.dart';
+
+/// 作業内容の記入サポート(チレアカップ)モード
+/// 店舗区分(SE/プロワン)と対応区分によって、重複を避けるべく内容を切り替える。
+enum _WorkSupportMode { seRepair, seOther, nonSE }
 
 class ReportEditScreen extends StatefulWidget {
   final WorkReport? existing;
@@ -44,11 +49,17 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   final List<String> _tags = [];
   final List<String> _photoPaths = [];
 
+  // 音声入力(speech_to_text)
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechAvailable = false;
+  TextEditingController? _activeListenController;
+
   bool get isEditing => widget.existing != null;
 
   @override
   void initState() {
     super.initState();
+    _initSpeech();
     final e = widget.existing;
     _selectedStoreId = e?.storeId;
     _clientNameCtrl = TextEditingController(text: e?.clientName ?? '');
@@ -101,6 +112,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
   @override
   void dispose() {
+    _speech.stop();
     _clientNameCtrl.dispose();
     _storeFreeTextCtrl.dispose();
     _workContentCtrl.dispose();
@@ -114,6 +126,75 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     }
     _tagInputCtrl.dispose();
     super.dispose();
+  }
+
+  /// 音声認識エンジンの初期化。未対応のブリブザ/デビスでは失敗する可能性があり、
+  /// その場合はマイコボコンをタップした時に案内を表示する。
+  Future<void> _initSpeech() async {
+    try {
+      final available = await _speech.initialize(
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            if (mounted) setState(() => _activeListenController = null);
+          }
+        },
+        onError: (_) {
+          if (mounted) setState(() => _activeListenController = null);
+        },
+      );
+      if (mounted) setState(() => _speechAvailable = available);
+    } catch (_) {
+      if (mounted) setState(() => _speechAvailable = false);
+    }
+  }
+
+  /// 指定したテキストフィールドの音声入力を開始/停止する。
+  /// 既入力済みの内容に追記する形で、認識中のタリーをリアルタイムに反映する。
+  Future<void> _toggleVoiceInput(TextEditingController controller) async {
+    if (_activeListenController == controller) {
+      await _speech.stop();
+      if (mounted) setState(() => _activeListenController = null);
+      return;
+    }
+    if (!_speechAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('この端末・ブリブザでは音声入力がご利用いただけません')),
+      );
+      return;
+    }
+    if (_speech.isListening) {
+      await _speech.stop();
+    }
+    final base = controller.text;
+    final prefix = base.isEmpty || base.endsWith('\n') || base.endsWith(' ')
+        ? base
+        : '$base ';
+    setState(() => _activeListenController = controller);
+    try {
+      await _speech.listen(
+        localeId: 'ja_JP',
+        onResult: (result) {
+          controller.text = prefix + result.recognizedWords;
+          controller.selection = TextSelection.collapsed(
+            offset: controller.text.length,
+          );
+        },
+      );
+    } catch (_) {
+      if (mounted) setState(() => _activeListenController = null);
+    }
+  }
+
+  /// 作業内容の記入サポートモードを、店舗区分(SE店舗かどうか)と対応区分から判定する。
+  _WorkSupportMode _workSupportMode(bool isSEStore) {
+    if (isSEStore) {
+      if (_responseType == ResponseType.repair ||
+          _responseType == ResponseType.breakdown) {
+        return _WorkSupportMode.seRepair;
+      }
+      return _WorkSupportMode.seOther;
+    }
+    return _WorkSupportMode.nonSE;
   }
 
   DateTime _combine(DateTime date, TimeOfDay time) {
@@ -295,6 +376,16 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   @override
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('yyyy年M月d日 (E)', 'ja_JP');
+    final appState = context.watch<AppState>();
+    final selectedStore = _selectedStoreId != null
+        ? appState.getStoreById(_selectedStoreId!)
+        : null;
+    final isSEStore = selectedStore?.isSE ?? false;
+    // コンビニ側システム入力控えは、SE店舗かつ修理・故障対応の場合のみ必須(マニュアルの入力ルールに準拠)。
+    final showStoreSystemSection =
+        isSEStore &&
+        (_responseType == ResponseType.repair ||
+            _responseType == ResponseType.breakdown);
 
     return Scaffold(
       appBar: AppBar(title: Text(isEditing ? '日報編集' : '日報作成')),
@@ -436,9 +527,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               label: _responseType.isBackOffice ? '業務内容' : '作業内容',
               icon: Icons.build,
               maxLines: 4,
+              enableVoice: true,
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? '必須項目です' : null,
             ),
+            if (!_responseType.isBackOffice)
+              _buildWorkContentSupport(isSEStore),
             const SizedBox(height: 12),
 
             // 使用部品
@@ -554,6 +648,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               icon: Icons.thumb_up_alt_outlined,
               maxLines: 3,
               iconColor: AppColors.success,
+              enableVoice: true,
             ),
             const SizedBox(height: 12),
             _buildField(
@@ -562,6 +657,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               icon: Icons.report_problem_outlined,
               maxLines: 3,
               iconColor: AppColors.warning,
+              enableVoice: true,
             ),
             const SizedBox(height: 12),
             // タグ
@@ -601,14 +697,32 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 ),
               ),
 
+            if (showStoreSystemSection) ...[
             const SizedBox(height: 20),
             _SectionTitle('コンビニ側システム入力控え'),
             const SizedBox(height: 4),
-            Text(
-              'コンビニ側の業務システムはデータ抽出ができないため、社内保管用にここへ同じ内容を項目ごとに控えとして記録してください。自由記述ではなく項目別入力にすることで記入漏れを防ぎます。',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.storefront, size: 16, color: Colors.orange.shade800),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'SE店舗(コンビニ)の修理・故障対応のため、この入力控えは必須です。コンビニ側の業務システムはデータ抽出ができないため、社内保管用にここへ同じ内容を項目ごとに控えとして記録してください。',
+                      style: TextStyle(fontSize: 12, color: Colors.orange.shade900, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               '受付情報',
               style: TextStyle(
@@ -667,6 +781,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               label: '依頼内容',
               icon: Icons.assignment_outlined,
               maxLines: 2,
+              enableVoice: true,
             ),
             const SizedBox(height: 12),
             _buildField(
@@ -729,6 +844,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               label: '事象',
               icon: Icons.report_gmailerrorred_outlined,
               maxLines: 2,
+              enableVoice: true,
             ),
             const SizedBox(height: 12),
             _buildField(
@@ -736,6 +852,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               label: '事象補足',
               icon: Icons.notes_outlined,
               maxLines: 2,
+              enableVoice: true,
             ),
             const SizedBox(height: 12),
             _buildField(
@@ -743,6 +860,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               label: '原因',
               icon: Icons.psychology_alt_outlined,
               maxLines: 2,
+              enableVoice: true,
             ),
             const SizedBox(height: 12),
             _buildField(
@@ -750,6 +868,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               label: '処置内容',
               icon: Icons.handyman_outlined,
               maxLines: 2,
+              enableVoice: true,
             ),
             const SizedBox(height: 12),
             _buildField(
@@ -757,6 +876,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               label: '処置内容2(任意)',
               icon: Icons.handyman_outlined,
               maxLines: 2,
+              enableVoice: true,
             ),
             const SizedBox(height: 16),
             Text(
@@ -803,7 +923,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               label: '備考(コンビニ側システム用)',
               icon: Icons.sticky_note_2_outlined,
               maxLines: 2,
+              enableVoice: true,
             ),
+            ], // showStoreSystemSection
 
             const SizedBox(height: 20),
             _SectionTitle('備考'),
@@ -835,7 +957,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     int maxLines = 1,
     Color? iconColor,
     String? Function(String?)? validator,
+    bool enableVoice = false,
   }) {
+    final isListening = _activeListenController == controller;
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
@@ -845,6 +969,113 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         hintText: hint,
         prefixIcon: Icon(icon, color: iconColor),
         alignLabelWithHint: maxLines > 1,
+        suffixIcon: enableVoice
+            ? IconButton(
+                icon: Icon(
+                  isListening ? Icons.mic : Icons.mic_none,
+                  color: isListening ? Colors.red : Colors.grey.shade500,
+                ),
+                tooltip: isListening ? '音声入力を停止' : '音声入力を開始',
+                onPressed: () => _toggleVoiceInput(controller),
+              )
+            : null,
+      ),
+    );
+  }
+
+  /// 作業内容欄の記入サポート(ナレガレ共有の前提となる必要情報のもれないチェッキリスト)。
+  /// 店舗区分(SE/プロワン)と対応区分に応じて内容を切り替え、他セレクションとの重複を避ける。
+  Widget _buildWorkContentSupport(bool isSEStore) {
+    final mode = _workSupportMode(isSEStore);
+    late String title;
+    late String note;
+    late List<String> items;
+    late MaterialColor color;
+    switch (mode) {
+      case _WorkSupportMode.seRepair:
+        title = '記入サポート(SE店舗・修理・故障対応)';
+        note =
+            '事象・原因・処置の詳細はこの下の「コンビニ側システム入力控え」に記入するため、ここでは重複させず、社内のナレッジ共有に役立つ視点を中心に記載してください。';
+        color = Colors.orange;
+        items = [
+          '対応中に気づいたこと・判断に迷った点',
+          '工夫した対応・うまくいった進め方',
+          '次に同じような対応をする人へのアドバイス',
+          '(事象・原因・処置内容の詳細は下の入力控えへ)',
+        ];
+        break;
+      case _WorkSupportMode.seOther:
+        title = '記入サポート(SE店舗・点検など)';
+        note =
+            '点検などSE店舗対応の場合、コンビニ側システムへの入力控えは不要です。作業内容欄に必要な情報を記載してください。';
+        color = Colors.blue;
+        items = [
+          '点検・確認した設備・箇所',
+          '状態(正常/要注意/異常等)の確認結果',
+          '気になった点・次回確認すべき点',
+          '次に対応する人への引き継ぎ事項',
+        ];
+        break;
+      case _WorkSupportMode.nonSE:
+        title = '記入サポート(プロワン管轄案件)';
+        note =
+            '修理・故障対応の詳細はプロワン側システムに記録されているため、ここでは重複入力を避け、ナレッジ共有に役立つ概要・気づきを中心に記載してください。';
+        color = Colors.teal;
+        items = [
+          'どんな状況・依頼だったか(概要)',
+          '対応の判断ポイント・工夫した点',
+          '次に同じ案件を担当する人へ伝えたいこと',
+          '(詳細な修理手順・使用部品等はプロワン側システム参照のため省略可)',
+        ];
+        break;
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.checklist_rtl, size: 16, color: color.shade800),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: color.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            note,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          ...items.map(
+            (it) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.check_circle_outline, size: 14, color: color.shade700),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(it, style: const TextStyle(fontSize: 12))),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

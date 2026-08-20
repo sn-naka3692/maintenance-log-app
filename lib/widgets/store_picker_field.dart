@@ -71,6 +71,44 @@ class _StorePickerFieldState extends State<StorePickerField> {
                 : Text(selectedStore.name),
           ),
         ),
+        if (selectedStore != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, left: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: selectedStore.isSE
+                    ? Colors.orange.withValues(alpha: 0.12)
+                    : Colors.blueGrey.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    selectedStore.isSE ? Icons.storefront : Icons.handshake_outlined,
+                    size: 14,
+                    color: selectedStore.isSE
+                        ? Colors.orange.shade800
+                        : Colors.blueGrey.shade700,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    selectedStore.isSE
+                        ? 'SE店舗(コンビニ) — 修理・故障対応はコンビニ側入力控えが必須です'
+                        : 'プロワン管轄案件 — 基本情報のみで入力完了します',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: selectedStore.isSE
+                          ? Colors.orange.shade800
+                          : Colors.blueGrey.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         if (selectedStore != null &&
             (selectedStore.address.isNotEmpty ||
                 selectedStore.keyLocation.isNotEmpty))

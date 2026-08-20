@@ -55,6 +55,9 @@ dependencies:
   path_provider: ^2.1.5
   fl_chart: ^0.69.2
 
+  # 音声入力(作業内容などの記入サポート用)
+  speech_to_text: 7.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -124,18 +124,46 @@ class _StoreListScreenState extends State<StoreListScreen> {
                                 Text(s.address, style: const TextStyle(fontSize: 12)),
                               if (s.phone.isNotEmpty)
                                 Text(s.phone, style: const TextStyle(fontSize: 12)),
-                              if (s.isCustom)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 4),
-                                  child: Text(
-                                    '手動追加',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w700,
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: s.isSE
+                                            ? Colors.orange.withValues(alpha: 0.12)
+                                            : Colors.blueGrey.withValues(alpha: 0.10),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        s.isSE ? 'SE店舗(コンビニ)' : 'プロワン管轄',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: s.isSE
+                                              ? Colors.orange.shade800
+                                              : Colors.blueGrey.shade700,
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    if (s.isCustom)
+                                      const Text(
+                                        '手動追加',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                  ],
                                 ),
+                              ),
                             ],
                           ),
                           isThreeLine: s.address.isNotEmpty && s.phone.isNotEmpty,
@@ -170,6 +198,7 @@ class _StoreFormSheetState extends State<_StoreFormSheet> {
   late TextEditingController _addressCtrl;
   late TextEditingController _keyCtrl;
   late TextEditingController _noteCtrl;
+  late bool _isSE;
 
   bool get isEditing => widget.existing != null;
 
@@ -183,6 +212,7 @@ class _StoreFormSheetState extends State<_StoreFormSheet> {
     _addressCtrl = TextEditingController(text: e?.address ?? '');
     _keyCtrl = TextEditingController(text: e?.keyLocation ?? '');
     _noteCtrl = TextEditingController(text: e?.note ?? '');
+    _isSE = e?.isSE ?? false;
   }
 
   @override
@@ -213,6 +243,7 @@ class _StoreFormSheetState extends State<_StoreFormSheet> {
       s.address = _addressCtrl.text.trim();
       s.keyLocation = _keyCtrl.text.trim();
       s.note = _noteCtrl.text.trim();
+      s.isSE = _isSE;
       await appState.updateStore(s);
     } else {
       await appState.addStore(
@@ -222,6 +253,7 @@ class _StoreFormSheetState extends State<_StoreFormSheet> {
         address: _addressCtrl.text.trim(),
         keyLocation: _keyCtrl.text.trim(),
         note: _noteCtrl.text.trim(),
+        isSE: _isSE,
       );
     }
     if (mounted) {
@@ -340,6 +372,36 @@ class _StoreFormSheetState extends State<_StoreFormSheet> {
                 prefixIcon: Icon(Icons.notes),
                 alignLabelWithHint: true,
               ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.25)),
+              ),
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _isSE,
+                onChanged: (v) => setState(() => _isSE = v),
+                title: const Text(
+                  'SE店舗(セブンイレブン)',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+                subtitle: Text(
+                  _isSE
+                      ? 'ONの場合、修理・故障対応時は「コンビニ側システム入力控え」の入力が必須になります。'
+                      : 'OFFの場合(プロワン管轄案件)は基本情報のみで入力が完了します。',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+                activeThumbColor: Colors.orange.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '※ 店舗名に「SE」が含まれていても、コンビニ以外の場合があります(例:病院名等)。実際の対応区分に合わせて手動で設定してください。',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
             ),
             const SizedBox(height: 20),
             ElevatedButton.icon(

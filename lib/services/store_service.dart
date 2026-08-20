@@ -71,6 +71,7 @@ class StoreService {
     String address = '',
     String keyLocation = '',
     String note = '',
+    bool isSE = false,
   }) async {
     final id = _uuid.v4();
     final store = Store(
@@ -82,6 +83,7 @@ class StoreService {
       keyLocation: keyLocation,
       note: note,
       isCustom: true,
+      isSE: isSE,
       createdAt: DateTime.now(),
     );
     await _storesCol.doc(id).set(store.toMap());

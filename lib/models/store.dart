@@ -8,6 +8,7 @@ class Store {
   String keyLocation; // 鍵・動力盤の設置場所
   String note; // 備考
   bool isCustom; // アプリ内でユーザーが追加した店舗かどうか
+  bool isSE; // SE店舗(セブンイレブン/コンビニ側システム入力控えが必要な店舗)かどうか
   DateTime? createdAt;
 
   Store({
@@ -19,6 +20,7 @@ class Store {
     this.keyLocation = '',
     this.note = '',
     this.isCustom = false,
+    this.isSE = false,
     this.createdAt,
   });
 
@@ -31,6 +33,7 @@ class Store {
       'key_location': keyLocation,
       'note': note,
       'is_custom': isCustom,
+      'is_se': isSE,
       'created_at': createdAt ?? DateTime.now(),
     };
   }
@@ -45,6 +48,7 @@ class Store {
       keyLocation: map['key_location'] as String? ?? '',
       note: map['note'] as String? ?? '',
       isCustom: map['is_custom'] as bool? ?? false,
+      isSE: map['is_se'] as bool? ?? false,
       createdAt: _parseDate(map['created_at']),
     );
   }

@@ -84,6 +84,7 @@ class AppState extends ChangeNotifier {
     String address = '',
     String keyLocation = '',
     String note = '',
+    bool isSE = false,
   }) async {
     final s = await _storeService.addStore(
       name: name,
@@ -92,6 +93,7 @@ class AppState extends ChangeNotifier {
       address: address,
       keyLocation: keyLocation,
       note: note,
+      isSE: isSE,
     );
     _stores = _storeService.getAll();
     notifyListeners();
