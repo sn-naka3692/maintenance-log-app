@@ -59,6 +59,9 @@ dependencies:
   speech_to_text: 7.3.0
   share_plus: ^12.0.2
 
+  # マニュアルのダウンロード版(PDF/Web/編集可能版)を開くために使用
+  url_launcher: ^6.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

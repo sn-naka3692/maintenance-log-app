@@ -20,6 +20,15 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.1.2',
+    date: '2026-08-22',
+    title: '入力マニュアル画面からダウンロード版を直接開けるように',
+    details: [
+      '「入力マニュアル」画面の上部に、PDF版・Web版・編集可能版(Markdown)をダウンロード・閲覧できるボタンを追加しました。',
+      'これまでURLを直接開く必要があったマニュアルの各形式に、アプリ内から1タップでアクセスできるようになりました。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.1.1',
     date: '2026-08-21',
     title: '管理者ダッシュボードに自分の権限バッジを表示',
