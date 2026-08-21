@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
+import '../models/user.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_card.dart';
@@ -57,11 +58,75 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final successCount = allReports.where((r) => r.hasSuccess).length;
     final issuesCount = allReports.where((r) => r.hasIssues).length;
 
+    final currentUser = appState.currentUser;
+    final isSuperAdmin = appState.isSuperAdmin;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('管理者ダッシュボード')),
+      appBar: AppBar(
+        title: const Text('管理者ダッシュボード'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: Chip(
+                avatar: Icon(
+                  isSuperAdmin ? Icons.security : Icons.admin_panel_settings,
+                  size: 16,
+                  color: isSuperAdmin ? AppColors.danger : AppColors.primary,
+                ),
+                label: Text(
+                  AppUser.roleLabel(currentUser?.role),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isSuperAdmin ? AppColors.danger : AppColors.primary,
+                  ),
+                ),
+                backgroundColor: isSuperAdmin
+                    ? AppColors.danger.withValues(alpha: 0.1)
+                    : AppColors.primary.withValues(alpha: 0.1),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                side: BorderSide.none,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (!isSuperAdmin)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '一般管理者としてログイン中です。社員の役割変更・削除は最高管理者のみ行えます。',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Row(
             children: [
               Expanded(
