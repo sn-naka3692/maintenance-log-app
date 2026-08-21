@@ -709,6 +709,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             const SizedBox(height: 12),
             _buildCoWorkerField(),
 
+            // SE店舗の修理・故障対応の場合、作業内容を手入力する前に
+            // まず「作業報告書をお持ちならスキャン」という導線を提示する。
+            // 動線がコンビニ側システム入力控え(画面下部)の中に埋もれて
+            // 見つけにくいという指摘への対応(2026-08)。
+            if (showStoreSystemSection) _buildScanEntryCard(),
+
             const SizedBox(height: 20),
             _SectionTitle(_responseType.isBackOffice ? '業務内容' : '作業内容'),
             const SizedBox(height: 8),
@@ -772,7 +778,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               }),
 
             const SizedBox(height: 12),
-            // 写真
+            // 写真(現場・作業内容の補完情報用。ここでの撮影・選択内容はAI解析されない)
             Row(
               children: [
                 const Text('写真', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -784,6 +790,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 ),
               ],
             ),
+            if (showStoreSystemSection)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, bottom: 4),
+                child: Text(
+                  '※ ここは現場写真の保存用です。SE作業報告書の自動読み取りは'
+                  '上の「作業報告書をスキャンしてAIで自動入力」ボタンをご利用ください。',
+                  style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                ),
+              ),
             if (_photoPaths.isNotEmpty)
               SizedBox(
                 height: 90,
@@ -937,13 +952,16 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 child: OutlinedButton.icon(
                   onPressed: _scanReport,
                   icon: const Icon(Icons.document_scanner_outlined),
-                  label: const Text('作業報告書をスキャンしてAIで自動入力'),
+                  // 画面上部の入口カードでスキャン済みの場合はこちらは「再スキャン」の
+                  // 位置づけ(読み取り漏れ・別ページの追加取り込みなどに利用)。
+                  label: const Text('作業報告書を(再)スキャンしてAIで自動入力'),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 6, bottom: 4),
                 child: Text(
-                  '撮影後、AIの読み取り結果を必ず確認・修正してから反映します。',
+                  '撮影後、AIの読み取り結果を必ず確認・修正してから反映します。'
+                  'まだスキャンしていない場合は、この画面の上部にもスキャン用のボタンがあります。',
                   style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
                 ),
               ),
@@ -1474,6 +1492,70 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 「SE作業報告書をスキャンしてAIで自動入力」への入口カード。
+  ///
+  /// 作業内容や各項目を手入力する前の段階で表示し、報告書がある場合は
+  /// 先にスキャンしておけば以降の入力項目(店番・住所・型式・機番・
+  /// 事象・処置内容など)を自動で埋められることを案内する。
+  /// 実際のスキャン処理は_scanReport()(コンビニ側システム入力控え内の
+  /// ボタンと同じ処理)を呼び出すため、二重実装にはならない。
+  Widget _buildScanEntryCard() {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.document_scanner,
+                size: 18,
+                color: Colors.blue.shade800,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'SE作業報告書はお持ちですか?',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.blue.shade900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '先にスキャンすると、店番・住所・型式・機番・事象・処置内容など'
+            'この先の入力項目にAIが自動入力します(下部で内容を確認・修正できます)。',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.blue.shade900,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _scanReport,
+              icon: const Icon(Icons.document_scanner_outlined),
+              label: const Text('作業報告書をスキャンしてAIで自動入力'),
             ),
           ),
         ],
