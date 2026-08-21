@@ -68,7 +68,8 @@ const List<ExternalService> externalServices = [
     costNote:
         'Standard S0プラン。ページ数に応じた従量課金(カスタムモデルの解析は1ページあたり数円〜十数円程度)。'
         '利用頻度が増える場合はAzure Portalで実際の請求額を確認すること',
-    credentialLocation: 'サブスクリプションキーは中継API(下記 Azure Functions)側にのみ保管。'
+    credentialLocation:
+        'サブスクリプションキーは中継API(下記 Azure Functions)側にのみ保管。'
         'このアプリ自体はキーを持たない設計',
     notes: [
       'カスタムテンプレートモデル「sdrs-repair-report-v1」を学習済み',
@@ -88,7 +89,8 @@ const List<ExternalService> externalServices = [
     costNote:
         'Consumption(従量課金)プラン。呼び出し回数が少ないうちは月額ほぼ無料〜数百円程度。'
         '1日に何百回もスキャンするような使い方に変わった場合はコスト再確認が必要',
-    credentialLocation: 'AIサービスの鍵はAzure Functionsのアプリ設定(サーバー側)にのみ保管。'
+    credentialLocation:
+        'AIサービスの鍵はAzure Functionsのアプリ設定(サーバー側)にのみ保管。'
         'アプリ側はこの中継サーバーを呼び出すための限定的な鍵のみ保持(AI鍵そのものへのアクセス権はない)',
     notes: [
       '今回の開発で新規に追加したサービス',
@@ -134,6 +136,32 @@ class AccountNote {
   final String description;
   const AccountNote({required this.title, required this.description});
 }
+
+/// 今後の課題として意識的に「宿題」として残している項目。
+///
+/// 現時点では実装・意思決定を見送っているが、将来的に検討が必要な事項を
+/// 明文化しておくことで、担当者が変わっても引き継ぎ漏れが起きないようにする。
+class FutureConsideration {
+  final String title;
+  final String description;
+  const FutureConsideration({required this.title, required this.description});
+}
+
+const List<FutureConsideration> futureConsiderations = [
+  FutureConsideration(
+    title: 'Google Play内部テストへの移行(今後の課題)',
+    description:
+        '現状はAPKファイルを直接配布する「野良アプリ」形式で運用している。'
+        'この方式では、社員が新しいAPKを自発的に再インストールしない限りアプリは'
+        '古いバージョンのまま残り続けるという課題があり、今回「強制アップデート'
+        'ゲート」機能を導入した背景の一つとなっている。\n\n'
+        'Google Play Consoleの「内部テスト」機能を使えば、Playストア経由で自動更新'
+        'が可能になり、この課題自体を構造的に解消できる可能性がある。ただし、'
+        'Google Play Consoleへの登録(登録料・審査対応)や、会社としての公開方針'
+        '(社内配布のみか、将来的な一般公開の可能性があるか)の意思決定が必要となる'
+        'ため、中長期の検討課題として保留している。',
+  ),
+];
 
 const List<AccountNote> accountStructureNotes = [
   AccountNote(

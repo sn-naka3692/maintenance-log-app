@@ -60,6 +60,16 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // ------------------------------------------------------------
+    // app_config: 強制アップデートゲート等のアプリ全体設定
+    // - 読み取り: ログイン済みなら誰でも可(起動時のバージョンチェックに必要)
+    // - 更新: 最高管理者のみ(誤操作で全社ロックアウトになる事故を防ぐため)
+    // ------------------------------------------------------------
+    match /app_config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
     // その他の未定義コレクションはデフォルトで拒否
     match /{document=**} {
       allow read, write: if false;
