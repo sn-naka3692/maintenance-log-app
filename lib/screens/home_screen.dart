@@ -1,14 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../data/changelog_data.dart';
 import '../providers/app_state.dart';
+import '../services/update_notice_service.dart';
 import '../widgets/report_card.dart';
+import 'changelog_screen.dart';
 import 'report_detail_screen.dart';
 import 'report_edit_screen.dart';
 import 'store_list_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _hasUnseenUpdate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUnseenUpdate();
+  }
+
+  Future<void> _checkUnseenUpdate() async {
+    final has = await UpdateNoticeService.hasUnseenUpdate();
+    if (mounted) setState(() => _hasUnseenUpdate = has);
+  }
+
+  Future<void> _openChangelog() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ChangelogScreen()));
+    // 更新履歴画面を開いた=確認したものとして、バナーを消す
+    await UpdateNoticeService.markLatestAsSeen();
+    if (mounted) setState(() => _hasUnseenUpdate = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +70,9 @@ class HomeScreen extends StatelessWidget {
             icon: const Icon(Icons.storefront_outlined),
             tooltip: '店舗マスタ',
             onPressed: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const StoreListScreen()));
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StoreListScreen()),
+              );
             },
           ),
         ],
@@ -51,6 +81,8 @@ class HomeScreen extends StatelessWidget {
         onRefresh: () async => appState.refreshReports(),
         child: CustomScrollView(
           slivers: [
+            if (_hasUnseenUpdate)
+              SliverToBoxAdapter(child: _UpdateBanner(onTap: _openChangelog)),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -181,6 +213,85 @@ class HomeScreen extends StatelessWidget {
         },
         icon: const Icon(Icons.add),
         label: const Text('日報作成'),
+      ),
+    );
+  }
+}
+
+/// 「アプリが更新されたことに気づけない」問題への対応バナー。
+///
+/// 端末で最後に確認した更新履歴バージョンと最新バージョンが異なる場合、
+/// ホーム画面の一番上に自動で表示する。タップすると更新履歴画面に遷移し、
+/// 確認済みとして記録されるとバナーは消える。
+class _UpdateBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _UpdateBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final latest = changelogEntries.first;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.indigo.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.indigo.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.indigo.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.new_releases,
+                size: 18,
+                color: Colors.indigo.shade700,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'アプリが更新されました(v${latest.version})',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      color: Colors.indigo.shade900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    latest.title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.indigo.shade800,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'タップして更新内容を確認',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.indigo.shade400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.indigo.shade400),
+          ],
+        ),
       ),
     );
   }

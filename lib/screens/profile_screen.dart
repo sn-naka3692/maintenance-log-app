@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../data/changelog_data.dart';
 import '../models/user.dart';
 import '../providers/app_state.dart';
+import '../services/update_notice_service.dart';
 import '../theme/app_theme.dart';
 import 'changelog_screen.dart';
 import 'manual_screen.dart';
@@ -115,9 +116,15 @@ class ProfileScreen extends StatelessWidget {
                   title: const Text('更新履歴'),
                   subtitle: const Text('アプリの変更内容をここで確認できます'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ChangelogScreen()),
-                  ),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ChangelogScreen(),
+                      ),
+                    );
+                    // ホーム画面の「更新されました」バナーを既読にする
+                    await UpdateNoticeService.markLatestAsSeen();
+                  },
                 ),
                 const Divider(height: 1),
                 ListTile(
