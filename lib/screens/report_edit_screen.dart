@@ -45,6 +45,13 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
   String? _selectedStoreId;
   final List<String> _selectedCoWorkerIds = [];
+  // 作業者氏名(報告書控え)の入力方式:
+  // 現場作業者はほぼ全員アプリ登録済みの社員のため、まず従業員マスタから選択する
+  // ドロップダウンを用意する。リストにない場合(協力会社・臨時作業者など)のみ
+  // 「その他(手入力)」を選び、_ssCtrls['workerName']へ直接入力してもらう。
+  // OCR(AIスキャン)はこの項目を対象外とする(誤検出対策・運用効率化のため)。
+  static const String _workerNameOtherValue = '__other__';
+  String? _workerNameSelection;
   DateTime _visitDate = DateTime.now();
   TimeOfDay _startTime = TimeOfDay.now();
   TimeOfDay _endTime = TimeOfDay.now();
@@ -126,6 +133,17 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       _tags.addAll(e.tags);
       _photoPaths.addAll(e.photoPaths);
       _selectedCoWorkerIds.addAll(e.coWorkerIds);
+    }
+    // 既存データの「作業者氏名」(過去の手入力・OCR取り込み分含む)を、
+    // 従業員マスタの氏名と照合し、一致すればその社員を選択済み状態にする。
+    // 一致しない場合(退職者・協力会社など)は「その他(手入力)」として扱う。
+    final existingWorkerName = _ssCtrls['workerName']!.text.trim();
+    if (existingWorkerName.isNotEmpty) {
+      final users = context.read<AppState>().users;
+      final matched = users
+          .where((u) => u.name == existingWorkerName)
+          .firstOrNull;
+      _workerNameSelection = matched?.id ?? _workerNameOtherValue;
     }
   }
 
@@ -359,9 +377,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       if ((confirmed['ActionContent'] ?? '').isNotEmpty) {
         _ssCtrls['treatmentContent']!.text = confirmed['ActionContent']!;
       }
-      if ((confirmed['WorkerName'] ?? '').isNotEmpty) {
-        _ssCtrls['workerName']!.text = confirmed['WorkerName']!;
-      }
+      // 【方針】作業者氏名はOCR対象外(kScanFieldDefinitionsから除外済み)。
+      // 従業員マスタからの選択+手入力併用欄(_buildWorkerNameField)で管理する。
       // 冷媒回収量・充填量(半角英数のみ許可のバリデーション対象欄)
       if ((confirmed['RecoveryAmountKg'] ?? '').isNotEmpty) {
         _ssCtrls['recoveryAmount']!.text = confirmed['RecoveryAmountKg']!;
@@ -396,8 +413,14 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
   /// "2025/8/15" のようなAI抽出テキストをDateTimeへ変換する(失敗時はnull)。
   DateTime? _tryParseDate(String text) {
-    final cleaned = text.trim().replaceAll('年', '/').replaceAll('月', '/').replaceAll('日', '');
-    final match = RegExp(r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})').firstMatch(cleaned);
+    final cleaned = text
+        .trim()
+        .replaceAll('年', '/')
+        .replaceAll('月', '/')
+        .replaceAll('日', '');
+    final match = RegExp(
+      r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})',
+    ).firstMatch(cleaned);
     if (match == null) return null;
     try {
       return DateTime(
@@ -1076,24 +1099,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildField(
-                      controller: _ssCtrls['workerName']!,
-                      label: '作業者氏名(報告書控え・任意)',
-                      icon: Icons.person_outline,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildField(
-                      controller: _ssCtrls['recoveryAmount']!,
-                      label: '冷媒回収量(kg・任意)',
-                      icon: Icons.opacity,
-                    ),
-                  ),
-                ],
+              _buildWorkerNameField(),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['recoveryAmount']!,
+                label: '冷媒回収量(kg・任意)',
+                icon: Icons.opacity,
               ),
               const SizedBox(height: 16),
               Text(
@@ -1467,6 +1478,73 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// 作業者氏名(報告書控え)フィールド。
+  ///
+  /// 【方針】現場作業者はほぼ全員アプリ登録済みの社員であるため、まず従業員マスタ
+  /// (appState.users)からの選択を基本とする(表記ゆれ・誤字を防止)。
+  /// 協力会社や臨時作業者などマスタに存在しない場合のみ「その他(手入力)」を選び、
+  /// 直接氏名を入力できるようにする(併用方式)。
+  /// この項目はAI-OCR(作業報告書スキャン)の対象外とし、常に人の手で選択・入力する。
+  Widget _buildWorkerNameField() {
+    final appState = context.watch<AppState>();
+    final users = List<AppUser>.from(appState.users)
+      ..sort((a, b) => a.name.compareTo(b.name));
+    final isOther = _workerNameSelection == _workerNameOtherValue;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String?>(
+          initialValue: _workerNameSelection,
+          decoration: const InputDecoration(
+            labelText: '作業者氏名(報告書控え・任意)',
+            prefixIcon: Icon(Icons.person_outline),
+          ),
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('選択してください', overflow: TextOverflow.ellipsis),
+            ),
+            ...users.map(
+              (u) => DropdownMenuItem<String?>(
+                value: u.id,
+                child: Text(u.name, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+            const DropdownMenuItem<String?>(
+              value: _workerNameOtherValue,
+              child: Text('その他(リストにない場合は手入力)'),
+            ),
+          ],
+          onChanged: (v) {
+            setState(() {
+              _workerNameSelection = v;
+              if (v == null) {
+                _ssCtrls['workerName']!.text = '';
+              } else if (v == _workerNameOtherValue) {
+                // 手入力欄をこのあと表示するので、既存の値はそのまま保持する
+                // (社員一覧に見つからず「その他」として復元されたケースを含む)。
+              } else {
+                final u = users.where((u) => u.id == v).firstOrNull;
+                _ssCtrls['workerName']!.text = u?.name ?? '';
+              }
+            });
+          },
+        ),
+        if (isOther) ...[
+          const SizedBox(height: 10),
+          _buildField(
+            controller: _ssCtrls['workerName']!,
+            label: '作業者氏名(手入力)',
+            icon: Icons.edit_outlined,
+            hint: '協力会社・臨時作業者など、リストにない方の氏名',
+          ),
+        ],
+      ],
     );
   }
 

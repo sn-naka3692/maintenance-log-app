@@ -59,7 +59,9 @@ class DocumentScanService {
     try {
       body = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
     } catch (_) {
-      throw DocumentScanException('サーバーからの応答を解釈できませんでした (HTTP ${resp.statusCode})');
+      throw DocumentScanException(
+        'サーバーからの応答を解釈できませんでした (HTTP ${resp.statusCode})',
+      );
     }
 
     if (resp.statusCode != 200) {
@@ -141,7 +143,12 @@ const List<ScanFieldDef> kScanFieldDefinitions = [
   ScanFieldDef('VisitDate', '作業実施日'),
   ScanFieldDef('StartTime', '作業時間(開始)'),
   ScanFieldDef('EndTime', '作業時間(終了)'),
-  ScanFieldDef('WorkerName', '作業者氏名'),
+  // 【方針】作業者氏名はOCR対象外とする。
+  // 現場作業者はほぼ全員アプリ登録済みの社員であるため、自由入力(OCR含む)より
+  // 従業員マスタからの選択の方が精度・運用効率ともに優れる。
+  // Azureモデル自体はWorkerNameフィールドを抽出するが、ここで定義から外すことで
+  // 確認・修正画面(ScanConfirmScreen)には表示されず、抽出値も一切使用されない。
+  // 作業者氏名の入力はreport_edit_screen.dartの「従業員選択+手入力併用」欄で行う。
   ScanFieldDef('RecoveryAmountKg', '冷媒回収量(kg)'),
   ScanFieldDef('ChargeAmountKg', '冷媒充填量(kg)'),
   ScanFieldDef('EquipmentName', '設備名称'),
