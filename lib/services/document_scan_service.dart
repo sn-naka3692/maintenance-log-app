@@ -13,98 +13,76 @@ import '../utils/maker_name_normalizer.dart';
 /// 【重要】AI一発登録は行わない。抽出結果は必ず
 /// 「確認・修正画面」でユーザーが目視確認・修正してから
 /// 登録するフローに限定する(社内方針)。
+///
+/// 【セキュリティ設計】
+/// Document Intelligenceの Subscription Key はクライアント(このアプリ)には
+/// 一切埋め込まない。代わりに Azure Functions の中継エンドポイント
+/// (nakano-scan-proxy) を経由して解析を行う。中継Functionにのみ
+/// Document Intelligenceキーを保持し、クライアントはFunction呼び出し用の
+/// Function Key(呼び出し権限のみ、Document Intelligence自体は操作不可)を持つ。
 class DocumentScanService {
-  // TODO: 本番運用前に、このAPIキーをクライアントへ直接埋め込む方式から
-  // バックエンド経由の呼び出し(キーをサーバー側にのみ保持)に変更することを推奨。
-  // 現状はプロトタイプとして直接呼び出している。
-  static const String _endpoint =
-      'https://nakano-doc-intelligence.cognitiveservices.azure.com';
-  static const String _apiKey = String.fromEnvironment(
-    'AZURE_DOC_INTEL_KEY',
-    defaultValue: '<<AZURE_DOC_INTEL_KEY>>',
-  );
-  static const String _modelId = 'sdrs-repair-report-v1';
-  static const String _apiVersion = '2024-11-30';
+  // 中継Function(Azure Functions)のエンドポイント。
+  // Document Intelligence の Subscription Key はサーバー側(App Settings)に
+  // のみ保持され、ここには含まれない。
+  static const String _proxyEndpoint =
+      'https://nakano-scan-proxy.azurewebsites.net/api/scan';
 
-  /// 画像バイト列を渡してAzureで解析し、フィールド抽出結果を返す。
+  // Function呼び出し用のキー。Document Intelligenceそのものへの権限はなく、
+  // この中継Functionを呼び出す権限のみを持つ。ビルド時に埋め込む。
+  static const String _functionKey = String.fromEnvironment(
+    'SCAN_PROXY_FUNCTION_KEY',
+    defaultValue: '<<SCAN_PROXY_FUNCTION_KEY>>',
+  );
+
+  /// 画像バイト列を渡して中継Function経由でAzureに解析させ、
+  /// フィールド抽出結果を返す。
   /// 戻り値: フィールドキー(Pascal case) -> 値 のMap。未検出は空文字。
   static Future<ScanResult> analyzeImage(Uint8List imageBytes) async {
-    final analyzeUri = Uri.parse(
-      '$_endpoint/documentintelligence/documentModels/$_modelId:analyze'
-      '?api-version=$_apiVersion',
-    );
+    final uri = Uri.parse('$_proxyEndpoint?code=$_functionKey');
 
-    final postResp = await http.post(
-      analyzeUri,
-      headers: {
-        'Ocp-Apim-Subscription-Key': _apiKey,
-        'Content-Type': 'application/octet-stream',
-      },
-      body: imageBytes,
-    );
-
-    if (postResp.statusCode != 202) {
-      throw DocumentScanException(
-        'スキャン解析の開始に失敗しました (HTTP ${postResp.statusCode})\n${postResp.body}',
-      );
-    }
-
-    final opLocation = postResp.headers['operation-location'];
-    if (opLocation == null) {
-      throw DocumentScanException('解析結果の取得先(Operation-Location)が見つかりません');
-    }
-
-    // ポーリングで結果を待つ(最大30秒、1秒間隔)
-    final resultUri = Uri.parse(opLocation);
-    Map<String, dynamic>? resultJson;
-    for (var i = 0; i < 30; i++) {
-      await Future.delayed(const Duration(seconds: 1));
-      final getResp = await http.get(
-        resultUri,
-        headers: {'Ocp-Apim-Subscription-Key': _apiKey},
-      );
-      if (getResp.statusCode != 200) {
-        throw DocumentScanException(
-          '解析結果の取得に失敗しました (HTTP ${getResp.statusCode})',
-        );
-      }
-      final body = jsonDecode(utf8.decode(getResp.bodyBytes))
-          as Map<String, dynamic>;
-      final status = body['status'] as String?;
-      if (status == 'succeeded') {
-        resultJson = body;
-        break;
-      } else if (status == 'failed') {
-        throw DocumentScanException('AI解析に失敗しました');
-      }
-      // status == 'running' or 'notStarted' -> 継続ポーリング
-    }
-
-    if (resultJson == null) {
+    final http.Response resp;
+    try {
+      resp = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/octet-stream'},
+            body: imageBytes,
+          )
+          .timeout(const Duration(seconds: 60));
+    } on TimeoutException {
       throw DocumentScanException('解析がタイムアウトしました。もう一度お試しください');
+    } catch (e) {
+      throw DocumentScanException('サーバーへの接続に失敗しました: $e');
     }
 
-    final analyzeResult =
-        resultJson['analyzeResult'] as Map<String, dynamic>? ?? {};
-    final documents = analyzeResult['documents'] as List<dynamic>? ?? [];
-    if (documents.isEmpty) {
-      throw DocumentScanException('作業報告書のフォーマットを認識できませんでした');
-    }
-    final doc = documents.first as Map<String, dynamic>;
-    final docConfidence = (doc['confidence'] as num?)?.toDouble() ?? 0.0;
-    final fieldsRaw = doc['fields'] as Map<String, dynamic>? ?? {};
-
-    final values = <String, String>{};
-    final confidences = <String, double>{};
-    for (final entry in fieldsRaw.entries) {
-      final fieldData = entry.value as Map<String, dynamic>;
-      final content = fieldData['content'] as String? ?? '';
-      final confidence = (fieldData['confidence'] as num?)?.toDouble() ?? 0.0;
-      values[entry.key] = content;
-      confidences[entry.key] = confidence;
+    Map<String, dynamic> body;
+    try {
+      body = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    } catch (_) {
+      throw DocumentScanException('サーバーからの応答を解釈できませんでした (HTTP ${resp.statusCode})');
     }
 
-    // メーカー名の社名変更対応(ユーザー指示: 旧社名は新社名「SDRS株式会社」に統一)
+    if (resp.statusCode != 200) {
+      final errorMsg = body['error'] as String? ?? 'スキャン解析に失敗しました';
+      throw DocumentScanException('$errorMsg (HTTP ${resp.statusCode})');
+    }
+
+    final valuesRaw = body['values'] as Map<String, dynamic>? ?? {};
+    final confidencesRaw = body['confidences'] as Map<String, dynamic>? ?? {};
+    final docConfidence =
+        (body['documentConfidence'] as num?)?.toDouble() ?? 0.0;
+
+    final values = <String, String>{
+      for (final entry in valuesRaw.entries)
+        entry.key: entry.value as String? ?? '',
+    };
+    final confidences = <String, double>{
+      for (final entry in confidencesRaw.entries)
+        entry.key: (entry.value as num?)?.toDouble() ?? 0.0,
+    };
+
+    // メーカー名の社名変更対応(サーバー側でも正規化済みだが、念のため
+    // クライアント側でも冪等に正規化しておく)
     if (values.containsKey('MakerName')) {
       values['MakerName'] = normalizeMakerName(values['MakerName']);
     }
