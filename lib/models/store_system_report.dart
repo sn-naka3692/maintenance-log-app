@@ -26,6 +26,18 @@ class StoreSystemReport {
   String part5; // 部品5
   String remarks; // 備考
 
+  // 以下、作業報告書AIスキャン(Azure Document Intelligence)機能で
+  // 追加された項目。既存データにはないため空文字がデフォルト。
+  String storeNumber; // 店番(スキャン取り込み用)
+  String scannedAddress; // 住所(スキャン取り込み用)
+  String scannedTel; // TEL(スキャン取り込み用)
+  String machineNo; // 機番
+  String assetNo; // 資産管理No
+  String barcode; // ランダムバーコード
+  String deliveryDate; // 納品日
+  String workerName; // 作業者氏名(報告書に印字された氏名の控え)
+  String recoveryAmount; // 冷媒回収量(kg)
+
   StoreSystemReport({
     this.receiptNumber = '',
     this.refrigerantType = '',
@@ -47,6 +59,15 @@ class StoreSystemReport {
     this.part4 = '',
     this.part5 = '',
     this.remarks = '',
+    this.storeNumber = '',
+    this.scannedAddress = '',
+    this.scannedTel = '',
+    this.machineNo = '',
+    this.assetNo = '',
+    this.barcode = '',
+    this.deliveryDate = '',
+    this.workerName = '',
+    this.recoveryAmount = '',
   });
 
   /// すべての項目が空かどうか(未入力判定用)
@@ -94,6 +115,15 @@ class StoreSystemReport {
       'part4': part4,
       'part5': part5,
       'remarks': remarks,
+      'store_number': storeNumber,
+      'scanned_address': scannedAddress,
+      'scanned_tel': scannedTel,
+      'machine_no': machineNo,
+      'asset_no': assetNo,
+      'barcode': barcode,
+      'delivery_date': deliveryDate,
+      'worker_name': workerName,
+      'recovery_amount': recoveryAmount,
     };
   }
 
@@ -120,6 +150,15 @@ class StoreSystemReport {
       part4: map['part4'] as String? ?? '',
       part5: map['part5'] as String? ?? '',
       remarks: map['remarks'] as String? ?? '',
+      storeNumber: map['store_number'] as String? ?? '',
+      scannedAddress: map['scanned_address'] as String? ?? '',
+      scannedTel: map['scanned_tel'] as String? ?? '',
+      machineNo: map['machine_no'] as String? ?? '',
+      assetNo: map['asset_no'] as String? ?? '',
+      barcode: map['barcode'] as String? ?? '',
+      deliveryDate: map['delivery_date'] as String? ?? '',
+      workerName: map['worker_name'] as String? ?? '',
+      recoveryAmount: map['recovery_amount'] as String? ?? '',
     );
   }
 }

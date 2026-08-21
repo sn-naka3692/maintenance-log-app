@@ -11,6 +11,7 @@ import '../models/user.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/document_scan_flow.dart';
 import '../widgets/store_picker_field.dart';
 
 /// 作業内容の記入サポート(チレアカップ)モード
@@ -104,6 +105,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       'part4': TextEditingController(text: ss.part4),
       'part5': TextEditingController(text: ss.part5),
       'remarks': TextEditingController(text: ss.remarks),
+      'storeNumber': TextEditingController(text: ss.storeNumber),
+      'scannedAddress': TextEditingController(text: ss.scannedAddress),
+      'scannedTel': TextEditingController(text: ss.scannedTel),
+      'machineNo': TextEditingController(text: ss.machineNo),
+      'assetNo': TextEditingController(text: ss.assetNo),
+      'barcode': TextEditingController(text: ss.barcode),
+      'deliveryDate': TextEditingController(text: ss.deliveryDate),
+      'workerName': TextEditingController(text: ss.workerName),
+      'recoveryAmount': TextEditingController(text: ss.recoveryAmount),
     };
     _tagInputCtrl = TextEditingController();
 
@@ -279,7 +289,139 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       part4: _ssCtrls['part4']!.text.trim(),
       part5: _ssCtrls['part5']!.text.trim(),
       remarks: _ssCtrls['remarks']!.text.trim(),
+      storeNumber: _ssCtrls['storeNumber']!.text.trim(),
+      scannedAddress: _ssCtrls['scannedAddress']!.text.trim(),
+      scannedTel: _ssCtrls['scannedTel']!.text.trim(),
+      machineNo: _ssCtrls['machineNo']!.text.trim(),
+      assetNo: _ssCtrls['assetNo']!.text.trim(),
+      barcode: _ssCtrls['barcode']!.text.trim(),
+      deliveryDate: _ssCtrls['deliveryDate']!.text.trim(),
+      workerName: _ssCtrls['workerName']!.text.trim(),
+      recoveryAmount: _ssCtrls['recoveryAmount']!.text.trim(),
     );
+  }
+
+  /// 作業報告書をカメラで撮影し、AI(Azure Document Intelligence)で
+  /// 23項目を自動抽出する。ユーザーが確認・修正画面で内容をチェック・修正した後、
+  /// 「反映」した項目のみをこの画面の各フィールドへ書き込む。
+  /// AIの解析結果を確認なしにそのまま登録することは絶対に行わない。
+  Future<void> _scanReport() async {
+    final confirmed = await DocumentScanFlow.run(context);
+    if (confirmed == null || !mounted) return;
+
+    setState(() {
+      // コンビニ側システム入力控えセクションへ反映
+      if ((confirmed['StoreNumber'] ?? '').isNotEmpty) {
+        _ssCtrls['storeNumber']!.text = confirmed['StoreNumber']!;
+      }
+      if ((confirmed['Address'] ?? '').isNotEmpty) {
+        _ssCtrls['scannedAddress']!.text = confirmed['Address']!;
+      }
+      if ((confirmed['Tel'] ?? '').isNotEmpty) {
+        _ssCtrls['scannedTel']!.text = confirmed['Tel']!;
+      }
+      if ((confirmed['EquipmentName'] ?? '').isNotEmpty) {
+        _ssCtrls['equipmentName']!.text = confirmed['EquipmentName']!;
+      }
+      if ((confirmed['MakerName'] ?? '').isNotEmpty) {
+        _ssCtrls['maker']!.text = confirmed['MakerName']!;
+      }
+      if ((confirmed['ModelNo'] ?? '').isNotEmpty) {
+        _ssCtrls['modelNumber']!.text = confirmed['ModelNo']!;
+      }
+      if ((confirmed['MachineNo'] ?? '').isNotEmpty) {
+        _ssCtrls['machineNo']!.text = confirmed['MachineNo']!;
+      }
+      if ((confirmed['AssetNo'] ?? '').isNotEmpty) {
+        _ssCtrls['assetNo']!.text = confirmed['AssetNo']!;
+      }
+      if ((confirmed['Barcode'] ?? '').isNotEmpty) {
+        _ssCtrls['barcode']!.text = confirmed['Barcode']!;
+      }
+      if ((confirmed['DeliveryDate'] ?? '').isNotEmpty) {
+        _ssCtrls['deliveryDate']!.text = confirmed['DeliveryDate']!;
+      }
+      if ((confirmed['PartCategory'] ?? '').isNotEmpty) {
+        _ssCtrls['part']!.text = confirmed['PartCategory']!;
+      }
+      if ((confirmed['PartDetail'] ?? '').isNotEmpty) {
+        _ssCtrls['detailPart']!.text = confirmed['PartDetail']!;
+      }
+      if ((confirmed['Symptom'] ?? '').isNotEmpty) {
+        _ssCtrls['phenomenon']!.text = confirmed['Symptom']!;
+      }
+      if ((confirmed['SymptomDetail'] ?? '').isNotEmpty) {
+        _ssCtrls['phenomenonNote']!.text = confirmed['SymptomDetail']!;
+      }
+      if ((confirmed['Cause'] ?? '').isNotEmpty) {
+        _ssCtrls['cause']!.text = confirmed['Cause']!;
+      }
+      if ((confirmed['ActionContent'] ?? '').isNotEmpty) {
+        _ssCtrls['treatmentContent']!.text = confirmed['ActionContent']!;
+      }
+      if ((confirmed['WorkerName'] ?? '').isNotEmpty) {
+        _ssCtrls['workerName']!.text = confirmed['WorkerName']!;
+      }
+      // 冷媒回収量・充填量(半角英数のみ許可のバリデーション対象欄)
+      if ((confirmed['RecoveryAmountKg'] ?? '').isNotEmpty) {
+        _ssCtrls['recoveryAmount']!.text = confirmed['RecoveryAmountKg']!;
+      }
+      if ((confirmed['ChargeAmountKg'] ?? '').isNotEmpty) {
+        _ssCtrls['refrigerantAmount']!.text = confirmed['ChargeAmountKg']!;
+      }
+      // 訪問日・作業開始/終了時刻(パースできた場合のみ反映)
+      final visitDateStr = confirmed['VisitDate'];
+      if (visitDateStr != null && visitDateStr.isNotEmpty) {
+        final parsed = _tryParseDate(visitDateStr);
+        if (parsed != null) _visitDate = parsed;
+      }
+      final startTimeStr = confirmed['StartTime'];
+      if (startTimeStr != null && startTimeStr.isNotEmpty) {
+        final parsed = _tryParseTime(startTimeStr);
+        if (parsed != null) _startTime = parsed;
+      }
+      final endTimeStr = confirmed['EndTime'];
+      if (endTimeStr != null && endTimeStr.isNotEmpty) {
+        final parsed = _tryParseTime(endTimeStr);
+        if (parsed != null) _endTime = parsed;
+      }
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('スキャン内容をフォームへ反映しました。他の項目も確認してください。')),
+      );
+    }
+  }
+
+  /// "2025/8/15" のようなAI抽出テキストをDateTimeへ変換する(失敗時はnull)。
+  DateTime? _tryParseDate(String text) {
+    final cleaned = text.trim().replaceAll('年', '/').replaceAll('月', '/').replaceAll('日', '');
+    final match = RegExp(r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})').firstMatch(cleaned);
+    if (match == null) return null;
+    try {
+      return DateTime(
+        int.parse(match.group(1)!),
+        int.parse(match.group(2)!),
+        int.parse(match.group(3)!),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// "16:00" や "~17:00" のようなAI抽出テキストをTimeOfDayへ変換する(失敗時はnull)。
+  TimeOfDay? _tryParseTime(String text) {
+    final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(text.trim());
+    if (match == null) return null;
+    try {
+      final hour = int.parse(match.group(1)!);
+      final minute = int.parse(match.group(2)!);
+      if (hour > 23 || minute > 59) return null;
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _pickPhoto() async {
@@ -767,10 +909,32 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 ),
               ),
               const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _scanReport,
+                  icon: const Icon(Icons.document_scanner_outlined),
+                  label: const Text('作業報告書をスキャンしてAIで自動入力'),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 6, bottom: 4),
+                child: Text(
+                  '撮影後、AIの読み取り結果を必ず確認・修正してから反映します。',
+                  style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                ),
+              ),
+              const SizedBox(height: 12),
               _buildField(
                 controller: _ssCtrls['receiptNumber']!,
                 label: '弊社受付No.',
                 icon: Icons.confirmation_number_outlined,
+              ),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['storeNumber']!,
+                label: '店番(スキャン取り込み・任意)',
+                icon: Icons.store_outlined,
               ),
               const SizedBox(height: 16),
               Text(
@@ -835,6 +999,18 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               ),
               const SizedBox(height: 12),
               _buildField(
+                controller: _ssCtrls['scannedAddress']!,
+                label: '住所(スキャン取り込み・任意)',
+                icon: Icons.location_on_outlined,
+              ),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['scannedTel']!,
+                label: 'TEL(スキャン取り込み・任意)',
+                icon: Icons.call_outlined,
+              ),
+              const SizedBox(height: 12),
+              _buildField(
                 controller: _ssCtrls['equipmentName']!,
                 label: '設備名称',
                 icon: Icons.kitchen,
@@ -855,6 +1031,66 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['modelNumber']!,
                       label: '型式',
                       icon: Icons.qr_code_2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['machineNo']!,
+                      label: '機番(任意)',
+                      icon: Icons.confirmation_num_outlined,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['assetNo']!,
+                      label: '資産管理No(任意)',
+                      icon: Icons.badge_outlined,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['barcode']!,
+                      label: 'ランダムバーコード(任意)',
+                      icon: Icons.qr_code_scanner_outlined,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['deliveryDate']!,
+                      label: '納品日(任意)',
+                      icon: Icons.local_shipping_outlined,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['workerName']!,
+                      label: '作業者氏名(報告書控え・任意)',
+                      icon: Icons.person_outline,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildField(
+                      controller: _ssCtrls['recoveryAmount']!,
+                      label: '冷媒回収量(kg・任意)',
+                      icon: Icons.opacity,
                     ),
                   ),
                 ],
