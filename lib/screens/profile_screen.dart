@@ -8,6 +8,7 @@ import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 import 'changelog_screen.dart';
 import 'manual_screen.dart';
+import 'system_architecture_screen.dart';
 import 'user_management_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -131,6 +132,23 @@ class ProfileScreen extends StatelessWidget {
                     MaterialPageRoute(builder: (_) => const ManualScreen()),
                   ),
                 ),
+                if (appState.isSuperAdmin) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.security,
+                      color: AppColors.danger,
+                    ),
+                    title: const Text('システム構成・アカウント整理'),
+                    subtitle: const Text('外部サービス・APIキーの管理状況(最高管理者のみ)'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SystemArchitectureScreen(),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
