@@ -1,11 +1,11 @@
 {
-    "name": "flutter_app",
-    "short_name": "flutter_app",
+    "name": "札幌中野冷機 業務日報アプリ",
+    "short_name": "日報アプリ",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0D6EFD",
+    "theme_color": "#0D6EFD",
+    "description": "札幌中野冷機の業務日報を作成・共有するアプリです。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

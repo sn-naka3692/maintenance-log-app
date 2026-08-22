@@ -18,22 +18,140 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="札幌中野冷機の業務日報を作成・共有するアプリです。">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="flutter_app">
+  <meta name="apple-mobile-web-app-title" content="日報アプリ">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>flutter_app</title>
+  <title>札幌中野冷機 業務日報アプリ</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* ------------------------------------------------------------
+       ホーム画面へのインストール(ショートカット追加)を促す案内バー。
+       - Android/Chrome系: beforeinstallprompt が発火した端末のみ、
+         「インストール」ボタンをタップ一つでネイティブのインストール
+         ダイアログを呼び出せる。
+       - iOS Safari: beforeinstallpromptに非対応のため、共有ボタン経由の
+         手順を案内する文言を表示する(ボタンではなく案内文)。
+       - PC/対応外ブラウザでは何も表示しない。
+       ------------------------------------------------------------ */
+    #pwa-install-bar {
+      display: none;
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      z-index: 9999;
+      background: #0D6EFD;
+      color: #fff;
+      padding: 10px 16px;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom));
+      font-family: "Hiragino Sans", "Noto Sans JP", -apple-system, sans-serif;
+      font-size: 13px;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.15);
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    #pwa-install-bar.show { display: flex; }
+    #pwa-install-bar .msg { flex: 1; line-height: 1.4; }
+    #pwa-install-bar button {
+      background: #fff;
+      color: #0D6EFD;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    #pwa-install-bar .close-btn {
+      background: transparent;
+      color: #fff;
+      font-size: 18px;
+      padding: 0 4px;
+      font-weight: 400;
+    }
+  </style>
 </head>
 <body>
+  <div id="pwa-install-bar">
+    <span class="msg" id="pwa-install-msg">📱 このアプリをホーム画面に追加できます</span>
+    <button id="pwa-install-btn" style="display:none;">インストール</button>
+    <button class="close-btn" id="pwa-install-close" aria-label="閉じる">×</button>
+  </div>
+
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    (function () {
+      var STORAGE_KEY = 'pwaInstallBarDismissedAt';
+      var bar = document.getElementById('pwa-install-bar');
+      var msg = document.getElementById('pwa-install-msg');
+      var installBtn = document.getElementById('pwa-install-btn');
+      var closeBtn = document.getElementById('pwa-install-close');
+      var deferredPrompt = null;
+
+      function alreadyInstalled() {
+        // すでにホーム画面から起動されている(standalone)場合は案内不要
+        return window.matchMedia('(display-mode: standalone)').matches ||
+               window.navigator.standalone === true;
+      }
+
+      function recentlyDismissed() {
+        var t = localStorage.getItem(STORAGE_KEY);
+        if (!t) return false;
+        // 一度閉じたら7日間は再表示しない(毎回出て邪魔にならないようにする)
+        return (Date.now() - parseInt(t, 10)) < 7 * 24 * 60 * 60 * 1000;
+      }
+
+      function showBar() {
+        if (alreadyInstalled() || recentlyDismissed()) return;
+        bar.classList.add('show');
+      }
+
+      closeBtn.addEventListener('click', function () {
+        bar.classList.remove('show');
+        localStorage.setItem(STORAGE_KEY, String(Date.now()));
+      });
+
+      // Android Chrome / Edge 等: ネイティブのインストールダイアログを利用可能
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.style.display = 'inline-block';
+        msg.textContent = '📱 このアプリをホーム画面に追加できます';
+        showBar();
+      });
+
+      installBtn.addEventListener('click', function () {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.finally(function () {
+          deferredPrompt = null;
+          bar.classList.remove('show');
+        });
+      });
+
+      window.addEventListener('appinstalled', function () {
+        bar.classList.remove('show');
+      });
+
+      // iOS Safari: beforeinstallprompt非対応のため、共有ボタン経由の
+      // 手順を案内文として表示する(自動インストールボタンは出せない)。
+      var ua = window.navigator.userAgent;
+      var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+      var isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
+      if (isIOS && isSafari && !alreadyInstalled() && !recentlyDismissed()) {
+        msg.textContent = '📱 下の共有ボタン(□↑)から「ホーム画面に追加」を選ぶとアプリのように使えます';
+        showBar();
+      }
+    })();
+  </script>
 </body>
 </html>
