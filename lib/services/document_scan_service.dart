@@ -34,25 +34,58 @@ class DocumentScanService {
     defaultValue: '<<SCAN_PROXY_FUNCTION_KEY>>',
   );
 
+  /// 通信の最大リトライ回数。
+  ///
+  /// 【背景】作業現場(冷凍機械室・地下・バックヤードの鉄扉内など)は
+  /// 電波が不安定な場所が多く、一度の通信失敗だけで即座にエラーとして
+  /// ユーザーに撮影し直しを求めるのは負担が大きい。一時的な電波の乱れは
+  /// 自動的に再送してカバーし、本当に電波が届かない場合のみユーザーに
+  /// 伝える。
+  static const int _maxAttempts = 3;
+
   /// 画像バイト列を渡して中継Function経由でAzureに解析させ、
   /// フィールド抽出結果を返す。
   /// 戻り値: フィールドキー(Pascal case) -> 値 のMap。未検出は空文字。
   static Future<ScanResult> analyzeImage(Uint8List imageBytes) async {
     final uri = Uri.parse('$_proxyEndpoint?code=$_functionKey');
 
-    final http.Response resp;
-    try {
-      resp = await http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/octet-stream'},
-            body: imageBytes,
-          )
-          .timeout(const Duration(seconds: 60));
-    } on TimeoutException {
-      throw DocumentScanException('解析がタイムアウトしました。もう一度お試しください');
-    } catch (e) {
-      throw DocumentScanException('サーバーへの接続に失敗しました: $e');
+    http.Response? resp;
+    Object? lastError;
+
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      try {
+        resp = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/octet-stream'},
+              body: imageBytes,
+            )
+            .timeout(const Duration(seconds: 25));
+        break; // 成功したのでリトライループを抜ける
+      } on TimeoutException catch (e) {
+        lastError = e;
+      } catch (e) {
+        // 電波が不安定な現場(冷凍機械室・地下・バックヤード等)では、
+        // 通信が一時的に切れることが多い。ここで即座にエラーとせず、
+        // 電波が回復するのを期待して間隔を空けてリトライする。
+        lastError = e;
+      }
+
+      if (attempt < _maxAttempts) {
+        await Future.delayed(Duration(seconds: attempt * 2)); // 2秒, 4秒 と間隔を広げる
+      }
+    }
+
+    if (resp == null) {
+      // 【重要】$maxAttempts回すべて失敗 = 端末からAzureまで一度も
+      // 通信が成立していない可能性が高い(電波が届いていない)。
+      // 診断のため実際の例外の型名も付記する。
+      final errorType = lastError?.runtimeType.toString() ?? '';
+      throw DocumentScanException(
+        '通信環境が不安定なため、サーバーに接続できませんでした($_maxAttempts回再送を試みました)。\n'
+        '電波の良い場所(店舗事務所の出入口付近など)に移動してから、もう一度お試しください。'
+        '${errorType.isNotEmpty ? '\n[$errorType]' : ''}',
+      );
     }
 
     Map<String, dynamic> body;

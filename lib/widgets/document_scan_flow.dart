@@ -95,7 +95,8 @@ class _AnalyzingDialog extends StatelessWidget {
             Text('AIが作業報告書を読み取っています…'),
             SizedBox(height: 4),
             Text(
-              '数秒〜数十秒かかる場合があります',
+              '電波が弱い場所では自動的に再送します。\n数秒〜数十秒かかる場合があります',
+              textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
