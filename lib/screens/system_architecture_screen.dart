@@ -32,6 +32,8 @@ class SystemArchitectureScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const _ForceUpdateGateSection(),
+          const SizedBox(height: 12),
+          const _VersionBuildTable(),
 
           const SizedBox(height: 24),
           _SectionHeader(
@@ -634,6 +636,160 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// バージョン名(1.1.9など)とビルド番号(強制アップデートゲートに入力
+/// する数字)の対応表。新しいAPKをビルドするたびに、上の「最低利用可能
+/// ビルド番号」を更新する際、ここを見れば「今回はどの数字を入れればいいか」
+/// を迷わずに判断できるようにするための一覧。
+class _VersionBuildTable extends StatelessWidget {
+  const _VersionBuildTable();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.table_rows_outlined,
+                  size: 18,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    'バージョン名 ⇔ ビルド番号 対応表',
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '上の「最低利用可能ビルド番号」に入力するのは、'
+              '「バージョン名」ではなく下表の「ビルド番号」の数字です。',
+              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+            ),
+            const Divider(height: 18),
+            Table(
+              columnWidths: const {
+                0: FlexColumnWidth(1.3),
+                1: FlexColumnWidth(1.1),
+                2: FlexColumnWidth(1.4),
+                3: FlexColumnWidth(3.2),
+              },
+              border: TableBorder(
+                horizontalInside: BorderSide(color: Colors.grey.shade200),
+              ),
+              children: [
+                TableRow(
+                  decoration: BoxDecoration(color: Colors.grey.shade100),
+                  children: const [
+                    _TableHeaderCell('バージョン名'),
+                    _TableHeaderCell('ビルド番号'),
+                    _TableHeaderCell('リリース日'),
+                    _TableHeaderCell('主な変更点'),
+                  ],
+                ),
+                for (final r in versionBuildHistory)
+                  TableRow(
+                    children: [
+                      _TableDataCell(r.versionName, bold: true),
+                      _TableDataCell(
+                        '${r.buildNumber}',
+                        bold: true,
+                        color: AppColors.primary,
+                      ),
+                      _TableDataCell(r.releaseDate),
+                      _TableDataCell(r.summary),
+                    ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.warning.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Colors.orange.shade800,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '新しいAPKをビルドしたら、この表の先頭に1行追加してください'
+                      '(system_architecture_data.dart の versionBuildHistory)。'
+                      'このリストが古いままだと、ゲートに入力すべき数字を'
+                      '間違えるおそれがあります。',
+                      style: TextStyle(fontSize: 11, color: Colors.orange.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TableHeaderCell extends StatelessWidget {
+  final String text;
+  const _TableHeaderCell(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          color: Colors.grey.shade700,
+        ),
+      ),
+    );
+  }
+}
+
+class _TableDataCell extends StatelessWidget {
+  final String text;
+  final bool bold;
+  final Color? color;
+  const _TableDataCell(this.text, {this.bold = false, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: bold ? FontWeight.w800 : FontWeight.w400,
+          color: color ?? Colors.grey.shade800,
         ),
       ),
     );

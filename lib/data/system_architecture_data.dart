@@ -9,6 +9,81 @@
 ///   あくまで「何がどこにあるか」の管理台帳として機能させる。
 library;
 
+/// 「バージョン名(1.1.9など)」と「ビルド番号(強制アップデートゲートで
+/// 入力する数字)」の対応記録。
+///
+/// 【使い方】強制アップデートゲートの「最低利用可能ビルド番号」には、
+/// バージョン名ではなく、この表の「ビルド番号」列の数字を入力する。
+/// (pubspec.yaml の "version: 1.1.9+8" の "+" の後ろの数字がビルド番号)
+///
+/// 【重要】新しいAPKをビルドするたびに、このリストの先頭に1行追加すること。
+/// これを忘れると、次にゲートのビルド番号を確認する際にここが古いままになる。
+class VersionBuildRecord {
+  final String versionName; // 例: "1.1.9"
+  final int buildNumber; // 例: 8
+  final String releaseDate; // 例: "2026-08-24"
+  final String summary; // その版の主な変更点(短く)
+
+  const VersionBuildRecord({
+    required this.versionName,
+    required this.buildNumber,
+    required this.releaseDate,
+    required this.summary,
+  });
+}
+
+/// 新しいバージョンほどリストの先頭に追加すること。
+const List<VersionBuildRecord> versionBuildHistory = [
+  VersionBuildRecord(
+    versionName: '1.1.9',
+    buildNumber: 8,
+    releaseDate: '2026-08-24',
+    summary: 'CSV出力に「このデバイスに保存」ボタンを追加(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
+    versionName: '1.1.8',
+    buildNumber: 7,
+    releaseDate: '2026-08-22',
+    summary: 'WEB版マニュアルにホーム画面追加(PWA)手順を追加',
+  ),
+  VersionBuildRecord(
+    versionName: '1.1.7',
+    buildNumber: 6,
+    releaseDate: '2026-08-21',
+    summary: '強制アップデートゲート機能を追加',
+  ),
+  VersionBuildRecord(
+    versionName: '1.1.6',
+    buildNumber: 5,
+    releaseDate: '2026-08-21',
+    summary: 'ホーム画面に更新通知バナーを追加',
+  ),
+  VersionBuildRecord(
+    versionName: '1.1.5',
+    buildNumber: 4,
+    releaseDate: '2026-08-21',
+    summary: '作業報告書スキャンの導線を改善',
+  ),
+  VersionBuildRecord(
+    versionName: '1.1.4',
+    buildNumber: 3,
+    releaseDate: '2026-08-21',
+    summary: '作業者氏名を従業員リストからの選択方式に変更',
+  ),
+  VersionBuildRecord(
+    versionName: '1.1.0',
+    buildNumber: 2,
+    releaseDate: '2026-08-20',
+    summary: '入力マニュアル画面からPDF/Web/編集可能版をダウンロード可能に',
+  ),
+  VersionBuildRecord(
+    versionName: '1.0.0',
+    buildNumber: 1,
+    releaseDate: '2026-08-18',
+    summary: '初回リリース',
+  ),
+];
+
 /// サービスの現在の状態
 enum ServiceStatus {
   active, // 現在使用中
