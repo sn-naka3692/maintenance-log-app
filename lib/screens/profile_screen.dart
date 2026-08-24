@@ -13,23 +13,26 @@ import 'manual_screen.dart';
 import 'system_architecture_screen.dart';
 import 'user_management_screen.dart';
 
-/// APKダウンロード用の固定URL(Firebase Hosting経由)。
+/// APKダウンロード用の固定URL(GitHub Releases経由)。
 ///
-/// 【重要・v1.2.5で変更】以前はGitHub Releasesの「latest」固定URLを
-/// 使用していたが、社内Wi-Fi等のネットワーク環境によってはGitHubの
-/// リリースファイル配信先ドメイン(release-assets.githubusercontent.com)が
-/// 遅延・ブロックされ、ダウンロードがタイムアウトする不具合が発生した。
-/// Web版と同じ Firebase Hosting(sn-report.web.app、単一ドメイン・
-/// リダイレクトなし)経由で配布する方式に変更し、この問題を解消した。
-/// ファイル自体はFirebase Hosting無料プランの「実行可能ファイル禁止」
-/// 制限を回避するため拡張子を .data にしているが、Content-Disposition
-/// ヘッダーによりダウンロード時のファイル名は app-release.apk になる。
-/// このURLに新しいAPKをデプロイ(firebase deploy)するたびに、常に
-/// 最新版を指すようになる(URL自体は不変)。
+/// 【重要・v1.2.6で訂正】v1.2.5で一時的にFirebase Hosting経由の配布に
+/// 変更したが、これは誤った対応だった。実際に調査したところ、
+/// Firebase Hosting(裏側はFastly CDN)は大容量バイナリの配信時に
+/// Content-Lengthヘッダーを返さず、Rangeリクエスト(途中からの再開)にも
+/// 対応していないという構造的な制限があることが判明した。これにより
+/// 「ダウンロードの進行状況が表示されない」「通信が少しでも乱れると
+/// 最初からやり直しになりタイムアウトする」という不具合が起きていた
+/// (自宅Wi-Fi・5Gモバイル回線を問わず発生していたのはこのため)。
+///
+/// 一方、GitHub Releases(実体はAzure Blob Storage配信)は
+/// Content-Length・Range双方とも正常に機能することを検証済みのため、
+/// v1.2.6で元のGitHub Releases配布方式に戻した。
+/// 「latest」固定URLのため、新バージョンをリリースするたびに
+/// 常に最新版を指すようになる(URL自体は不変)。
 /// 社内マニュアル(web/manual.html・web/日報アプリ操作マニュアル.md)に
 /// 記載しているURLと同一のものを使用している。
 const String kLatestApkDownloadUrl =
-    'https://sn-report.web.app/downloads/app-release.data';
+    'https://github.com/sn-naka3692/maintenance-log-app/releases/latest/download/app-release.apk';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
