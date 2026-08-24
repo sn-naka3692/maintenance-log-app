@@ -62,8 +62,19 @@ class DocumentScanFlow {
 
     if (errorMessage != null) {
       if (context.mounted) {
+        // 診断情報(実行環境・バージョン・エラー種別)を含む長文になる場合が
+        // あるため、通常より長めに表示し、手動で消せるようにする。
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage)),
+          SnackBar(
+            content: Text(errorMessage),
+            duration: const Duration(seconds: 12),
+            action: SnackBarAction(
+              label: '閉じる',
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
+          ),
         );
       }
       return null;

@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../utils/maker_name_normalizer.dart';
 
@@ -86,14 +88,30 @@ class DocumentScanService {
     }
 
     if (resp == null) {
-      // 【重要】$maxAttempts回すべて失敗。診断のため実際の例外の
-      // 型名も付記する(サポート対応時にこの型名を伝えてもらうことで
-      // 原因の切り分けがしやすくなる)。
+      // 【重要】$maxAttempts回すべて失敗。診断のため以下を全て付記する:
+      // - 実際の例外の型名・内容(サポート対応時に伝えてもらうことで
+      //   原因の切り分けがしやすくなる)
+      // - 実行プラットフォーム(Web版かAndroidネイティブか)
+      // - アプリのバージョン・ビルド番号(古いバージョンを使っていないか確認用)
       final errorType = lastError?.runtimeType.toString() ?? '';
+      final errorDetail = lastError?.toString() ?? '';
+      final platform = kIsWeb ? 'Web版(ブラウザ/ホーム画面PWA)' : 'Androidアプリ(APK)';
+
+      String versionInfo = '';
+      try {
+        final info = await PackageInfo.fromPlatform();
+        versionInfo = 'v${info.version}+${info.buildNumber}';
+      } catch (_) {
+        // バージョン情報の取得に失敗しても診断メッセージ自体は表示する
+      }
+
+      final sizeKb = (imageBytes.length / 1024).toStringAsFixed(0);
       throw DocumentScanException(
         'サーバーへの接続に失敗しました($_maxAttempts回再送しましたが成功しませんでした)。\n'
-        'しばらく時間をおくか、通信環境の良い場所でもう一度お試しください。'
-        '${errorType.isNotEmpty ? '\n[エラー種別: $errorType]' : ''}',
+        'しばらく時間をおくか、通信環境の良い場所でもう一度お試しください。\n'
+        '[実行環境: $platform${versionInfo.isNotEmpty ? ' $versionInfo' : ''} / 画像サイズ: ${sizeKb}KB]'
+        '${errorType.isNotEmpty ? '\n[エラー種別: $errorType]' : ''}'
+        '${errorDetail.isNotEmpty && errorDetail != errorType ? '\n[詳細: $errorDetail]' : ''}',
       );
     }
 

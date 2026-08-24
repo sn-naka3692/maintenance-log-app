@@ -35,10 +35,16 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.2',
+    buildNumber: 11,
+    releaseDate: '2026-08-24',
+    summary: '作業報告書スキャンのエラー表示に診断情報(実行環境・バージョン・画像サイズ)を追加(調査継続中)(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.1',
     buildNumber: 10,
     releaseDate: '2026-08-24',
-    summary: '作業報告書スキャンの「サーバー接続失敗」エラーを修正(タイムアウト値が短すぎた不具合)(★配布中の最新版)',
+    summary: '作業報告書スキャンの「サーバー接続失敗」エラーを修正(タイムアウト値が短すぎた不具合)',
   ),
   VersionBuildRecord(
     versionName: '1.2.0',
