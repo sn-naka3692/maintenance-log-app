@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:file_saver/file_saver.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/work_report.dart';
@@ -167,5 +168,35 @@ class CsvExporter {
         subject: fileNamePrefix,
       ),
     );
+  }
+
+  /// CSVを生成し、端末のダウンロード/保存フォルダへ直接保存する。
+  ///
+  /// - Android: 「ダウンロード」フォルダへ直接保存され、共有シートを
+  ///   経由しない(file_saverパッケージ経由)。
+  /// - Web: ブラウザの標準ダウンロード動作として保存される。
+  ///
+  /// 戻り値は保存先の情報(端末に表示可能な簡易な説明文字列)。
+  static Future<String> exportAndSaveToDevice(
+    List<WorkReport> reports, {
+    String fileNamePrefix = '日報データ',
+  }) async {
+    final csvBody = buildCsv(reports);
+    // Excel(特にWindows版)で文字化けしないよう UTF-8 BOM を先頭に付与する。
+    const bom = '\uFEFF';
+    final bytes = utf8.encode(bom + csvBody);
+
+    final now = DateTime.now();
+    final stamp = DateFormat('yyyyMMdd_HHmm').format(now);
+    final fileName = '${fileNamePrefix}_$stamp';
+
+    await FileSaver.instance.saveFile(
+      name: fileName,
+      bytes: bytes,
+      fileExtension: 'csv',
+      mimeType: MimeType.csv,
+    );
+
+    return '$fileName.csv';
   }
 }

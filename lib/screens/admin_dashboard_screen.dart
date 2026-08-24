@@ -18,6 +18,7 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   String? _selectedAuthorId;
   bool _isExporting = false;
+  bool _isSaving = false;
 
   Future<void> _exportCsv(List filtered, {required bool isAll}) async {
     if (filtered.isEmpty) {
@@ -40,6 +41,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       }
     } finally {
       if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  /// 共有シートを経由せず、端末(このデバイス)のダウンロードフォルダに
+  /// 直接CSVを保存する。
+  Future<void> _saveCsvToDevice(List filtered, {required bool isAll}) async {
+    if (filtered.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('保存対象の日報がありません')),
+      );
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      final savedName = await CsvExporter.exportAndSaveToDevice(
+        filtered.cast(),
+        fileNamePrefix: isAll ? '日報データ_全社員' : '日報データ_絞り込み',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('このデバイスに保存しました: $savedName')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('CSV保存に失敗しました: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -333,6 +365,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ),
           const SizedBox(height: 10),
+          Text(
+            '共有(メール・LINE等に送る)',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
@@ -340,25 +381,65 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   onPressed: _isExporting
                       ? null
                       : () => _exportCsv(allReports, isAll: true),
-                  icon: const Icon(Icons.download, size: 18),
-                  label: Text('全件(${allReports.length}件)をCSV出力'),
+                  icon: const Icon(Icons.ios_share, size: 18),
+                  label: Text('全件(${allReports.length}件)を共有'),
                 ),
               ),
               if (_selectedAuthorId != null) ...[
                 const SizedBox(width: 10),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: _isExporting
                         ? null
                         : () => _exportCsv(filtered, isAll: false),
-                    icon: const Icon(Icons.download, size: 18),
-                    label: Text('絞り込み(${filtered.length}件)を出力'),
+                    icon: const Icon(Icons.ios_share, size: 18),
+                    label: Text('絞り込み(${filtered.length}件)を共有'),
                   ),
                 ),
               ],
             ],
           ),
           if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(),
+            ),
+          const SizedBox(height: 14),
+          Text(
+            'このデバイスに保存(ダウンロードフォルダへ直接保存)',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isSaving
+                      ? null
+                      : () => _saveCsvToDevice(allReports, isAll: true),
+                  icon: const Icon(Icons.save_alt, size: 18),
+                  label: Text('全件(${allReports.length}件)を保存'),
+                ),
+              ),
+              if (_selectedAuthorId != null) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isSaving
+                        ? null
+                        : () => _saveCsvToDevice(filtered, isAll: false),
+                    icon: const Icon(Icons.save_alt, size: 18),
+                    label: Text('絞り込み(${filtered.length}件)を保存'),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (_isSaving)
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: LinearProgressIndicator(),
