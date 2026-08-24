@@ -10,6 +10,7 @@ import '../models/store_system_report.dart';
 import '../models/user.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
+import '../services/prowan_job_cache_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/document_scan_flow.dart';
 import '../widgets/store_picker_field.dart';
@@ -64,6 +65,19 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechAvailable = false;
   TextEditingController? _activeListenController;
+
+  // ------------------------------------------------------------
+  // プロワンCSVキャッシュ照合(重複入力削減機能)関連の状態
+  // ------------------------------------------------------------
+  // フィールド名 -> "auto"|"manual"。編集開始時に既存レコードから引き継ぐ
+  // (新規作成時は空、つまり全て「手入力」扱いから始まる)。
+  Map<String, String> _fieldSources = {};
+  // 曖昧一致でキャッシュ照合が確定していない場合 true(要確認)。
+  bool _manualReviewNeeded = false;
+  // スキャン/照合時にマッチしたキャッシュ側の伝票No(参照用)。
+  String _matchedCacheJobNumber = '';
+  // プロワン管理番号照合中のローディング表示用フラグ。
+  bool _isMatchingCache = false;
 
   bool get isEditing => widget.existing != null;
 
@@ -133,6 +147,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       _tags.addAll(e.tags);
       _photoPaths.addAll(e.photoPaths);
       _selectedCoWorkerIds.addAll(e.coWorkerIds);
+      _fieldSources = Map<String, String>.from(e.fieldSources);
+      _manualReviewNeeded = e.manualReviewNeeded;
+      _matchedCacheJobNumber = e.matchedCacheJobNumber;
     }
     // 既存データの「作業者氏名」(過去の手入力・OCR取り込み分含む)を、
     // 従業員マスタの氏名と照合し、一致すればその社員を選択済み状態にする。
@@ -145,6 +162,195 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           .firstOrNull;
       _workerNameSelection = matched?.id ?? _workerNameOtherValue;
     }
+
+    // プロワンCSVキャッシュ照合で自動入力される主要フィールドについて、
+    // ユーザーが手動で編集したことを検知したら「manual(手入力確定)」として
+    // マークする(前セッションで確定した設計方針: 手入力修正は常時可能・
+    // 自動入力/手入力を区別してフラグ管理)。
+    // 「auto」のまま保存された場合は、月次CSV再照合バッチが引き続き
+    // 自動補完の対象として扱うことができる。
+    _clientNameCtrl.addListener(() => _markFieldEditedManually('client_name'));
+    _storeFreeTextCtrl.addListener(
+      () => _markFieldEditedManually('client_name'),
+    );
+    _workContentCtrl.addListener(
+      () => _markFieldEditedManually('work_content'),
+    );
+    _equipmentModelCtrl.addListener(
+      () => _markFieldEditedManually('equipment_model'),
+    );
+    _proWanCtrl.addListener(
+      () => _markFieldEditedManually('pro_wan_ref_number'),
+    );
+    _nonSeRefrigerantTypeCtrl.addListener(
+      () => _markFieldEditedManually('non_se_refrigerant_type'),
+    );
+    _nonSeRefrigerantAmountCtrl.addListener(
+      () => _markFieldEditedManually('non_se_refrigerant_amount_kg'),
+    );
+  }
+
+  /// 指定フィールドを「手入力確定(manual)」としてマークする。
+  /// すでにmanualの場合は何もしない(不要な再描画を避ける)。
+  void _markFieldEditedManually(String fieldKey) {
+    if (_fieldSources[fieldKey] == 'manual') return;
+    setState(() => _fieldSources[fieldKey] = 'manual');
+  }
+
+  /// プロワン管理番号(伝票No)でCSVキャッシュを照合し、
+  /// 顧客名・作業内容・機器型番・冷媒情報を自動入力する。
+  ///
+  /// 【二段階マッチング方式・①スキャン時の照合ロジック】
+  /// 完全一致 -> 曖昧一致(OCR誤読1〜2文字を許容) -> 見つからなければ
+  /// 手入力フォールバック(何もせずユーザーに案内)。
+  Future<void> _matchProwanCache() async {
+    final scannedNumber = _proWanCtrl.text.trim();
+    if (scannedNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('プロワン管理番号(伝票No)を入力してから照合してください')),
+      );
+      return;
+    }
+
+    setState(() => _isMatchingCache = true);
+    ProwanJobCacheMatchResult? result;
+    try {
+      result = await ProwanJobCacheService.instance.findByScannedJobNumber(
+        scannedNumber,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('照合中にエラーが発生しました: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isMatchingCache = false);
+    }
+
+    if (!mounted) return;
+
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '該当する案件が見つかりませんでした。伝票Noを確認するか、手入力を続けてください。',
+          ),
+        ),
+      );
+      // 見つからなかった場合も、後で月次CSV再照合が試行できるよう
+      // 「要確認」フラグを立てておく(取込タイミングのズレを吸収するため)。
+      setState(() => _manualReviewNeeded = true);
+      return;
+    }
+
+    // 曖昧一致の場合はユーザーに確認を求める(AI一発登録は行わない方針)。
+    if (!result.isExactMatch) {
+      final accepted = await _confirmFuzzyMatch(result);
+      if (!mounted) return;
+      if (!accepted) return; // ユーザーが拒否 -> 何も反映しない
+    }
+
+    final values = result.cache.toWorkReportFieldValues();
+    setState(() {
+      // すでに人間が手入力確定(manual)しているフィールドは上書きしない。
+      if (_fieldSources['client_name'] != 'manual' &&
+          (values['client_name'] ?? '').isNotEmpty) {
+        // 店舗マスタ選択中の場合はclientNameが自動生成されるため、
+        // 自由入力欄側に反映する。
+        if (_selectedStoreId == null) {
+          _storeFreeTextCtrl.text = values['client_name']!;
+        }
+        _fieldSources['client_name'] = 'auto';
+      }
+      if (_fieldSources['work_content'] != 'manual' &&
+          (values['work_content'] ?? '').isNotEmpty) {
+        _workContentCtrl.text = values['work_content']!;
+        _fieldSources['work_content'] = 'auto';
+      }
+      if (_fieldSources['equipment_model'] != 'manual' &&
+          (values['equipment_model'] ?? '').isNotEmpty) {
+        _equipmentModelCtrl.text = values['equipment_model']!;
+        _fieldSources['equipment_model'] = 'auto';
+      }
+      if (_fieldSources['non_se_refrigerant_type'] != 'manual' &&
+          (values['non_se_refrigerant_type'] ?? '').isNotEmpty) {
+        _nonSeRefrigerantTypeCtrl.text = values['non_se_refrigerant_type']!;
+        _fieldSources['non_se_refrigerant_type'] = 'auto';
+      }
+      if (_fieldSources['non_se_refrigerant_amount_kg'] != 'manual' &&
+          (values['non_se_refrigerant_amount_kg'] ?? '').isNotEmpty) {
+        _nonSeRefrigerantAmountCtrl.text =
+            values['non_se_refrigerant_amount_kg']!;
+        _fieldSources['non_se_refrigerant_amount_kg'] = 'auto';
+      }
+      // 伝票No自体は照合で確定した正しい値に揃えておく(完全一致時のみ)。
+      if (result!.isExactMatch) {
+        _proWanCtrl.text = result.matchedJobNumber;
+      }
+      _matchedCacheJobNumber = result.matchedJobNumber;
+      _manualReviewNeeded = !result.isExactMatch;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.isExactMatch
+                ? '案件情報を自動入力しました(完全一致)。内容を確認してください。'
+                : '案件情報を自動入力しました(曖昧一致・要確認)。内容を必ず確認してください。',
+          ),
+        ),
+      );
+    }
+  }
+
+  /// 曖昧一致(OCR誤読の可能性がある)結果をユーザーに提示し、採用するか確認する。
+  /// 「AI一発登録は行わない」社内方針に基づき、曖昧一致の場合は必ず
+  /// ユーザーの明示的な承認を経てから値を反映する。
+  Future<bool> _confirmFuzzyMatch(ProwanJobCacheMatchResult result) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('伝票Noの完全一致が見つかりません'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('入力値: ${_proWanCtrl.text.trim()}'),
+            const SizedBox(height: 4),
+            Text(
+              '近い案件が見つかりました: ${result.matchedJobNumber}'
+              '(${result.cache.storeName.isNotEmpty ? result.cache.storeName : result.cache.clientName})',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            if (result.alternativeCandidates.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                '他の候補: ${result.alternativeCandidates.join(", ")}',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+            const SizedBox(height: 10),
+            const Text(
+              'この案件情報を自動入力しますか?(後で「要確認」として一覧に表示されます)',
+              style: TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('手入力する'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('この案件で反映する'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 
   @override
@@ -514,6 +720,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       r.storeSystemReportCopy = _buildStoreSystemReport();
       r.nonSeRefrigerantType = _nonSeRefrigerantTypeCtrl.text.trim();
       r.nonSeRefrigerantAmountKg = _nonSeRefrigerantAmountCtrl.text.trim();
+      r.fieldSources = _fieldSources;
+      r.manualReviewNeeded = _manualReviewNeeded;
+      r.matchedCacheJobNumber = _matchedCacheJobNumber;
       await appState.updateReport(r);
     } else {
       final report = WorkReport(
@@ -539,6 +748,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         storeSystemReportCopy: _buildStoreSystemReport(),
         nonSeRefrigerantType: _nonSeRefrigerantTypeCtrl.text.trim(),
         nonSeRefrigerantAmountKg: _nonSeRefrigerantAmountCtrl.text.trim(),
+        fieldSources: _fieldSources,
+        manualReviewNeeded: _manualReviewNeeded,
+        matchedCacheJobNumber: _matchedCacheJobNumber,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -702,10 +914,46 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             const SizedBox(height: 12),
             _buildField(
               controller: _proWanCtrl,
-              label: 'プロワン管理番号(任意)',
+              label: 'プロワン管理番号(伝票No・任意)',
               icon: Icons.numbers,
-              hint: 'プロワン側で管理している案件番号',
+              hint: 'プロワン側で管理している案件番号(伝票Noと同じ)',
             ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: _isMatchingCache ? null : _matchProwanCache,
+                icon: _isMatchingCache
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync, size: 16),
+                label: Text(_isMatchingCache ? '照合中...' : '案件情報を照合して自動入力'),
+              ),
+            ),
+            if (_manualReviewNeeded)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber,
+                      size: 14,
+                      color: Colors.deepOrange.shade600,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '要確認: 案件の照合が未確定です(曖昧一致または未検出)',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Colors.deepOrange.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 12),
             _buildCoWorkerField(),
 
