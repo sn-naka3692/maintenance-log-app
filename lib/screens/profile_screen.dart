@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../data/changelog_data.dart';
 import '../models/user.dart';
 import '../providers/app_state.dart';
@@ -11,6 +12,15 @@ import 'changelog_screen.dart';
 import 'manual_screen.dart';
 import 'system_architecture_screen.dart';
 import 'user_management_screen.dart';
+
+/// GitHub Releasesの「latest」固定URL。
+///
+/// 【重要】このURLはタグ名を含まないため、GitHub上で新しいリリースを
+/// 作成するたびに、自動的に最新のAPKを指すようになる(URL自体は不変)。
+/// 社内マニュアル(web/manual.html・web/日報アプリ操作マニュアル.md)に
+/// 記載しているURLと同一のものを使用している。
+const String kLatestApkDownloadUrl =
+    'https://github.com/sn-naka3692/maintenance-log-app/releases/latest/download/app-release.apk';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -108,6 +118,21 @@ class ProfileScreen extends StatelessWidget {
           Card(
             child: Column(
               children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.download_outlined,
+                    color: AppColors.primary,
+                  ),
+                  title: const Text('最新版のアプリ(APK)をダウンロード'),
+                  subtitle: Text(
+                    '最新バージョン(v${changelogEntries.first.version})を'
+                    'ダウンロードします',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _downloadLatestApk(context),
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(
                     Icons.system_update,
@@ -217,6 +242,43 @@ class ProfileScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  // ------------------------------------------------------------------
+  // 最新版APKのダウンロード
+  // ------------------------------------------------------------------
+  /// GitHub Releasesの「latest」固定URLを外部ブラウザで開き、
+  /// 最新版のAPKをダウンロードさせる。
+  ///
+  /// 【運用上の背景】現場から「ダウンロードリンクの入手方法・更新方法が
+  /// 分かりにくい」との相談があったため、アプリ内(プロフィール画面)から
+  /// 直接ボタン一つでダウンロードできるようにした。URL自体はタグ名を
+  /// 含まない固定リンクのため、GitHub上で新しいリリースを作成する限り、
+  /// 常に最新版のAPKがダウンロードされる。
+  Future<void> _downloadLatestApk(BuildContext context) async {
+    final uri = Uri.parse(kLatestApkDownloadUrl);
+    bool launched = false;
+    try {
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      launched = false;
+    }
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ダウンロードを開始できませんでした。時間をおいて再度お試しください。'),
+        ),
+      );
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'ダウンロードを開始しました。完了したら通知からファイルを開いてインストールしてください。',
+          ),
+          duration: Duration(seconds: 6),
+        ),
+      );
+    }
   }
 
   // ------------------------------------------------------------------
