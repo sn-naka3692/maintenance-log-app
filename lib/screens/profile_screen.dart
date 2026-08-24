@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/changelog_data.dart';
 import '../models/user.dart';
 import '../providers/app_state.dart';
+import '../services/app_update_service.dart' as app_update;
 import '../services/update_notice_service.dart';
 import '../theme/app_theme.dart';
 import 'changelog_screen.dart';
@@ -130,20 +132,45 @@ class ProfileScreen extends StatelessWidget {
           Card(
             child: Column(
               children: [
-                ListTile(
-                  leading: const Icon(
-                    Icons.download_outlined,
-                    color: AppColors.primary,
+                // 【不具合修正・2026-08】Web版とAndroid(APK)版で表示するボタンを
+                // 出し分ける。以前はWeb版でも「APKをダウンロード」ボタンが表示
+                // されており、Web版利用者がタップするとAndroid用のAPKファイルが
+                // ダウンロードされてしまい「これを開けるアプリが分からない」
+                // という混乱を招いていた。
+                // - Web版: 「最新の状態に更新する」(Service Worker/キャッシュを
+                //   削除して強制リロードする、本来必要だったボタン)
+                // - Android版: 従来通り「最新版のアプリ(APK)をダウンロード」
+                if (kIsWeb)
+                  ListTile(
+                    leading: const Icon(
+                      Icons.refresh,
+                      color: AppColors.primary,
+                    ),
+                    title: const Text('最新の状態に更新する'),
+                    subtitle: Text(
+                      'ブラウザに保存された古いデータを消去し、'
+                      '最新バージョン(v${changelogEntries.first.version})に'
+                      '更新します',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _reloadWebApp(context),
+                  )
+                else
+                  ListTile(
+                    leading: const Icon(
+                      Icons.download_outlined,
+                      color: AppColors.primary,
+                    ),
+                    title: const Text('最新版のアプリ(APK)をダウンロード'),
+                    subtitle: Text(
+                      '最新バージョン(v${changelogEntries.first.version})を'
+                      'ダウンロードします',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _downloadLatestApk(context),
                   ),
-                  title: const Text('最新版のアプリ(APK)をダウンロード'),
-                  subtitle: Text(
-                    '最新バージョン(v${changelogEntries.first.version})を'
-                    'ダウンロードします',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _downloadLatestApk(context),
-                ),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(
@@ -291,6 +318,44 @@ class ProfileScreen extends StatelessWidget {
         ),
       );
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Web版の更新(最新の状態に更新する)
+  // ------------------------------------------------------------------
+  /// 【不具合修正・2026-08】Web版はブラウザがService Worker経由で
+  /// ファイルをキャッシュするため、Firebase Hostingへ新バージョンを
+  /// デプロイしても、開きっぱなしのタブでは古いバージョンが表示され
+  /// 続けてしまう。「Web版で更新の案内が出ない・何をすればいいか
+  /// 分からない」という問い合わせへの対応として、確実に最新版へ
+  /// 更新するボタンを用意した。
+  ///
+  /// 処理は app_update_service.dart(conditional import)経由で
+  /// Web実装(Service Worker解除・キャッシュ削除・強制リロード)を呼ぶ。
+  Future<void> _reloadWebApp(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('最新の状態に更新しますか?'),
+        content: const Text(
+          'ブラウザに保存されている古いデータを消去し、ページを再読み込みして'
+          '最新バージョンに更新します。入力中の内容があれば失われますので、'
+          '保存してから実行してください。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('更新する'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await app_update.reloadForLatestVersion();
   }
 
   // ------------------------------------------------------------------

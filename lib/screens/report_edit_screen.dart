@@ -837,14 +837,23 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         : null;
     final isSEStore = selectedStore?.isSE ?? false;
     // コンビニ側システム入力控えは、SE店舗かつ修理・故障対応の場合のみ必須(マニュアルの入力ルールに準拠)。
-    final showStoreSystemSection =
-        isSEStore &&
-        (_responseType == ResponseType.repair ||
-            _responseType == ResponseType.breakdown);
+    final isRepairOrBreakdown =
+        _responseType == ResponseType.repair ||
+        _responseType == ResponseType.breakdown;
+    final showStoreSystemSection = isSEStore && isRepairOrBreakdown;
     // プロワン管轄案件(SE店舗以外)の現場作業では、請求業務効率化のため
     // 冷媒種類・冷媒量の入力を必須とする(バックオフィス業務は対象外)。
     final showNonSeRefrigerantSection =
         !isSEStore && !_responseType.isBackOffice;
+    // 【不具合修正・2026-08】作業報告書スキャン機能はSE用・プロワン用の両方の
+    // 書式をサーバー側で自動判別する設計(document_scan_service.dart /
+    // _scanReport()内のdocType分岐)になっているが、入口カードの表示条件が
+    // SE店舗限定になっていたため、プロワン管轄案件(SE以外)ではボタン自体が
+    // 表示されず、実装済みの機能に辿り着けなかった。
+    // プロワン管轄案件でも「作業報告書(プロワン用)」をスキャンすれば
+    // 伝票Noを自動読み取り→CSVキャッシュ照合まで自動実行されるため、
+    // 修理・故障対応であれば店舗区分を問わずスキャン入口を表示する。
+    final showScanEntryCard = isRepairOrBreakdown;
 
     return Scaffold(
       appBar: AppBar(title: Text(isEditing ? '日報編集' : '日報作成')),
@@ -1020,11 +1029,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             const SizedBox(height: 12),
             _buildCoWorkerField(),
 
-            // SE店舗の修理・故障対応の場合、作業内容を手入力する前に
+            // 修理・故障対応の場合、作業内容を手入力する前に
             // まず「作業報告書をお持ちならスキャン」という導線を提示する。
-            // 動線がコンビニ側システム入力控え(画面下部)の中に埋もれて
-            // 見つけにくいという指摘への対応(2026-08)。
-            if (showStoreSystemSection) _buildScanEntryCard(),
+            // SE店舗・プロワン管轄案件のどちらの書式もサーバー側で自動判別
+            // されるため、店舗区分を問わず表示する(2026-08 不具合修正)。
+            if (showScanEntryCard) _buildScanEntryCard(isSEStore),
 
             const SizedBox(height: 20),
             _SectionTitle(_responseType.isBackOffice ? '業務内容' : '作業内容'),
@@ -1810,14 +1819,20 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     );
   }
 
-  /// 「SE作業報告書をスキャンしてAIで自動入力」への入口カード。
+  /// 「作業報告書をスキャンしてAIで自動入力」への入口カード。
   ///
   /// 作業内容や各項目を手入力する前の段階で表示し、報告書がある場合は
-  /// 先にスキャンしておけば以降の入力項目(店番・住所・型式・機番・
-  /// 事象・処置内容など)を自動で埋められることを案内する。
+  /// 先にスキャンしておけば以降の入力項目を自動で埋められることを案内する。
   /// 実際のスキャン処理は_scanReport()(コンビニ側システム入力控え内の
   /// ボタンと同じ処理)を呼び出すため、二重実装にはならない。
-  Widget _buildScanEntryCard() {
+  ///
+  /// 【2026-08 不具合修正】SE店舗・プロワン管轄案件のどちらでも表示する
+  /// (サーバー側でSE用・プロワン用の書式を自動判別する設計のため)。
+  /// isSEStoreに応じて案内文言を出し分ける:
+  /// - SE店舗: 従来通り店番・住所・型式・機番・事象・処置内容などを案内
+  /// - プロワン管轄案件: 伝票No(案件管理番号)を読み取り、CSVキャッシュと
+  ///   自動照合して顧客名・作業内容・機器型番・冷媒情報を自動入力する旨を案内
+  Widget _buildScanEntryCard(bool isSEStore) {
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(12),
@@ -1840,7 +1855,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'SE作業報告書はお持ちですか?',
+                  '作業報告書はお持ちですか?',
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
@@ -1852,8 +1867,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            '先にスキャンすると、店番・住所・型式・機番・事象・処置内容など'
-            'この先の入力項目にAIが自動入力します(下部で内容を確認・修正できます)。',
+            isSEStore
+                ? '先にスキャンすると、店番・住所・型式・機番・事象・処置内容など'
+                      'この先の入力項目にAIが自動入力します(下部で内容を確認・修正できます)。'
+                : '先にスキャンすると、伝票No(案件管理番号)をAIが読み取り、'
+                      'プロワンの案件情報と自動照合して顧客名・作業内容・機器型番・冷媒情報'
+                      'を自動入力します(内容を必ず確認・修正してください)。',
             style: TextStyle(
               fontSize: 12,
               color: Colors.blue.shade900,

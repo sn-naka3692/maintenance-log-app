@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.6+15
+version: 1.2.7+16
 
 environment:
   sdk: ^3.9.2
@@ -67,6 +67,10 @@ dependencies:
 
   # 作業報告書スキャン(Azure Document Intelligence連携)用のHTTP通信
   http: 1.5.0
+
+  # Web版「最新の状態に更新する」ボタン用(Service Worker/キャッシュ操作)
+  # 元々は推移的依存としてのみ存在していたため、明示的な依存として追加。
+  web: 1.1.1
 
   # 強制アップデートゲート用に実機のビルド番号を取得するために使用
   package_info_plus: 8.1.3
