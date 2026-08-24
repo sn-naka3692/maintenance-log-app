@@ -875,6 +875,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 controller: _clientNameCtrl,
                 label: '対象・場所(任意)',
                 icon: Icons.apartment,
+                fieldKey: 'client_name',
               )
             else
               StorePickerField(
@@ -977,11 +978,136 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 ),
               ),
             const SizedBox(height: 12),
+            _buildCoWorkerField(),
+
+            // 【2026-08 導線改善】修理・故障対応の場合、他の項目を入力する前に
+            // まず「作業報告書をお持ちならスキャン」という導線を最上部付近に
+            // 提示する。SE店舗・プロワン管轄案件のどちらの書式もサーバー側で
+            // 自動判別されるため、店舗区分を問わず表示する。
+            // ここでスキャンしておけば、下の各項目のうちプロワン側システムと
+            // 重複する部分(顧客名・作業内容・機器型番・冷媒情報等)は自動入力
+            // され、手入力が必要なのは重複しない項目だけになる。
+            if (showScanEntryCard) _buildScanEntryCard(isSEStore),
+
+            // 【2026-08 導線改善】ナレッジ共有はこのアプリ独自の価値であり、
+            // プロワン側システムには存在しない項目。スキャンボタンのすぐ下に
+            // 配置することで、まずスキャンで重複項目を済ませてから、
+            // このアプリでしか記録できないナレッジ共有への積極的な入力を促す。
+            const SizedBox(height: 20),
+            _SectionTitle('ナレッジ共有(社内評価・マニュアル反映用)'),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'ここはプロワンや店舗側システムには無い、このアプリ独自の項目です。'
+                      '社内でのノウハウ共有・人事評価・現場マニュアル更新の元データとして'
+                      '活用されますので、積極的にご記入ください。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.primary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildField(
+              controller: _successCtrl,
+              label: 'うまくいったこと・工夫した点',
+              icon: Icons.thumb_up_alt_outlined,
+              maxLines: 3,
+              iconColor: AppColors.success,
+              enableVoice: true,
+            ),
+            const SizedBox(height: 12),
+            _buildField(
+              controller: _issuesCtrl,
+              label: '課題・失敗・改善点',
+              icon: Icons.report_problem_outlined,
+              maxLines: 3,
+              iconColor: AppColors.warning,
+              enableVoice: true,
+            ),
+            const SizedBox(height: 12),
+            // タグ
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _tagInputCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'タグ(症状・機種等)',
+                      prefixIcon: Icon(Icons.label_outline),
+                    ),
+                    onSubmitted: (_) => _addTag(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: _addTag,
+                  icon: const Icon(Icons.add),
+                ),
+              ],
+            ),
+            if (_tags.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _tags
+                      .map(
+                        (t) => Chip(
+                          label: Text(t),
+                          onDeleted: () => setState(() => _tags.remove(t)),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+
+            const SizedBox(height: 20),
+            _SectionTitle(_responseType.isBackOffice ? '業務内容' : '作業内容'),
+            const SizedBox(height: 8),
+            _buildField(
+              controller: _workContentCtrl,
+              label: _responseType.isBackOffice ? '業務内容' : '作業内容',
+              icon: Icons.build,
+              maxLines: 4,
+              enableVoice: true,
+              fieldKey: 'work_content',
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? '必須項目です' : null,
+            ),
+            if (!_responseType.isBackOffice)
+              _buildWorkContentSupport(isSEStore),
+            const SizedBox(height: 12),
             _buildField(
               controller: _equipmentModelCtrl,
               label: _responseType.isBackOffice ? '機器型番(任意)' : '機器型番(プロワン参照)',
               icon: Icons.qr_code,
               hint: '例: 冷凍機型番 XR-500',
+              fieldKey: 'equipment_model',
             ),
             const SizedBox(height: 12),
             _buildField(
@@ -989,6 +1115,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               label: 'プロワン管理番号(伝票No・任意)',
               icon: Icons.numbers,
               hint: 'プロワン側で管理している案件番号(伝票Noと同じ)',
+              fieldKey: 'pro_wan_ref_number',
             ),
             const SizedBox(height: 6),
             Align(
@@ -1026,29 +1153,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   ],
                 ),
               ),
-            const SizedBox(height: 12),
-            _buildCoWorkerField(),
-
-            // 修理・故障対応の場合、作業内容を手入力する前に
-            // まず「作業報告書をお持ちならスキャン」という導線を提示する。
-            // SE店舗・プロワン管轄案件のどちらの書式もサーバー側で自動判別
-            // されるため、店舗区分を問わず表示する(2026-08 不具合修正)。
-            if (showScanEntryCard) _buildScanEntryCard(isSEStore),
-
-            const SizedBox(height: 20),
-            _SectionTitle(_responseType.isBackOffice ? '業務内容' : '作業内容'),
-            const SizedBox(height: 8),
-            _buildField(
-              controller: _workContentCtrl,
-              label: _responseType.isBackOffice ? '業務内容' : '作業内容',
-              icon: Icons.build,
-              maxLines: 4,
-              enableVoice: true,
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? '必須項目です' : null,
-            ),
-            if (!_responseType.isBackOffice)
-              _buildWorkContentSupport(isSEStore),
             const SizedBox(height: 12),
 
             if (showNonSeRefrigerantSection) _buildNonSeRefrigerantSection(),
@@ -1158,69 +1262,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       ],
                     );
                   },
-                ),
-              ),
-
-            const SizedBox(height: 20),
-            _SectionTitle('ナレッジ共有(社内評価・マニュアル反映用)'),
-            const SizedBox(height: 4),
-            Text(
-              'ここに記録した内容は、社内でのノウハウ共有・人事評価・現場マニュアル更新の元データとして活用されます。',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _successCtrl,
-              label: 'うまくいったこと・工夫した点',
-              icon: Icons.thumb_up_alt_outlined,
-              maxLines: 3,
-              iconColor: AppColors.success,
-              enableVoice: true,
-            ),
-            const SizedBox(height: 12),
-            _buildField(
-              controller: _issuesCtrl,
-              label: '課題・失敗・改善点',
-              icon: Icons.report_problem_outlined,
-              maxLines: 3,
-              iconColor: AppColors.warning,
-              enableVoice: true,
-            ),
-            const SizedBox(height: 12),
-            // タグ
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _tagInputCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'タグ(症状・機種等)',
-                      prefixIcon: Icon(Icons.label_outline),
-                    ),
-                    onSubmitted: (_) => _addTag(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: _addTag,
-                  icon: const Icon(Icons.add),
-                ),
-              ],
-            ),
-            if (_tags.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _tags
-                      .map(
-                        (t) => Chip(
-                          label: Text(t),
-                          onDeleted: () => setState(() => _tags.remove(t)),
-                        ),
-                      )
-                      .toList(),
                 ),
               ),
 
@@ -1594,8 +1635,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     String? Function(String?)? validator,
     bool enableVoice = false,
     List<TextInputFormatter>? inputFormatters,
+    // 【重複入力削減・2026-08】スキャン取り込みで自動反映され得るフィールドは
+    // fieldKey(_fieldSourcesのキー)を渡すことで、自動反映済みかどうかを
+    // 視覚的に示す(プロワン側システムと重複する項目を手入力しなくて済む
+    // ことをユーザーに明示するため)。
+    String? fieldKey,
   }) {
     final isListening = _activeListenController == controller;
+    final isAutoFilled =
+        fieldKey != null && _fieldSources[fieldKey] == 'auto';
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
@@ -1606,16 +1654,26 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         hintText: hint,
         prefixIcon: Icon(icon, color: iconColor),
         alignLabelWithHint: maxLines > 1,
-        suffixIcon: enableVoice
-            ? IconButton(
-                icon: Icon(
-                  isListening ? Icons.mic : Icons.mic_none,
-                  color: isListening ? Colors.red : Colors.grey.shade500,
-                ),
-                tooltip: isListening ? '音声入力を停止' : '音声入力を開始',
-                onPressed: () => _toggleVoiceInput(controller),
-              )
+        helperText: isAutoFilled ? 'スキャンで自動反映済み(必要なら修正してください)' : null,
+        helperStyle: isAutoFilled
+            ? TextStyle(color: Colors.green.shade700, fontSize: 11)
             : null,
+        suffixIcon: isAutoFilled
+            ? Icon(
+                Icons.auto_awesome,
+                size: 18,
+                color: Colors.green.shade600,
+              )
+            : (enableVoice
+                  ? IconButton(
+                      icon: Icon(
+                        isListening ? Icons.mic : Icons.mic_none,
+                        color: isListening ? Colors.red : Colors.grey.shade500,
+                      ),
+                      tooltip: isListening ? '音声入力を停止' : '音声入力を開始',
+                      onPressed: () => _toggleVoiceInput(controller),
+                    )
+                  : null),
       ),
     );
   }
@@ -1689,6 +1747,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   label: '冷媒種類',
                   icon: Icons.ac_unit,
                   hint: '例: R410A / なし',
+                  fieldKey: 'non_se_refrigerant_type',
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? '必須項目です(未充填時は「なし」)'
                       : null,
@@ -1701,6 +1760,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   label: '冷媒量(kg)',
                   icon: Icons.opacity,
                   hint: '例: 1.5 / 0',
+                  fieldKey: 'non_se_refrigerant_amount_kg',
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? '必須項目です(未充填時は「0」)'
                       : null,
@@ -1869,10 +1929,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           Text(
             isSEStore
                 ? '先にスキャンすると、店番・住所・型式・機番・事象・処置内容など'
-                      'この先の入力項目にAIが自動入力します(下部で内容を確認・修正できます)。'
+                      'この先の入力項目にAIが自動入力します。'
+                      '自動入力された項目には緑色の'
+                      '「スキャンで自動反映済み」マークが付くので、'
+                      'それ以外の項目だけ追加で入力すればOKです。'
                 : '先にスキャンすると、伝票No(案件管理番号)をAIが読み取り、'
                       'プロワンの案件情報と自動照合して顧客名・作業内容・機器型番・冷媒情報'
-                      'を自動入力します(内容を必ず確認・修正してください)。',
+                      'を自動入力します。プロワン側で入力済みの内容と重複する項目は'
+                      'これで済むので、緑色の「スキャンで自動反映済み」マークが付いた'
+                      '項目以外(内容の確認・下のナレッジ共有など)だけ追加でご記入ください。',
             style: TextStyle(
               fontSize: 12,
               color: Colors.blue.shade900,
