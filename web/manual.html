@@ -131,6 +131,56 @@
   }
   .qa .q { font-weight: 700; color: var(--primary); font-size: 13px; }
   .qa .a { font-size: 13px; color: #333; margin-top: 4px; }
+  .version-choice {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .version-card {
+    flex: 1;
+    min-width: 220px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    background: #fafbfd;
+  }
+  .version-card.web { border-color: #0D6EFD; background: #eef4ff; }
+  .version-card.apk { border-color: #16794f; background: #eafaf0; }
+  .version-card h4 {
+    margin: 0 0 6px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .version-card p { font-size: 12.5px; margin: 4px 0; color: #444; }
+  .version-card .qr-box {
+    text-align: center;
+    margin-top: 10px;
+  }
+  .version-card .qr-box img {
+    width: 130px;
+    height: 130px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    padding: 6px;
+  }
+  .version-card .qr-caption {
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+  }
+  .version-card a.dl-link {
+    display: block;
+    text-align: center;
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #16794f;
+    word-break: break-all;
+  }
   .steps { counter-reset: step; list-style: none; padding-left: 0; }
   .steps li {
     position: relative;
@@ -247,20 +297,46 @@
   </section>
 
   <section>
-    <h2><span class="num">2</span>ログイン方法</h2>
+    <h2><span class="num">2</span>ログイン方法・アプリの入手方法</h2>
 
-    <div class="access-box">
-      <div class="label">📱 アプリのアクセスURL</div>
-      <a href="https://sn-report.web.app/" target="_blank">https://sn-report.web.app/</a>
-      <div class="hint">
-        ※ このURLは正式な社内利用アドレスです。下記の手順でホーム画面にアプリとして追加すると、次回から簡単にアクセスできます。
+    <p style="font-size:13px; color:#444; margin:0 0 10px;">
+      このアプリには「Web版」と「APK版(Androidアプリ)」の2種類があります。どちらも同じ機能が使えますが、入手方法が異なります。用途に合わせてお選びください。
+    </p>
+
+    <div class="version-choice">
+      <div class="version-card web">
+        <h4>🌐 Web版(ブラウザ / PWA)</h4>
+        <p>ブラウザでURLを開くだけで使えます。ホーム画面に追加すればアプリのように起動できます。ストア不要・すぐ使えるのが特徴です。</p>
+        <p>ホーム画面のアイコン名は<strong>「日報アプリ(Web)」</strong>と表示されます。</p>
+        <div class="access-box" style="margin:10px 0 0;">
+          <div class="label">📱 アクセスURL</div>
+          <a href="https://sn-report.web.app/" target="_blank">https://sn-report.web.app/</a>
+        </div>
       </div>
-      <div class="hint" style="margin-top:10px;">
+      <div class="version-card apk">
+        <h4>🤖 APK版(Androidアプリ)</h4>
+        <p>Androidの正式インストールアプリです。ホーム画面のアイコン名は<strong>「日報アプリ」</strong>(Web表記なし)です。</p>
+        <p>スマホで下のQRコードを読み取るか、下記URLからAPKファイルをダウンロードしてインストールしてください。</p>
+        <div class="qr-box">
+          <img src="icons/apk_download_qr.png" alt="APKダウンロード用QRコード">
+          <div class="qr-caption">📷 スマホのカメラで読み取ってください</div>
+        </div>
+        <a class="dl-link" href="https://github.com/sn-naka3692/maintenance-log-app/releases/latest/download/app-release.apk" target="_blank">APKファイルをダウンロード</a>
+        <p style="font-size:11px; color:#666; margin-top:6px;">※ インストール時に「不明なアプリのインストールを許可」を求められる場合があります。社内配布アプリのため許可して進めてください。</p>
+      </div>
+    </div>
+
+    <div class="note" style="background:#fff8e6; border-color:#f5d78e; color:#6b5300;">
+      💡 <strong>どちらを選べばいい?</strong> 特にこだわりがなければ、Web版で十分です。アップデートも自動で反映されるため、通常はWeb版の利用をおすすめします。
+    </div>
+
+    <div class="access-box" style="margin-top:14px;">
+      <div class="hint" style="margin-top:0;">
         📄 このマニュアルは <a href="日報アプリ操作マニュアル.pdf" target="_blank" style="display:inline; padding:0; border:none; background:none; font-weight:700;">PDF版はこちら</a> からもダウンロードできます(印刷・保存用)。
       </div>
     </div>
 
-    <h3>📲 スマホのホーム画面にアプリを追加する(推奨)</h3>
+    <h3>📲 Web版をスマホのホーム画面に追加する(推奨)</h3>
     <p style="font-size:13px; color:#555; margin:0 0 8px;">上記URLをホーム画面に追加しておくと、アイコンをタップするだけでアプリのように起動できます(ショートカット作成)。</p>
     <div class="note" style="background:#eef7ee; border-color:#bfe3bf; color:#2c5f2c; margin-bottom:8px;">
       <strong>Androidをお使いの方</strong><br>
@@ -271,11 +347,12 @@
       <strong>iPhone(Safari)をお使いの方</strong><br>
       Safariで上記URLを開き、画面下(または上)の共有ボタン<strong>「□↑」</strong>をタップします。<br>
       表示されたメニューから<strong>「ホーム画面に追加」</strong>を選び、右上の「追加」をタップすると完了です。<br>
-      ※ Chromeなど他のブラウザではこの手順は使えません。<strong>Safari</strong>でお試しください。
+      ※ Chromeなど他のブラウザではこの手順は使えません。Safariでお試しください。<br>
+      ※ iPhoneではAPK版は利用できません(Androidアプリのため)。Web版をお使いください。
     </div>
 
     <ol class="steps">
-      <li>上記URLをブラウザ(スマホ・PCどちらでも可)で開きます</li>
+      <li>上記URL(Web版)またはインストールしたAPK版アプリを開きます</li>
       <li>「メールアドレス」欄に、ご自身に割り当てられたメールアドレスを入力します</li>
       <li>「パスワード」欄に、お伝えした初期パスワードを入力します</li>
       <li>「ログイン」ボタンを押します</li>
@@ -500,9 +577,9 @@
   </section>
 
   <div class="access-box">
-    <div class="label">📱 アプリのアクセスURL(再掲)</div>
+    <div class="label">📱 Web版アクセスURL(再掲)</div>
     <a href="https://sn-report.web.app/" target="_blank">https://sn-report.web.app/</a>
-    <div class="hint">ホーム画面への追加方法は「2. ログイン方法」の案内をご覧ください。</div>
+    <div class="hint">APK版のダウンロードQRコード、ホーム画面への追加方法は「2. ログイン方法・アプリの入手方法」の案内をご覧ください。</div>
   </div>
 
   <footer>札幌中野冷機 &nbsp;|&nbsp; 業務日報アプリ 操作マニュアル(試験運用版)</footer>

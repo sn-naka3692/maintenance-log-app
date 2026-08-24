@@ -1,6 +1,6 @@
 {
-    "name": "札幌中野冷機 業務日報アプリ",
-    "short_name": "日報アプリ",
+    "name": "札幌中野冷機 業務日報アプリ(Web版)",
+    "short_name": "日報アプリ(Web)",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0D6EFD",
