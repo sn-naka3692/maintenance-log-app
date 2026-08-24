@@ -33,6 +33,13 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Galaxy A53以降の現場端末はすべてarm64-v8a(64bit ARM)のため、
+        // 配布用APKはarm64-v8aのみに絞り、ダウンロードサイズを削減する。
+        // (x86_64はエミュレータ用、armeabi-v7aは旧32bit機種用で現場では不要)
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {

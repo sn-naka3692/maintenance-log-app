@@ -33,6 +33,9 @@ const List<ChangelogEntry> changelogEntries = [
           '開けない場合の対策)。',
       'Web版・APK版それぞれのダウンロード用QRコードをマニュアルに追加し、'
           'スマホのカメラで読み取ってすぐアクセスできるようにしました。',
+      'APKファイルのダウンロードサイズを約58MBから約22MBに削減し、'
+          'ダウンロードが速くなりました(Galaxy A53以降の端末向けに'
+          '最適化)。',
     ],
   ),
   ChangelogEntry(
