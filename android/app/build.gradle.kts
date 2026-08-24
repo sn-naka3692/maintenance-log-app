@@ -37,6 +37,13 @@ android {
         // Galaxy A53以降の現場端末はすべてarm64-v8a(64bit ARM)のため、
         // 配布用APKはarm64-v8aのみに絞り、ダウンロードサイズを削減する。
         // (x86_64はエミュレータ用、armeabi-v7aは旧32bit機種用で現場では不要)
+        //
+        // ⚠️【重要】この設定はアプリ自身のネイティブコード用の絞り込みであり、
+        // Flutterエンジン本体(libflutter.so)を何アーキテクチャ分同梱するかは
+        // 別途 `flutter build apk` 実行時の --target-platform フラグで決まる。
+        // 配布用ビルドは必ず scripts/build_release_apk.sh を使うこと
+        // (直接 `flutter build apk --release` を実行すると、フラグ忘れにより
+        // 3アーキテクチャ分(約58MB)の巨大APKが生成されてしまう)。
         ndk {
             abiFilters += listOf("arm64-v8a")
         }

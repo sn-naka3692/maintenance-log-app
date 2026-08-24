@@ -20,6 +20,21 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.5',
+    date: '2026-08-24',
+    title: 'APKダウンロードがタイムアウトする不具合を修正',
+    details: [
+      '社内Wi-Fi等の環境によっては、GitHub経由のAPKダウンロードが'
+          '進行状況の表示もなく止まってしまう(タイムアウトする)不具合が'
+          'ありました。原因はGitHubの大容量ファイル配信専用ドメインが'
+          'ネットワーク環境によって遅延・ブロックされることでした。',
+      'APKの配布先をWeb版と同じFirebase Hosting(sn-report.web.app)'
+          'に変更し、単一ドメインから直接ダウンロードできるようにして'
+          '解消しました。プロフィール画面のダウンロードボタン・マニュアル・'
+          'QRコードもすべて新しいURLに更新しています。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.4',
     date: '2026-08-24',
     title: 'プロワン書類の自動判別・プロフィールからのAPK更新に対応',

@@ -46,3 +46,8 @@ app.*.map.json
 
 # Firebase Hosting cache
 .firebase/
+
+# 配布用APK本体(21MB超のバイナリのためgit管理外。
+# デプロイ手順は scripts/deploy_web_and_apk.sh を参照)
+web/downloads/*.data
+web/downloads/*.apk

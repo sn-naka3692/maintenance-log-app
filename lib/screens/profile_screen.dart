@@ -13,14 +13,23 @@ import 'manual_screen.dart';
 import 'system_architecture_screen.dart';
 import 'user_management_screen.dart';
 
-/// GitHub Releasesの「latest」固定URL。
+/// APKダウンロード用の固定URL(Firebase Hosting経由)。
 ///
-/// 【重要】このURLはタグ名を含まないため、GitHub上で新しいリリースを
-/// 作成するたびに、自動的に最新のAPKを指すようになる(URL自体は不変)。
+/// 【重要・v1.2.5で変更】以前はGitHub Releasesの「latest」固定URLを
+/// 使用していたが、社内Wi-Fi等のネットワーク環境によってはGitHubの
+/// リリースファイル配信先ドメイン(release-assets.githubusercontent.com)が
+/// 遅延・ブロックされ、ダウンロードがタイムアウトする不具合が発生した。
+/// Web版と同じ Firebase Hosting(sn-report.web.app、単一ドメイン・
+/// リダイレクトなし)経由で配布する方式に変更し、この問題を解消した。
+/// ファイル自体はFirebase Hosting無料プランの「実行可能ファイル禁止」
+/// 制限を回避するため拡張子を .data にしているが、Content-Disposition
+/// ヘッダーによりダウンロード時のファイル名は app-release.apk になる。
+/// このURLに新しいAPKをデプロイ(firebase deploy)するたびに、常に
+/// 最新版を指すようになる(URL自体は不変)。
 /// 社内マニュアル(web/manual.html・web/日報アプリ操作マニュアル.md)に
 /// 記載しているURLと同一のものを使用している。
 const String kLatestApkDownloadUrl =
-    'https://github.com/sn-naka3692/maintenance-log-app/releases/latest/download/app-release.apk';
+    'https://sn-report.web.app/downloads/app-release.data';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
