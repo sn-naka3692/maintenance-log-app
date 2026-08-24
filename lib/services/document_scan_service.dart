@@ -36,12 +36,22 @@ class DocumentScanService {
 
   /// 通信の最大リトライ回数。
   ///
-  /// 【背景】作業現場(冷凍機械室・地下・バックヤードの鉄扉内など)は
-  /// 電波が不安定な場所が多く、一度の通信失敗だけで即座にエラーとして
-  /// ユーザーに撮影し直しを求めるのは負担が大きい。一時的な電波の乱れは
-  /// 自動的に再送してカバーし、本当に電波が届かない場合のみユーザーに
-  /// 伝える。
+  /// 【背景】ネットワークが一時的に不安定な場合に、一度の通信失敗だけで
+  /// 即座にエラーとしてユーザーに撮影し直しを求めるのは負担が大きい。
+  /// 一時的な通信の乱れは自動的に再送してカバーし、本当に接続できない
+  /// 場合のみユーザーに伝える。
   static const int _maxAttempts = 3;
+
+  /// 1回の通信あたりのタイムアウト秒数。
+  ///
+  /// 【重要】中継Function(nakano-scan-proxy)は、Azure Document
+  /// Intelligenceの解析完了を最大30秒間ポーリングしてから応答を返す
+  /// 設計になっている(function_app.py参照)。そのため、この値は
+  /// 必ず35秒より長く設定すること。過去に25秒に短縮してしまった際、
+  /// Azure側が正常に処理していても常にクライアント側が先にタイムアウト
+  /// してしまい、通信環境の良し悪しに関わらず(事務所のWi-Fiでも)必ず
+  /// 失敗するという不具合を起こした。
+  static const int _timeoutSeconds = 45;
 
   /// 画像バイト列を渡して中継Function経由でAzureに解析させ、
   /// フィールド抽出結果を返す。
@@ -60,14 +70,13 @@ class DocumentScanService {
               headers: {'Content-Type': 'application/octet-stream'},
               body: imageBytes,
             )
-            .timeout(const Duration(seconds: 25));
+            .timeout(Duration(seconds: _timeoutSeconds));
         break; // 成功したのでリトライループを抜ける
       } on TimeoutException catch (e) {
         lastError = e;
       } catch (e) {
-        // 電波が不安定な現場(冷凍機械室・地下・バックヤード等)では、
-        // 通信が一時的に切れることが多い。ここで即座にエラーとせず、
-        // 電波が回復するのを期待して間隔を空けてリトライする。
+        // 通信が一時的に不安定な場合、ここで即座にエラーとせず、
+        // 通信環境が回復するのを期待して間隔を空けてリトライする。
         lastError = e;
       }
 
@@ -77,14 +86,14 @@ class DocumentScanService {
     }
 
     if (resp == null) {
-      // 【重要】$maxAttempts回すべて失敗 = 端末からAzureまで一度も
-      // 通信が成立していない可能性が高い(電波が届いていない)。
-      // 診断のため実際の例外の型名も付記する。
+      // 【重要】$maxAttempts回すべて失敗。診断のため実際の例外の
+      // 型名も付記する(サポート対応時にこの型名を伝えてもらうことで
+      // 原因の切り分けがしやすくなる)。
       final errorType = lastError?.runtimeType.toString() ?? '';
       throw DocumentScanException(
-        '通信環境が不安定なため、サーバーに接続できませんでした($_maxAttempts回再送を試みました)。\n'
-        '電波の良い場所(店舗事務所の出入口付近など)に移動してから、もう一度お試しください。'
-        '${errorType.isNotEmpty ? '\n[$errorType]' : ''}',
+        'サーバーへの接続に失敗しました($_maxAttempts回再送しましたが成功しませんでした)。\n'
+        'しばらく時間をおくか、通信環境の良い場所でもう一度お試しください。'
+        '${errorType.isNotEmpty ? '\n[エラー種別: $errorType]' : ''}',
       );
     }
 
