@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/changelog_data.dart';
+import '../services/apk_installer_service.dart' as apk_installer;
 import '../models/user.dart';
 import '../providers/app_state.dart';
 import '../services/app_update_service.dart' as app_update;
@@ -294,27 +295,77 @@ class ProfileScreen extends StatelessWidget {
   /// 直接ボタン一つでダウンロードできるようにした。URL自体はタグ名を
   /// 含まない固定リンクのため、GitHub上で新しいリリースを作成する限り、
   /// 常に最新版のAPKがダウンロードされる。
+  /// 【不具合修正・2026-08】従来はブラウザ委任のダウンロードのみで、
+  /// 「ダウンロード→通知から手動でファイルを開いてインストール」という
+  /// 2段階の手間があった。アプリ内で直接バイナリをダウンロードし、
+  /// 完了後にインストーラーを自動起動することでシームレスな更新体験に
+  /// 改善する(apk_installer_service.dart)。万一失敗した場合は、
+  /// 従来通りブラウザでのダウンロードにフォールバックする。
   Future<void> _downloadLatestApk(BuildContext context) async {
-    final uri = Uri.parse(kLatestApkDownloadUrl);
-    bool launched = false;
+    final progress = ValueNotifier<double>(0);
+    bool dialogShown = false;
     try {
-      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      launched = false;
-    }
-    if (!launched && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ダウンロードを開始できませんでした。時間をおいて再度お試しください。'),
-        ),
-      );
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'ダウンロードを開始しました。完了したら通知からファイルを開いてインストールしてください。',
+      dialogShown = true;
+      if (context.mounted) {
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => ValueListenableBuilder<double>(
+            valueListenable: progress,
+            builder: (_, value, __) => AlertDialog(
+              title: const Text('更新をダウンロード中'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LinearProgressIndicator(value: value > 0 ? value : null),
+                  const SizedBox(height: 12),
+                  Text(
+                    value > 0 ? '${(value * 100).toStringAsFixed(0)}%' : '準備中…',
+                  ),
+                ],
+              ),
+            ),
           ),
-          duration: Duration(seconds: 6),
+        );
+      }
+
+      await apk_installer.downloadAndInstallLatestApk(
+        url: kLatestApkDownloadUrl,
+        onProgress: (v) => progress.value = v,
+      );
+
+      if (context.mounted && dialogShown) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('ダウンロードが完了しました。表示された画面の指示に従ってインストールしてください。'),
+            duration: Duration(seconds: 6),
+          ),
+        );
+      }
+    } catch (_) {
+      if (context.mounted && dialogShown) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      // フォールバック: 従来通りブラウザでダウンロードさせる。
+      final uri = Uri.parse(kLatestApkDownloadUrl);
+      bool launched = false;
+      try {
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        launched = false;
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            launched
+                ? 'アプリ内更新に失敗したため、ブラウザでダウンロードを開始しました。完了したら通知からファイルを開いてインストールしてください。'
+                : 'ダウンロードを開始できませんでした。時間をおいて再度お試しください。',
+          ),
+          duration: const Duration(seconds: 6),
         ),
       );
     }

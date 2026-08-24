@@ -1,4 +1,5 @@
 import 'part_used.dart';
+import 'prowan_report_detail.dart';
 import 'store_system_report.dart';
 
 /// 対応区分
@@ -109,6 +110,11 @@ class WorkReport {
   String nonSeRefrigerantType; // 冷媒種類(プロワン管轄案件)
   String nonSeRefrigerantAmountKg; // 冷媒量・kg単位(プロワン管轄案件)
 
+  // プロワン管轄案件(SE店舗以外)専用の案件詳細情報の控え。
+  // SE店舗のstoreSystemReportCopyに相当する、プロワンCSVキャッシュ
+  // (店舗住所・部門・系統番号・障害内容・原因・依頼内容等)の受け皿。
+  ProWanReportDetail proWanReportDetail;
+
   // ------------------------------------------------------------
   // プロワンCSVキャッシュ照合(重複入力削減機能)関連フィールド
   // ------------------------------------------------------------
@@ -158,6 +164,7 @@ class WorkReport {
     StoreSystemReport? storeSystemReportCopy,
     this.nonSeRefrigerantType = '',
     this.nonSeRefrigerantAmountKg = '',
+    ProWanReportDetail? proWanReportDetail,
     Map<String, String>? fieldSources,
     this.manualReviewNeeded = false,
     this.matchedCacheJobNumber = '',
@@ -168,6 +175,7 @@ class WorkReport {
        tags = tags ?? [],
        coWorkerIds = coWorkerIds ?? [],
        storeSystemReportCopy = storeSystemReportCopy ?? StoreSystemReport(),
+       proWanReportDetail = proWanReportDetail ?? ProWanReportDetail(),
        fieldSources = fieldSources ?? {};
 
   Duration get workDuration => endTime.difference(startTime);
@@ -230,6 +238,7 @@ class WorkReport {
       'store_system_report': storeSystemReportCopy.toMap(),
       'non_se_refrigerant_type': nonSeRefrigerantType,
       'non_se_refrigerant_amount_kg': nonSeRefrigerantAmountKg,
+      'pro_wan_report_detail': proWanReportDetail.toMap(),
       'field_sources': fieldSources,
       'manual_review_needed': manualReviewNeeded,
       'matched_cache_job_number': matchedCacheJobNumber,
@@ -275,6 +284,9 @@ class WorkReport {
       nonSeRefrigerantType: map['non_se_refrigerant_type'] as String? ?? '',
       nonSeRefrigerantAmountKg:
           map['non_se_refrigerant_amount_kg'] as String? ?? '',
+      proWanReportDetail: ProWanReportDetail.fromMap(
+        map['pro_wan_report_detail'] as Map<String, dynamic>?,
+      ),
       fieldSources: (map['field_sources'] as Map<String, dynamic>? ?? {}).map(
         (k, v) => MapEntry(k, v.toString()),
       ),

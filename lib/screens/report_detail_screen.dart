@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../models/prowan_report_detail.dart';
 import '../models/store_system_report.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
@@ -253,6 +254,15 @@ class ReportDetailScreen extends StatelessWidget {
               child: _StoreSystemReportView(report.storeSystemReportCopy),
             ),
 
+          // 【不具合修正・2026-08】プロワン管轄案件の案件詳細
+          // (店舗住所・部門・系統番号・障害内容等)の表示セクション。
+          if (!report.proWanReportDetail.isEmpty)
+            _SectionCard(
+              title: 'プロワン案件詳細',
+              icon: Icons.assignment,
+              child: _ProWanReportDetailView(report.proWanReportDetail),
+            ),
+
           if (report.notes.isNotEmpty)
             _SectionCard(
               title: '備考',
@@ -332,6 +342,68 @@ class _StoreSystemReportView extends StatelessWidget {
       MapEntry('部品4', data.part4),
       MapEntry('部品5', data.part5),
       MapEntry('備考', data.remarks),
+    ].where((e) => e.value.isNotEmpty).toList();
+
+    if (rows.isEmpty) {
+      return Text(
+        '(未記入)',
+        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows
+          .map(
+            (e) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 92,
+                    child: Text(
+                      e.key,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      e.value,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _ProWanReportDetailView extends StatelessWidget {
+  final ProWanReportDetail data;
+  const _ProWanReportDetailView(this.data);
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <MapEntry<String, String>>[
+      MapEntry('店舗住所', data.storeAddress),
+      MapEntry('部門', data.department),
+      MapEntry('系統番号・名', data.systemNumber),
+      MapEntry('修理機器・場所', data.equipmentLocation),
+      MapEntry('障害内容', data.troubleContent),
+      MapEntry('障害機器', data.troubleEquipment),
+      MapEntry('原因', data.cause),
+      MapEntry('ご依頼内容', data.requestContent),
+      MapEntry('訪問結果', data.visitResult),
+      MapEntry('今後の予定', data.futurePlan),
+      MapEntry('技術者氏名', data.technicianName),
+      MapEntry('訪問日', data.visitDate),
     ].where((e) => e.value.isNotEmpty).toList();
 
     if (rows.isEmpty) {

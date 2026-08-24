@@ -95,6 +95,14 @@ class ProwanJobCache {
   /// このキャッシュ内容を、work_reportの各フィールドへマッピングする際に
   /// 使いやすい形(フィールド名 -> 値)で返す。
   /// キーは WorkReport.toMap() のキー名とできるだけ揃えている。
+  ///
+  /// 【2026-08 不具合修正】従来はclient_name/work_content/equipment_model/
+  /// 冷媒情報の5項目しか返しておらず、店舗住所・部門・系統番号・障害内容・
+  /// 障害機器・原因・依頼内容・訪問結果・今後の予定・技術者氏名・訪問日
+  /// といった大半のCSV項目が照合結果から捨てられていた
+  /// (=「反映先の項目欄がない」という不具合の実態)。
+  /// ProWanReportDetail(pro_wan_report_detail.*)を新設し、これらの項目も
+  /// 反映できるようにした。
   Map<String, String> toWorkReportFieldValues() {
     return {
       'client_name': clientName,
@@ -103,6 +111,19 @@ class ProwanJobCache {
       'pro_wan_ref_number': jobManagementNumber,
       'non_se_refrigerant_type': refrigerantType1,
       'non_se_refrigerant_amount_kg': refrigerantAmount1,
+      // ProWanReportDetail側のフィールド(以下、report.proWanReportDetail.*)
+      'pro_wan_report_detail.store_address': storeAddress,
+      'pro_wan_report_detail.department': department,
+      'pro_wan_report_detail.system_number': systemNumber,
+      'pro_wan_report_detail.equipment_location': equipmentLocation,
+      'pro_wan_report_detail.trouble_content': troubleContent,
+      'pro_wan_report_detail.trouble_equipment': troubleEquipment,
+      'pro_wan_report_detail.cause': cause,
+      'pro_wan_report_detail.request_content': requestContent,
+      'pro_wan_report_detail.visit_result': visitResult,
+      'pro_wan_report_detail.future_plan': futurePlan,
+      'pro_wan_report_detail.technician_name': technicianName1,
+      'pro_wan_report_detail.visit_date': visitDate,
     };
   }
 }

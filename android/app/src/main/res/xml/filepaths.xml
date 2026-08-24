@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  【不具合修正・2026-08】open_filexパッケージ(APK版「更新」ボタンで
+  ダウンロード済みAPKファイルを自動的に開いてインストーラーを起動する
+  ために使用)が要求するFileProviderのパス許可設定。
+  アプリのキャッシュディレクトリ(getTemporaryDirectory)配下に
+  ダウンロードしたAPKファイルを置く運用のため、external-cache-path等
+  一通りのパスを許可しておく。
+-->
+<paths>
+    <external-path name="external-path" path="."/>
+    <external-cache-path name="external-cache-path" path="."/>
+    <external-files-path name="external-files-path" path="."/>
+    <files-path name="files_path" path="."/>
+    <cache-path name="cache-path" path="."/>
+    <root-path name="root" path="."/>
+</paths>

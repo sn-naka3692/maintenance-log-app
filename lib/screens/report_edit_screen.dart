@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../models/part_used.dart';
+import '../models/prowan_report_detail.dart';
 import '../models/store.dart';
 import '../models/store_system_report.dart';
 import '../models/user.dart';
@@ -43,6 +44,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   late TextEditingController _tagInputCtrl;
   late TextEditingController _nonSeRefrigerantTypeCtrl;
   late TextEditingController _nonSeRefrigerantAmountCtrl;
+  // 【不具合修正・2026-08】プロワンCSVキャッシュ照合で反映先が無かった項目
+  // (店舗住所・部門・系統番号・障害内容・障害機器・原因・依頼内容・訪問結果・
+  // 今後の予定・技術者氏名・訪問日)の受け皿(ProWanReportDetail)用コントローラ。
+  late Map<String, TextEditingController> _pwCtrls;
 
   String? _selectedStoreId;
   final List<String> _selectedCoWorkerIds = [];
@@ -104,6 +109,21 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     _nonSeRefrigerantAmountCtrl = TextEditingController(
       text: e?.nonSeRefrigerantAmountKg ?? '',
     );
+    final pw = e?.proWanReportDetail ?? ProWanReportDetail();
+    _pwCtrls = {
+      'storeAddress': TextEditingController(text: pw.storeAddress),
+      'department': TextEditingController(text: pw.department),
+      'systemNumber': TextEditingController(text: pw.systemNumber),
+      'equipmentLocation': TextEditingController(text: pw.equipmentLocation),
+      'troubleContent': TextEditingController(text: pw.troubleContent),
+      'troubleEquipment': TextEditingController(text: pw.troubleEquipment),
+      'cause': TextEditingController(text: pw.cause),
+      'requestContent': TextEditingController(text: pw.requestContent),
+      'visitResult': TextEditingController(text: pw.visitResult),
+      'futurePlan': TextEditingController(text: pw.futurePlan),
+      'technicianName': TextEditingController(text: pw.technicianName),
+      'visitDate': TextEditingController(text: pw.visitDate),
+    };
     final ss = e?.storeSystemReportCopy ?? StoreSystemReport();
     _ssCtrls = {
       'receiptNumber': TextEditingController(text: ss.receiptNumber),
@@ -188,7 +208,32 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     _nonSeRefrigerantAmountCtrl.addListener(
       () => _markFieldEditedManually('non_se_refrigerant_amount_kg'),
     );
+    // プロワン案件詳細(ProWanReportDetail)の各項目も同様に、ユーザーが
+    // 手入力で編集したらmanual確定としてマークし、月次CSV再照合の
+    // 自動上書き対象から外す。
+    for (final entry in _pwFieldKeyMap.entries) {
+      _pwCtrls[entry.key]!.addListener(
+        () => _markFieldEditedManually('pro_wan_report_detail.${entry.value}'),
+      );
+    }
   }
+
+  /// _pwCtrlsのキー(camelCase) -> ProWanReportDetail.toMap()のキー(snake_case)
+  /// の対応表。_matchProwanCache()での自動反映・manual判定の両方で使う。
+  static const Map<String, String> _pwFieldKeyMap = {
+    'storeAddress': 'store_address',
+    'department': 'department',
+    'systemNumber': 'system_number',
+    'equipmentLocation': 'equipment_location',
+    'troubleContent': 'trouble_content',
+    'troubleEquipment': 'trouble_equipment',
+    'cause': 'cause',
+    'requestContent': 'request_content',
+    'visitResult': 'visit_result',
+    'futurePlan': 'future_plan',
+    'technicianName': 'technician_name',
+    'visitDate': 'visit_date',
+  };
 
   /// 指定フィールドを「手入力確定(manual)」としてマークする。
   /// すでにmanualの場合は何もしない(不要な再描画を避ける)。
@@ -284,6 +329,20 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             values['non_se_refrigerant_amount_kg']!;
         _fieldSources['non_se_refrigerant_amount_kg'] = 'auto';
       }
+      // 【不具合修正・2026-08】プロワンCSVキャッシュの残り12項目
+      // (店舗住所・部門・系統番号・障害内容・障害機器・原因・依頼内容・
+      // 訪問結果・今後の予定・技術者氏名・訪問日)も、これまで反映先が
+      // なく捨てられていたため、ProWanReportDetail用コントローラへ反映する。
+      for (final entry in _pwFieldKeyMap.entries) {
+        final camelKey = entry.key;
+        final snakeKey = entry.value;
+        final valueKey = 'pro_wan_report_detail.$snakeKey';
+        if (_fieldSources[valueKey] != 'manual' &&
+            (values[valueKey] ?? '').isNotEmpty) {
+          _pwCtrls[camelKey]!.text = values[valueKey]!;
+          _fieldSources[valueKey] = 'auto';
+        }
+      }
       // 伝票No自体は照合で確定した正しい値に揃えておく(完全一致時のみ)。
       if (result!.isExactMatch) {
         _proWanCtrl.text = result.matchedJobNumber;
@@ -367,6 +426,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     _nonSeRefrigerantTypeCtrl.dispose();
     _nonSeRefrigerantAmountCtrl.dispose();
     for (final c in _ssCtrls.values) {
+      c.dispose();
+    }
+    for (final c in _pwCtrls.values) {
       c.dispose();
     }
     _tagInputCtrl.dispose();
@@ -762,6 +824,24 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       return;
     }
 
+    // 【不具合修正・2026-08】プロワン管轄案件専用の案件詳細
+    // (店舗住所・部門・系統番号・障害内容・障害機器・原因・依頼内容・
+    // 訪問結果・今後の予定・技術者氏名・訪問日)を_pwCtrlsから構築する。
+    final pwDetail = ProWanReportDetail(
+      storeAddress: _pwCtrls['storeAddress']!.text.trim(),
+      department: _pwCtrls['department']!.text.trim(),
+      systemNumber: _pwCtrls['systemNumber']!.text.trim(),
+      equipmentLocation: _pwCtrls['equipmentLocation']!.text.trim(),
+      troubleContent: _pwCtrls['troubleContent']!.text.trim(),
+      troubleEquipment: _pwCtrls['troubleEquipment']!.text.trim(),
+      cause: _pwCtrls['cause']!.text.trim(),
+      requestContent: _pwCtrls['requestContent']!.text.trim(),
+      visitResult: _pwCtrls['visitResult']!.text.trim(),
+      futurePlan: _pwCtrls['futurePlan']!.text.trim(),
+      technicianName: _pwCtrls['technicianName']!.text.trim(),
+      visitDate: _pwCtrls['visitDate']!.text.trim(),
+    );
+
     if (isEditing) {
       final r = widget.existing!;
       r.coWorkerIds = List<String>.from(_selectedCoWorkerIds);
@@ -783,6 +863,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       r.storeSystemReportCopy = _buildStoreSystemReport();
       r.nonSeRefrigerantType = _nonSeRefrigerantTypeCtrl.text.trim();
       r.nonSeRefrigerantAmountKg = _nonSeRefrigerantAmountCtrl.text.trim();
+      r.proWanReportDetail = pwDetail;
       r.fieldSources = _fieldSources;
       r.manualReviewNeeded = _manualReviewNeeded;
       r.matchedCacheJobNumber = _matchedCacheJobNumber;
@@ -811,6 +892,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         storeSystemReportCopy: _buildStoreSystemReport(),
         nonSeRefrigerantType: _nonSeRefrigerantTypeCtrl.text.trim(),
         nonSeRefrigerantAmountKg: _nonSeRefrigerantAmountCtrl.text.trim(),
+        proWanReportDetail: pwDetail,
         fieldSources: _fieldSources,
         manualReviewNeeded: _manualReviewNeeded,
         matchedCacheJobNumber: _matchedCacheJobNumber,
@@ -1156,6 +1238,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             const SizedBox(height: 12),
 
             if (showNonSeRefrigerantSection) _buildNonSeRefrigerantSection(),
+            if (showNonSeRefrigerantSection) _buildProWanReportDetailSection(),
 
             // 使用部品
             Row(
@@ -1764,6 +1847,167 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? '必須項目です(未充填時は「0」)'
                       : null,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 【不具合修正・2026-08】プロワン管轄案件(SE店舗以外)専用の案件詳細
+  /// (店舗住所・部門・系統番号・障害内容・障害機器・原因・依頼内容・
+  /// 訪問結果・今後の予定・技術者氏名・訪問日)の入力セクション。
+  ///
+  /// 背景: プロワンCSVキャッシュ(ProwanJobCache)には20項目近い情報が
+  /// 保持されているが、これまでアプリ側の反映先(顧客名・作業内容・
+  /// 機器型番・冷媒情報のみ)が乏しく、スキャン照合しても大半の情報が
+  /// 捨てられていた。SE店舗の「コンビニ側システム入力控え」に相当する
+  /// 受け皿として新設。作業報告書スキャンで自動反映された項目には
+  /// 「スキャンで自動反映済み」バッジが表示され、重複しない箇所だけ
+  /// 手入力すればよいことが一目でわかるようにしている。
+  Widget _buildProWanReportDetailSection() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.indigo.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.indigo.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.assignment, size: 16, color: Colors.indigo.shade800),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'プロワン案件詳細(任意・社内保存用)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.indigo.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '作業報告書をスキャンすると自動反映されます。反映されない箇所だけ追加で入力してください。',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.indigo.shade900,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildField(
+            controller: _pwCtrls['storeAddress']!,
+            label: '店舗住所',
+            icon: Icons.location_on,
+            fieldKey: 'pro_wan_report_detail.store_address',
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildField(
+                  controller: _pwCtrls['department']!,
+                  label: '部門',
+                  icon: Icons.business,
+                  fieldKey: 'pro_wan_report_detail.department',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildField(
+                  controller: _pwCtrls['systemNumber']!,
+                  label: '系統番号・名',
+                  icon: Icons.tag,
+                  fieldKey: 'pro_wan_report_detail.system_number',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _buildField(
+            controller: _pwCtrls['equipmentLocation']!,
+            label: '修理機器・場所',
+            icon: Icons.place,
+            fieldKey: 'pro_wan_report_detail.equipment_location',
+          ),
+          const SizedBox(height: 10),
+          _buildField(
+            controller: _pwCtrls['troubleContent']!,
+            label: '障害内容',
+            icon: Icons.report_problem,
+            maxLines: 2,
+            fieldKey: 'pro_wan_report_detail.trouble_content',
+          ),
+          const SizedBox(height: 10),
+          _buildField(
+            controller: _pwCtrls['troubleEquipment']!,
+            label: '障害機器',
+            icon: Icons.devices_other,
+            fieldKey: 'pro_wan_report_detail.trouble_equipment',
+          ),
+          const SizedBox(height: 10),
+          _buildField(
+            controller: _pwCtrls['cause']!,
+            label: '原因(故障箇所)',
+            icon: Icons.search,
+            maxLines: 2,
+            fieldKey: 'pro_wan_report_detail.cause',
+          ),
+          const SizedBox(height: 10),
+          _buildField(
+            controller: _pwCtrls['requestContent']!,
+            label: 'ご依頼内容',
+            icon: Icons.mail_outline,
+            maxLines: 2,
+            fieldKey: 'pro_wan_report_detail.request_content',
+          ),
+          const SizedBox(height: 10),
+          _buildField(
+            controller: _pwCtrls['visitResult']!,
+            label: '訪問結果',
+            icon: Icons.fact_check,
+            maxLines: 2,
+            fieldKey: 'pro_wan_report_detail.visit_result',
+          ),
+          const SizedBox(height: 10),
+          _buildField(
+            controller: _pwCtrls['futurePlan']!,
+            label: '今後の予定(未完了の場合)',
+            icon: Icons.event_note,
+            maxLines: 2,
+            fieldKey: 'pro_wan_report_detail.future_plan',
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildField(
+                  controller: _pwCtrls['technicianName']!,
+                  label: '技術者氏名(プロワン側記録)',
+                  icon: Icons.badge,
+                  fieldKey: 'pro_wan_report_detail.technician_name',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildField(
+                  controller: _pwCtrls['visitDate']!,
+                  label: '訪問日(プロワン側記録)',
+                  icon: Icons.event,
+                  fieldKey: 'pro_wan_report_detail.visit_date',
                 ),
               ),
             ],
