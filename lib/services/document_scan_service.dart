@@ -133,6 +133,10 @@ class DocumentScanService {
     final confidencesRaw = body['confidences'] as Map<String, dynamic>? ?? {};
     final docConfidence =
         (body['documentConfidence'] as num?)?.toDouble() ?? 0.0;
+    // サーバー側(function_app.py)が判定した書式種別。
+    // "SEDocType" | "ProWanDocType"。未対応の古いレスポンスの場合は
+    // 空文字となり、呼び出し元はSE用フィールド定義にフォールバックする。
+    final docType = body['docType'] as String? ?? '';
 
     final values = <String, String>{
       for (final entry in valuesRaw.entries)
@@ -153,6 +157,7 @@ class DocumentScanService {
       values: values,
       confidences: confidences,
       documentConfidence: docConfidence,
+      docType: docType,
     );
   }
 }
@@ -163,11 +168,22 @@ class ScanResult {
   final Map<String, double> confidences; // フィールドキー -> 信頼度(0.0〜1.0)
   final double documentConfidence; // ドキュメント全体の信頼度
 
+  /// サーバー側(nakano-scan-proxy)がSE用・プロワン用の2モデルを並行解析し、
+  /// confidence比較の結果判定した書式種別。
+  /// "SEDocType" | "ProWanDocType"。
+  /// 古いレスポンス(docType未対応)の場合は空文字となり、呼び出し元は
+  /// SE用フィールド定義にフォールバックする。
+  final String docType;
+
   ScanResult({
     required this.values,
     required this.confidences,
     required this.documentConfidence,
+    this.docType = '',
   });
+
+  /// プロワン作業報告書として判定されたかどうか。
+  bool get isProWanDocument => docType == 'ProWanDocType';
 
   String value(String key) => values[key] ?? '';
 
@@ -225,3 +241,27 @@ const List<ScanFieldDef> kScanFieldDefinitions = [
   ScanFieldDef('Cause', '原因'),
   ScanFieldDef('ActionContent', '処置内容'),
 ];
+
+/// プロワン作業報告書用の抽出フィールド定義。
+/// generate_training_labels.py の FIELD_DEFINITIONS(プロワン用モデル
+/// prowan-report-v1)と対応。プロワン用モデルは意図的に最小限の2項目
+/// (案件管理番号=伝票No、店名〔誤マッチ防止の補助確認用〕)のみを
+/// 抽出する設計になっている。
+/// 【重要】伝票No自体は「_matchProwanCache()」でCSVキャッシュと照合し、
+/// 顧客名・作業内容・機器型番・冷媒情報を自動入力するための起点として
+/// 使われる。ここで細かいSE用の23項目を抽出する必要はない。
+const List<ScanFieldDef> kProWanScanFieldDefinitions = [
+  ScanFieldDef('ProWanRefNumber', '案件管理番号(伝票No)'),
+  ScanFieldDef('StoreName', '店名'),
+];
+
+/// スキャン結果のdocTypeに応じて、確認画面に表示すべきフィールド定義
+/// リストを返す。docTypeが未設定・不明("SEDocType"以外かつ
+/// "ProWanDocType"以外)の場合は、後方互換のためSE用リストへ
+/// フォールバックする。
+List<ScanFieldDef> scanFieldDefinitionsFor(String docType) {
+  if (docType == 'ProWanDocType') {
+    return kProWanScanFieldDefinitions;
+  }
+  return kScanFieldDefinitions;
+}

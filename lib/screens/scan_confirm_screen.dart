@@ -20,11 +20,17 @@ class ScanConfirmScreen extends StatefulWidget {
 class _ScanConfirmScreenState extends State<ScanConfirmScreen> {
   late Map<String, TextEditingController> _controllers;
 
+  /// スキャン結果のdocType(SE用/プロワン用)に応じて表示する
+  /// フィールド定義リストを切り替える。
+  /// プロワン文書の場合は案件管理番号(伝票No)と店名の2項目のみ。
+  late List<ScanFieldDef> _fieldDefs;
+
   @override
   void initState() {
     super.initState();
+    _fieldDefs = scanFieldDefinitionsFor(widget.scanResult.docType);
     _controllers = {
-      for (final def in kScanFieldDefinitions)
+      for (final def in _fieldDefs)
         def.key: TextEditingController(text: widget.scanResult.value(def.key)),
     };
   }
@@ -40,18 +46,26 @@ class _ScanConfirmScreenState extends State<ScanConfirmScreen> {
   void _confirm() {
     final result = <String, String>{
       for (final entry in _controllers.entries) entry.key: entry.value.text.trim(),
+      // 【予約キー】呼び出し元(report_edit_screen.dart)がSE用/プロワン用の
+      // どちらの反映ロジックを実行すべきか判定するために、判定済みdocTypeを
+      // 一緒に返す。Azureモデルのフィールドキーは全てPascalCaseのため、
+      // 先頭に "_" を付けたこのキーと衝突することはない。
+      '_docType': widget.scanResult.docType,
     };
     Navigator.of(context).pop(result);
   }
 
   @override
   Widget build(BuildContext context) {
-    final lowConfidenceCount = kScanFieldDefinitions
+    final lowConfidenceCount = _fieldDefs
         .where((d) => widget.scanResult.isLowConfidence(d.key))
         .length;
+    final isProWan = widget.scanResult.isProWanDocument;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('スキャン内容の確認・修正')),
+      appBar: AppBar(
+        title: Text(isProWan ? 'スキャン内容の確認・修正(プロワン)' : 'スキャン内容の確認・修正'),
+      ),
       body: Column(
         children: [
           Container(
@@ -77,6 +91,19 @@ class _ScanConfirmScreenState extends State<ScanConfirmScreen> {
                     ),
                   ],
                 ),
+                if (isProWan) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'ℹ プロワンの作業報告書として判定されました。案件管理番号(伝票No)を'
+                    '「反映」した後、日報編集画面の「照合」ボタンで顧客名・作業内容などを'
+                    '自動入力できます。',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue.shade800,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
                 if (lowConfidenceCount > 0) ...[
                   const SizedBox(height: 6),
                   Text(
@@ -94,9 +121,9 @@ class _ScanConfirmScreenState extends State<ScanConfirmScreen> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              itemCount: kScanFieldDefinitions.length,
+              itemCount: _fieldDefs.length,
               itemBuilder: (context, index) {
-                final def = kScanFieldDefinitions[index];
+                final def = _fieldDefs[index];
                 final lowConf = widget.scanResult.isLowConfidence(def.key);
                 final confidence = widget.scanResult.confidences[def.key];
                 return Padding(

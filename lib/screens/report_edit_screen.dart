@@ -526,12 +526,25 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   }
 
   /// 作業報告書をカメラで撮影し、AI(Azure Document Intelligence)で
-  /// 23項目を自動抽出する。ユーザーが確認・修正画面で内容をチェック・修正した後、
+  /// 自動抽出する。ユーザーが確認・修正画面で内容をチェック・修正した後、
   /// 「反映」した項目のみをこの画面の各フィールドへ書き込む。
   /// AIの解析結果を確認なしにそのまま登録することは絶対に行わない。
+  ///
+  /// 【docType対応】サーバー側(nakano-scan-proxy)がSE用・プロワン用の
+  /// 2モデルを並行解析し、confidence比較で書式を自動判定する。
+  /// - SEDocType: 従来通り23項目をコンビニ側システム入力控えへ反映
+  /// - ProWanDocType: 案件管理番号(伝票No)・店名の2項目のみを抽出し、
+  ///   伝票Noをプロワン管理番号欄へ反映した上で、CSVキャッシュ照合
+  ///   (_matchProwanCache)を自動的に続けて実行する
   Future<void> _scanReport() async {
     final confirmed = await DocumentScanFlow.run(context);
     if (confirmed == null || !mounted) return;
+
+    final docType = confirmed['_docType'] ?? '';
+    if (docType == 'ProWanDocType') {
+      await _applyProWanScanResult(confirmed);
+      return;
+    }
 
     setState(() {
       // コンビニ側システム入力控えセクションへ反映
@@ -615,6 +628,56 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         const SnackBar(content: Text('スキャン内容をフォームへ反映しました。他の項目も確認してください。')),
       );
     }
+  }
+
+  /// プロワン文書と判定されたスキャン結果を反映する。
+  ///
+  /// SE用の23項目とは異なり、プロワン用モデルは「案件管理番号(伝票No)」と
+  /// 「店名」の2項目のみを抽出する設計(generate_training_labels.py参照)。
+  /// 伝票Noをプロワン管理番号欄へ反映したら、そのまま続けてCSVキャッシュ照合
+  /// (_matchProwanCache)を自動実行し、顧客名・作業内容・機器型番・冷媒情報
+  /// を自動入力する。店名はキャッシュ照合結果との一致確認用の補助情報として
+  /// スナックバーに表示するのみで、フォームへの直接反映は行わない
+  /// (誤った店舗情報での上書きを避けるため)。
+  Future<void> _applyProWanScanResult(Map<String, String> confirmed) async {
+    final refNumber = (confirmed['ProWanRefNumber'] ?? '').trim();
+    final storeName = (confirmed['StoreName'] ?? '').trim();
+
+    if (refNumber.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('案件管理番号(伝票No)を読み取れませんでした。手入力してから照合してください。'),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _proWanCtrl.text = refNumber;
+      // スキャンによる自動入力のため、まだ人間による確定(manual)扱いには
+      // しない(既にmanual確定済みの場合はそのまま維持する)。
+      if (_fieldSources['pro_wan_ref_number'] != 'manual') {
+        _fieldSources['pro_wan_ref_number'] = 'auto';
+      }
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            storeName.isNotEmpty
+                ? '伝票No「$refNumber」($storeName)を読み取りました。案件情報を照合します…'
+                : '伝票No「$refNumber」を読み取りました。案件情報を照合します…',
+          ),
+        ),
+      );
+    }
+
+    // 【二段階マッチング方式・①スキャン時の照合ロジック】に直結させる。
+    // 読み取った伝票NoでそのままCSVキャッシュ照合を自動実行する。
+    await _matchProwanCache();
   }
 
   /// "2025/8/15" のようなAI抽出テキストをDateTimeへ変換する(失敗時はnull)。
