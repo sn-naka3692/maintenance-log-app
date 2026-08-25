@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import 'admin_dashboard_screen.dart';
+import 'case_list_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
@@ -63,6 +64,7 @@ class _MainNavigationState extends State<MainNavigation> {
     final pages = [
       const HomeScreen(),
       const SearchScreen(),
+      const CaseListScreen(),
       if (isAdmin) const AdminDashboardScreen(),
       const ProfileScreen(),
     ];
@@ -77,6 +79,11 @@ class _MainNavigationState extends State<MainNavigation> {
         icon: Icon(Icons.search_outlined),
         activeIcon: Icon(Icons.search),
         label: '検索',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.folder_outlined),
+        activeIcon: Icon(Icons.folder),
+        label: '案件',
       ),
       if (isAdmin)
         const BottomNavigationBarItem(
@@ -96,6 +103,7 @@ class _MainNavigationState extends State<MainNavigation> {
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
         items: items,

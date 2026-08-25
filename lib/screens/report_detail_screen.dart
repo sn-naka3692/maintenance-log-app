@@ -326,6 +326,14 @@ class ReportDetailScreen extends StatelessWidget {
               child: Text(report.notes),
             ),
 
+          // 【案件グルーピング機能・2026-08導入】
+          // 同じ案件(伝票No/受付No一致、または内容が近い)と判定された
+          // 他の日報がある場合、この日報とまとめて表示する。
+          // 複数人で同じ現場対応をした際、それぞれが個別に書いた日報を
+          // 後から突き合わせやすくするための機能。
+          if (report.caseId.isNotEmpty)
+            _RelatedReportsSection(report: report),
+
           const SizedBox(height: 16),
           Text(
             '作成: ${DateFormat('yyyy/MM/dd HH:mm').format(report.createdAt)}\n更新: ${DateFormat('yyyy/MM/dd HH:mm').format(report.updatedAt)}',
@@ -716,6 +724,72 @@ class _SectionCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 「この案件の他の日報」セクション。
+///
+/// 【背景】日報機能は1人1回の対応記録を書くためのものであり、複数人で
+/// 同じ現場対応をした場合、それぞれが個別に日報を書く運用は変えない
+/// (現場の入力負担を増やさないため)。その代わり、伝票No等の客観的な
+/// キーが一致する日報、または内容が酷似している日報はアプリが裏側で
+/// 自動的に「同じ案件」としてグルーピングしており、ここではその
+/// 他の日報を一覧表示することで、後からのデータ整理・案件把握を
+/// 容易にする。
+class _RelatedReportsSection extends StatelessWidget {
+  final WorkReport report;
+  const _RelatedReportsSection({required this.report});
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final related = appState.getRelatedReports(report);
+    if (related.isEmpty) return const SizedBox.shrink();
+
+    final dateFmt = DateFormat('M/d (E)', 'ja_JP');
+
+    return _SectionCard(
+      title: 'この案件の他の日報 (${related.length}件)',
+      icon: Icons.link,
+      iconColor: AppColors.primary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '同じ案件(伝票No/受付No、または内容の一致)として自動的にまとめられた、他の担当者による日報です。',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 8),
+          ...related.map(
+            (r) => Card(
+              margin: const EdgeInsets.only(bottom: 6),
+              color: Colors.grey.shade50,
+              child: ListTile(
+                dense: true,
+                leading: const Icon(Icons.person_outline, size: 20),
+                title: Text(
+                  r.authorName,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '${dateFmt.format(r.visitDate)} ・ ${r.workContent}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ReportDetailScreen(reportId: r.id),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

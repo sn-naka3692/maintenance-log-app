@@ -1,13 +1,16 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../models/case.dart';
 import '../models/store.dart';
 import '../models/user.dart';
 import '../models/work_report.dart';
+import '../services/case_service.dart';
 import '../services/report_service.dart';
 import '../services/store_service.dart';
 
 class AppState extends ChangeNotifier {
   final ReportService _service = ReportService.instance;
   final StoreService _storeService = StoreService.instance;
+  final CaseService _caseService = CaseService.instance;
 
   AppUser? _currentUser;
   AppUser? get currentUser => _currentUser;
@@ -125,18 +128,85 @@ class AppState extends ChangeNotifier {
 
   Future<void> addReport(WorkReport report) async {
     await _service.createReport(report);
+    await _syncCaseSilently(report);
+    // case_id がFirestore上で更新されている可能性があるため再取得する
+    await _service.refreshAll();
     _reports = _service.getAllReports();
     notifyListeners();
   }
 
   Future<void> updateReport(WorkReport report) async {
     await _service.updateReport(report);
+    await _syncCaseSilently(report);
+    await _service.refreshAll();
     _reports = _service.getAllReports();
     notifyListeners();
   }
 
+  /// 日報保存後、案件への自動グルーピングを行う。
+  ///
+  /// 【重要】これはあくまで「後から便利に検索・集計できるようにする」
+  /// 付随機能であり、日報の保存自体(従業員にとっての本来の目的)を
+  /// 妨げてはならない。そのため失敗してもエラーを表に出さず、
+  /// ログに記録するだけに留める(ベストエフォート)。
+  Future<void> _syncCaseSilently(WorkReport report) async {
+    try {
+      final caseId = await _caseService.syncCaseForReport(report);
+      if (caseId.isNotEmpty && report.caseId != caseId) {
+        report.caseId = caseId;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('案件グルーピング処理に失敗しました(日報自体は保存済み): $e');
+      }
+    }
+  }
+
   Future<void> deleteReport(String id) async {
+    // 削除前に案件からの切り離しを試みる(失敗しても日報削除は継続する)
+    try {
+      final report = _service.getReportById(id);
+      if (report != null && report.caseId.isNotEmpty) {
+        await _caseService.unlinkReportFromCase(id, report.caseId);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('案件からの切り離し処理に失敗しました(日報削除は継続します): $e');
+      }
+    }
     await _service.deleteReport(id);
+    _reports = _service.getAllReports();
+    notifyListeners();
+  }
+
+  /// 案件一覧を取得する(検索画面の「案件」タブ用)。
+  Future<List<WorkCase>> getAllCases() => _caseService.getAllCases();
+
+  /// 案件を1件取得する(案件詳細画面用)。
+  Future<WorkCase?> getCaseById(String caseId) =>
+      _caseService.getCaseById(caseId);
+
+  /// 指定した案件に紐づく日報一覧を取得する(新しい順)。
+  List<WorkReport> getReportsForCase(WorkCase c) {
+    final list = _reports.where((r) => c.linkedReportIds.contains(r.id)).toList();
+    list.sort((a, b) => b.visitDate.compareTo(a.visitDate));
+    return list;
+  }
+
+  /// 指定した日報と同じ案件に属する他の日報一覧を取得する(自分自身は除く)。
+  List<WorkReport> getRelatedReports(WorkReport report) {
+    if (report.caseId.isEmpty) return [];
+    final list = _reports
+        .where((r) => r.id != report.id && r.caseId == report.caseId)
+        .toList();
+    list.sort((a, b) => b.visitDate.compareTo(a.visitDate));
+    return list;
+  }
+
+  /// 誤って自動グルーピングされた日報を案件から手動で切り離す(管理画面用)。
+  Future<void> unlinkReportFromCase(String reportId, String caseId) async {
+    await _caseService.unlinkReportFromCase(reportId, caseId);
+    await _service.refreshAll();
     _reports = _service.getAllReports();
     notifyListeners();
   }

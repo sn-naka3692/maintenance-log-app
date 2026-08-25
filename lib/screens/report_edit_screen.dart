@@ -1270,6 +1270,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               hint: 'プロワン側で管理している案件番号(伝票Noと同じ)',
               fieldKey: 'pro_wan_ref_number',
             ),
+            _buildCaseGroupingHint(_proWanCtrl),
             const SizedBox(height: 6),
             Align(
               alignment: Alignment.centerLeft,
@@ -1522,6 +1523,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 label: '弊社受付No.',
                 icon: Icons.confirmation_number_outlined,
               ),
+              _buildCaseGroupingHint(_ssCtrls['receiptNumber']!),
               const SizedBox(height: 12),
               _buildField(
                 controller: _ssCtrls['storeNumber']!,
@@ -1812,6 +1814,55 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// 【案件グルーピング機能・2026-08導入】伝票No/受付Noの入力を促す
+  /// ソフトな確認バッジ。
+  ///
+  /// 【設計方針】この案件番号は保存時にアプリが裏側で自動的に
+  /// 「同じ案件の日報」をまとめる際のキーとして使われる(伝票No/受付No
+  /// が一致すれば確実にグルーピングされ、空欄の場合は内容の類似度による
+  /// 推測グルーピングにフォールバックし精度が落ちる)。
+  /// ただし、日報の入力・保存自体を妨げてはならない(A案の前提)ため、
+  /// 保存はブロックせず、あくまで「入力した方が案件の照合精度が上がる」
+  /// ことを控えめに伝えるのみに留める。
+  Widget _buildCaseGroupingHint(TextEditingController controller) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final hasValue = value.text.trim().isNotEmpty;
+        return Padding(
+          padding: const EdgeInsets.only(top: 4, left: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                hasValue ? Icons.check_circle_outline : Icons.info_outline,
+                size: 13,
+                color: hasValue
+                    ? AppColors.success
+                    : Colors.grey.shade500,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  hasValue
+                      ? '入力済み: 同じ案件の日報として自動的に照合されます'
+                      : '未入力: 空欄のままでも保存できますが、入力すると同じ案件の他の日報と'
+                            'より正確に自動でまとめられます',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: hasValue
+                        ? AppColors.success
+                        : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

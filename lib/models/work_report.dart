@@ -175,6 +175,17 @@ class WorkReport {
   // 依然正しいか」を再確認する際の起点として使う。
   String matchedCacheJobNumber;
 
+  // ------------------------------------------------------------
+  // 案件グルーピング機能(2026-08導入)
+  // ------------------------------------------------------------
+  //
+  // 【設計方針】
+  // 日報の入力項目・入力負担は一切増やさない。保存時にアプリが裏側で
+  // 自動的に「同じ案件と思われる日報」を判定し、cases コレクションへの
+  // 紐付けとしてこの caseId を自動セットする(CaseService が担当)。
+  // 従業員がこのフィールドを直接編集することはない。
+  String caseId; // 紐づく WorkCase のドキュメントID(未グルーピングなら空)
+
   DateTime createdAt;
   DateTime updatedAt;
 
@@ -207,6 +218,7 @@ class WorkReport {
     Map<String, String>? fieldSources,
     this.manualReviewNeeded = false,
     this.matchedCacheJobNumber = '',
+    this.caseId = '',
     required this.createdAt,
     required this.updatedAt,
   }) : partsUsed = partsUsed ?? [],
@@ -306,6 +318,7 @@ class WorkReport {
       'field_sources': fieldSources,
       'manual_review_needed': manualReviewNeeded,
       'matched_cache_job_number': matchedCacheJobNumber,
+      'case_id': caseId,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
@@ -359,6 +372,7 @@ class WorkReport {
       manualReviewNeeded: map['manual_review_needed'] as bool? ?? false,
       matchedCacheJobNumber:
           map['matched_cache_job_number'] as String? ?? '',
+      caseId: map['case_id'] as String? ?? '',
       createdAt: _parseDate(map['created_at']),
       updatedAt: _parseDate(map['updated_at']),
     );
