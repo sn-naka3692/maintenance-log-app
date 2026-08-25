@@ -25,12 +25,24 @@ cd "$(dirname "$0")/.."
 VERSION=$(grep -m1 '^version:' pubspec.yaml | sed 's/version: *//' | cut -d'+' -f1)
 TAG="v${VERSION}"
 
+# 【重要】スキャン機能用Function Key(SCAN_PROXY_FUNCTION_KEY)は
+# Web版・APK版どちらも --dart-define で埋め込む必要がある。
+# 詳細は scripts/build_release_apk.sh の冒頭コメントを参照。
+SECRETS_FILE="scripts/secrets.env"
+if [[ -f "$SECRETS_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$SECRETS_FILE"
+else
+  echo "⚠️  警告: $SECRETS_FILE が見つかりません。スキャン機能は401エラーになります。"
+fi
+
 echo "▶ 1/4 配布用APK(arm64-v8a専用)をビルドします..."
 bash scripts/build_release_apk.sh
 APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
 
 echo "▶ 2/4 Web版をビルドします..."
-flutter build web --release
+flutter build web --release \
+  --dart-define=SCAN_PROXY_FUNCTION_KEY="${SCAN_PROXY_FUNCTION_KEY:-}"
 
 echo "▶ 3/4 Web版をFirebase Hostingへデプロイします..."
 GOOGLE_APPLICATION_CREDENTIALS=/opt/flutter/firebase-admin-sdk.json \

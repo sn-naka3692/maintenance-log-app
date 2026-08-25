@@ -56,3 +56,6 @@ web/downloads/*.apk
 android/key.properties
 android/release-key.jks
 android/*.jks
+
+# スキャン機能用Function Key等の秘密情報(絶対にgit管理下に置かない)
+scripts/secrets.env
