@@ -19,6 +19,7 @@ class _SearchScreenState extends State<SearchScreen> {
   ResponseType? _filterType;
   bool _onlySuccess = false;
   bool _onlyIssues = false;
+  bool _onlyRefrigerantFilling = false;
   DateTime? _from;
   DateTime? _to;
   String? _filterStoreId;
@@ -42,6 +43,7 @@ class _SearchScreenState extends State<SearchScreen> {
         to: _to,
         onlySuccess: _onlySuccess,
         onlyIssues: _onlyIssues,
+        onlyRefrigerantFilling: _onlyRefrigerantFilling,
       );
     });
   }
@@ -147,6 +149,16 @@ class _SearchScreenState extends State<SearchScreen> {
                         selected: _onlyIssues,
                         onSelected: (v) {
                           setState(() => _onlyIssues = v);
+                          _runSearch();
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      FilterChip(
+                        label: const Text('冷媒充填案件'),
+                        avatar: const Icon(Icons.propane_tank, size: 16),
+                        selected: _onlyRefrigerantFilling,
+                        onSelected: (v) {
+                          setState(() => _onlyRefrigerantFilling = v);
                           _runSearch();
                         },
                       ),

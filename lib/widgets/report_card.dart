@@ -134,6 +134,15 @@ class ReportCard extends StatelessWidget {
                         color: AppColors.warning,
                       ),
                     ),
+                  if (report.hasRefrigerantFilling)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Icon(
+                        Icons.propane_tank,
+                        size: 15,
+                        color: AppColors.primary,
+                      ),
+                    ),
                   if (report.photoPaths.isNotEmpty)
                     const Padding(
                       padding: EdgeInsets.only(left: 4),

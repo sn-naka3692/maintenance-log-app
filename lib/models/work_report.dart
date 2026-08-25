@@ -222,6 +222,29 @@ class WorkReport {
   bool get hasIssues => issuesPoints.trim().isNotEmpty;
   bool get hasSuccess => successPoints.trim().isNotEmpty;
 
+  /// 冷媒充填を行った案件かどうか。
+  ///
+  /// SE店舗案件(storeSystemReportCopy.refrigerantType/refrigerantAmount)と
+  /// プロワン管轄案件(nonSeRefrigerantType/nonSeRefrigerantAmountKg)の
+  /// 両方をチェックする。
+  /// プロワン管轄案件側は「充填していない場合は種類「なし」・量「0」を入力する
+  /// 運用(空欄は不可)」のため、"なし"・"0"・空文字はすべて「未充填」扱いとする。
+  bool get hasRefrigerantFilling {
+    final seType = storeSystemReportCopy.refrigerantType.trim();
+    final seAmount = storeSystemReportCopy.refrigerantAmount.trim();
+    if (seType.isNotEmpty || seAmount.isNotEmpty) {
+      return true;
+    }
+    final nonSeType = nonSeRefrigerantType.trim();
+    final nonSeAmount = nonSeRefrigerantAmountKg.trim();
+    const notFilledValues = {'', 'なし', '0', '0.0', '0.00'};
+    if (!notFilledValues.contains(nonSeType) ||
+        !notFilledValues.contains(nonSeAmount)) {
+      return true;
+    }
+    return false;
+  }
+
   // ------------------------------------------------------------
   // 自動入力/手入力フラグ管理ヘルパー
   // ------------------------------------------------------------

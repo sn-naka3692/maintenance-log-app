@@ -206,6 +206,25 @@ class ReportDetailScreen extends StatelessWidget {
               label: 'プロワン管理番号',
               value: report.proWanRefNumber,
             ),
+          // プロワン管轄案件(SE店舗以外)専用の冷媒種類・充填量。
+          // SE店舗分は下部の「コンビニ側システム入力控え」内(冷媒種類/充填量)に表示される。
+          if (report.nonSeRefrigerantType.isNotEmpty ||
+              report.nonSeRefrigerantAmountKg.isNotEmpty) ...[
+            _InfoRow(
+              icon: Icons.propane_tank,
+              label: '冷媒種類',
+              value: report.nonSeRefrigerantType.isEmpty
+                  ? '(未記入)'
+                  : report.nonSeRefrigerantType,
+            ),
+            _InfoRow(
+              icon: Icons.propane_tank,
+              label: '冷媒充填量',
+              value: report.nonSeRefrigerantAmountKg.isEmpty
+                  ? '(未記入)'
+                  : '${report.nonSeRefrigerantAmountKg} kg',
+            ),
+          ],
 
           _SectionCard(
             title: '作業内容',

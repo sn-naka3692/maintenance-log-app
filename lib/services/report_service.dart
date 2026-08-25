@@ -296,6 +296,7 @@ class ReportService {
     DateTime? to,
     bool onlySuccess = false,
     bool onlyIssues = false,
+    bool onlyRefrigerantFilling = false,
   }) {
     var list = List<WorkReport>.from(_reportsCache);
 
@@ -332,6 +333,9 @@ class ReportService {
     }
     if (onlyIssues) {
       list = list.where((r) => r.hasIssues).toList();
+    }
+    if (onlyRefrigerantFilling) {
+      list = list.where((r) => r.hasRefrigerantFilling).toList();
     }
     if (keyword != null && keyword.trim().isNotEmpty) {
       final kw = keyword.trim().toLowerCase();

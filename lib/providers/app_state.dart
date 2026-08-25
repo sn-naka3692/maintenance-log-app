@@ -199,6 +199,7 @@ class AppState extends ChangeNotifier {
     DateTime? to,
     bool onlySuccess = false,
     bool onlyIssues = false,
+    bool onlyRefrigerantFilling = false,
   }) {
     return _service.search(
       keyword: keyword,
@@ -210,6 +211,7 @@ class AppState extends ChangeNotifier {
       to: to,
       onlySuccess: onlySuccess,
       onlyIssues: onlyIssues,
+      onlyRefrigerantFilling: onlyRefrigerantFilling,
     );
   }
 

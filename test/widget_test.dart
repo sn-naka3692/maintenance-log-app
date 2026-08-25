@@ -60,6 +60,68 @@ void main() {
     });
   });
 
+  group('WorkReport.hasRefrigerantFilling', () {
+    WorkReport buildReport({
+      StoreSystemReport? storeSystemReportCopy,
+      String nonSeRefrigerantType = '',
+      String nonSeRefrigerantAmountKg = '',
+    }) {
+      final now = DateTime.now();
+      return WorkReport(
+        id: 'r',
+        authorId: 'u',
+        authorName: 'テスト',
+        clientName: '顧客',
+        visitDate: now,
+        startTime: now,
+        endTime: now,
+        workContent: '',
+        storeSystemReportCopy: storeSystemReportCopy,
+        nonSeRefrigerantType: nonSeRefrigerantType,
+        nonSeRefrigerantAmountKg: nonSeRefrigerantAmountKg,
+        createdAt: now,
+        updatedAt: now,
+      );
+    }
+
+    test('false when both SE and non-SE fields are empty', () {
+      expect(buildReport().hasRefrigerantFilling, false);
+    });
+
+    test('false when non-SE fields are "なし"/"0" (not-filled convention)', () {
+      final r = buildReport(
+        nonSeRefrigerantType: 'なし',
+        nonSeRefrigerantAmountKg: '0',
+      );
+      expect(r.hasRefrigerantFilling, false);
+    });
+
+    test('true when non-SE fields indicate actual filling', () {
+      final r = buildReport(
+        nonSeRefrigerantType: 'R410A',
+        nonSeRefrigerantAmountKg: '1.2',
+      );
+      expect(r.hasRefrigerantFilling, true);
+    });
+
+    test('true when SE store refrigerant fields are filled', () {
+      final r = buildReport(
+        storeSystemReportCopy: StoreSystemReport(
+          refrigerantType: 'R32',
+          refrigerantAmount: '0.8',
+        ),
+      );
+      expect(r.hasRefrigerantFilling, true);
+    });
+
+    test('false when SE store refrigerant fields are empty', () {
+      final r = buildReport(
+        storeSystemReportCopy: StoreSystemReport(receiptNumber: 'R-1'),
+      );
+      expect(r.hasRefrigerantFilling, false);
+    });
+  });
+
   group('AppUser', () {
     test('isAdmin reflects role correctly', () {
       final admin = AppUser(
