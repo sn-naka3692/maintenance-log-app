@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>【重要】APK版アプリの入れ直しのお願い(署名鍵切替に伴う一度限りの作業)</title>
+<style>
+  :root {
+    --primary: #1565ef;
+    --bg: #f4f7fb;
+    --text: #1a1a1a;
+    --muted: #667085;
+    --border: #e3e8ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    line-height: 1.75;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 24px 20px 60px; }
+  header.hero {
+    background: linear-gradient(135deg, var(--primary), #3b82f6);
+    color: #fff;
+    border-radius: 16px;
+    padding: 26px 22px;
+    margin-bottom: 20px;
+  }
+  header.hero h1 { margin: 0 0 6px; font-size: 19px; }
+  header.hero p { margin: 0; font-size: 13px; opacity: 0.92; }
+  section {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+  }
+  h2 {
+    font-size: 16px;
+    margin: 0 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--primary);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h2 .num {
+    background: var(--primary);
+    color: #fff;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 14px; margin: 16px 0 6px; color: #333; }
+  p { font-size: 13.5px; margin: 6px 0; }
+  ol, ul { font-size: 13.5px; padding-left: 22px; margin: 8px 0; }
+  li { margin-bottom: 6px; }
+  .important {
+    background: #fdecec;
+    border: 1px solid #f3b4b4;
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+    color: #8a1f1f;
+    margin-bottom: 10px;
+  }
+  .note {
+    background: #fff8e6;
+    border: 1px solid #f5d78e;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 12.5px;
+    color: #6b5300;
+    margin-top: 10px;
+  }
+  .step-box {
+    background: #eef7ff;
+    border: 1px solid #bcd8f7;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 10px 0;
+  }
+  .step-box .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; height: 24px;
+    background: var(--primary);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .step-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; margin-bottom: 6px; }
+  .dl-link {
+    display: block;
+    text-align: center;
+    background: var(--primary);
+    color: #fff !important;
+    font-weight: 700;
+    padding: 14px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 15px;
+    margin: 14px 0 6px;
+  }
+  code {
+    background: #eef1f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12.5px;
+  }
+  .faq { border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 10px; }
+  .faq .q { font-weight: 700; font-size: 13.5px; color: var(--primary); margin-top: 10px; }
+  .faq .a { font-size: 13px; color: #444; margin: 4px 0 0; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>📱 APK版アプリの入れ直しのお願い</h1>
+    <p>アプリの安全性を高めるための正式な署名切替に伴い、一度だけ入れ直し(アンインストール→インストール)が必要です。</p>
+  </header>
+
+  <section>
+    <div class="important">
+      <strong>⚠️ 今回だけの作業です。</strong><br>
+      アプリの配布に使う「署名(証明書)」を、試験用の仮のものから正式なものに切り替えました。この影響で、これまで入れていたアプリの上に新しいアプリを「上書き更新」することができません。お手数ですが、<strong>今のアプリを一度削除してから、新しいアプリを入れ直して</strong>ください。<br>
+      <strong>データは消えません。</strong>日報のデータはすべてサーバー(クラウド)側に保存されているため、アプリを消してもログインし直せば元通り使えます。
+    </div>
+    <p>今回入れ直していただければ、<strong>次回からは今まで通り「アプリ内の更新ボタン」で自動更新</strong>できるようになります。ご協力よろしくお願いいたします。</p>
+  </section>
+
+  <section>
+    <h2><span class="num">1</span>今のアプリを削除する(アンインストール)</h2>
+    <div class="step-box">
+      <div class="step-title"><span class="step-num">1</span>ホーム画面または「設定」→「アプリ」を開く</div>
+      <p>ホーム画面にある <strong>「Maintenance Log」または「日報アプリ」</strong> のアイコンを長押しします。</p>
+    </div>
+    <div class="step-box">
+      <div class="step-title"><span class="step-num">2</span>「アンインストール」を選ぶ</div>
+      <p>長押しして出てきたメニューから <strong>「アンインストール」</strong>(ゴミ箱マークの場合もあります)をタップし、確認画面で <strong>「OK」</strong> を押します。</p>
+    </div>
+    <div class="note">
+      💡 アイコンが見当たらない場合は、「設定」アプリ →「アプリ」または「アプリ管理」→ 一覧から「Maintenance Log」を探して削除してください。
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span>新しいAPKファイルをダウンロードする</h2>
+    <p>下のボタンから最新のAPKファイルをダウンロードしてください。ブラウザ(Chromeなど)で開いてください。</p>
+    <a class="dl-link" href="https://github.com/sn-naka3692/maintenance-log-app/releases/latest/download/app-release.apk" target="_blank">⬇️ 最新のAPKファイルをダウンロード(約22MB)</a>
+
+    <div class="note">
+      <strong>すでに古いAPKファイルがダウンロード済みの場合は要注意</strong><br>
+      「ダウンロード」フォルダに <code>app-release.apk</code> や <code>app-release (1).apk</code> のような同名ファイルが複数残っていると、間違って古い(署名前の)ファイルを開いてしまうことがあります。上記ボタンから<strong>あらためて新しくダウンロードし直す</strong>ことをおすすめします。
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span>ダウンロードしたファイルを開いてインストールする</h2>
+    <div class="step-box">
+      <div class="step-title"><span class="step-num">1</span>ダウンロード完了の通知をタップ</div>
+      <p>画面上部の通知、またはブラウザの「ダウンロード」一覧、もしくは端末の「ファイル」アプリから <code>app-release.apk</code> を探してタップします。</p>
+    </div>
+    <div class="step-box">
+      <div class="step-title"><span class="step-num">2</span>「パッケージインストーラー」を選ぶ</div>
+      <p>アプリの選択画面が出た場合は、<strong>「パッケージインストーラー」</strong>(端末によっては「インストーラー」)を選んでください。</p>
+    </div>
+    <div class="step-box">
+      <div class="step-title"><span class="step-num">3</span>「提供元不明のアプリ」の警告が出た場合</div>
+      <p><strong>「詳細設定」→「このソースを許可」→「インストール」</strong> の順に進んでください。社内配布アプリのため問題ありません。</p>
+    </div>
+    <div class="step-box">
+      <div class="step-title"><span class="step-num">4</span>「インストール」を押す</div>
+      <p>確認画面で <strong>「インストール」</strong> を押します。完了したら <strong>「開く」</strong> を押すか、ホーム画面のアイコンから起動してください。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span>「デバイスを保護するため、アプリをブロックしました」と出た場合</h2>
+    <div class="important">
+      これは <strong>Google Play プロテクト</strong>が「Playストア経由ではない、まだスキャン実績のないアプリ」に対して表示する標準的な警告です。社内で配布している業務アプリのため、安全性に問題はありません。以下の手順で進めてください。
+    </div>
+    <div class="step-box">
+      <div class="step-title"><span class="step-num">1</span>警告画面の「詳細」を開く</div>
+      <p>「デバイスを保護するため、アプリをブロックしました」画面が出たら、<strong>「詳細」</strong>(下向き矢印の部分)をタップします。</p>
+    </div>
+    <div class="step-box">
+      <div class="step-title"><span class="step-num">2</span>「無視してインストール」を選ぶ</div>
+      <p>詳細を開くと <strong>「無視してインストール」</strong>という項目が表示されるので、それをタップします。</p>
+    </div>
+    <div class="note">
+      💡 この警告が一度も出ない端末もあります(Play プロテクトの設定・過去の利用状況による差です)。出なかった場合はそのまま手順3に進んでいただいて問題ありません。
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span>インストール後の確認</h2>
+    <ol>
+      <li>ホーム画面の「Maintenance Log」アイコンをタップして起動します</li>
+      <li>いつも通りのメールアドレス・パスワードでログインします(データは消えていません)</li>
+      <li>プロフィール画面の「更新履歴」から、バージョンが <strong>v1.2.10</strong> になっていることを確認してください</li>
+      <li>作業報告書のスキャン機能(SE・プロワン両方)も念のため一度お試しください</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2><span class="num">?</span>よくある質問</h2>
+    <div class="q">Q. アンインストールすると、これまでの日報データは消えますか?</div>
+    <p class="a">A. 消えません。日報データはすべてサーバー(クラウド)上に保存されているため、アプリを削除しても、ログインし直せばこれまでのデータがそのまま表示されます。</p>
+
+    <div class="q">Q. なぜ今回だけ入れ直しが必要なのですか?</div>
+    <p class="a">A. アプリの安全性を高めるため、配布用の「署名(証明書)」を試験用の仮のものから正式なものに切り替えたためです。Androidの仕組み上、署名が変わったアプリは「上書き更新」ができない決まりになっています。今回一度入れ直していただければ、以降はこの作業は不要です。</p>
+
+    <div class="q">Q. 次回からはどうやって更新すればいいですか?</div>
+    <p class="a">A. 今まで通り、アプリ内の更新通知・更新ボタンから自動更新できます。今回のような「アンインストール→インストール」の操作は不要です。</p>
+
+    <div class="q">Q. うまくインストールできない場合はどうすればいいですか?</div>
+    <p class="a">A. 仲までご連絡ください。画面のスクリーンショットを送っていただけるとスムーズです。</p>
+  </section>
+
+  <footer>札幌中野冷機株式会社 業務日報アプリ(Maintenance Log)</footer>
+</div>
+</body>
+</html>
