@@ -15,6 +15,28 @@ enum ResponseType {
   other, // その他
 }
 
+/// 「案件においての役割」のプルダウン選択肢(定型)。
+///
+/// 【今後の開発方向・人事評価制度連携について】(2026-08 導入)
+/// 現段階ではまず「案件ごとにどんな役割を担ったか」というデータを
+/// 蓄積することが目的であり、点数化や評価指標との自動連携は行わない。
+/// 将来的には、ここで蓄積したデータ(役割の分布・頻度など)を人事評価
+/// 制度上の評価指標(主担当としての遂行実績、後輩指導の実績等)に
+/// 紐づけ、定量的な点数化を検討する。そのため、この選択肢リストの
+/// 文言・粒度は将来の評価指標との対応付けを見据えて設計しており、
+/// 安易に文言を変更する場合は人事評価制度側との整合性に注意すること。
+class CaseRoleOptions {
+  CaseRoleOptions._();
+
+  static const List<String> presets = [
+    '主担当',
+    '副担当・アシスト',
+    '指導・OJT(後輩育成)',
+    '同行・見学',
+    'その他',
+  ];
+}
+
 extension ResponseTypeLabel on ResponseType {
   String get label {
     switch (this) {
@@ -116,6 +138,21 @@ class WorkReport {
   ProWanReportDetail proWanReportDetail;
 
   // ------------------------------------------------------------
+  // 「案件においての役割」(人事評価データ収集用・2026-08導入)
+  // ------------------------------------------------------------
+  //
+  // 【今後の開発方向】
+  // 現段階ではプルダウン選択+自由記述によるデータ収集のみを目的とし、
+  // 点数化や評価指標への自動反映は行わない。将来的に人事評価制度の
+  // 評価指標と紐づけ、定量的なスコアリングを行うことを検討している。
+  // そのため、caseRolePreset の値(CaseRoleOptions.presets)は
+  // 将来の評価指標との対応付けを見据えた選択肢設計にしてあり、
+  // caseRoleNote(自由記述)は定型選択肢では拾いきれない具体的な
+  // 役割・貢献内容を補足する目的で用意している。
+  String caseRolePreset; // プルダウン選択値(CaseRoleOptions.presetsのいずれか、または空)
+  String caseRoleNote; // 自由記述による補足
+
+  // ------------------------------------------------------------
   // プロワンCSVキャッシュ照合(重複入力削減機能)関連フィールド
   // ------------------------------------------------------------
   //
@@ -165,6 +202,8 @@ class WorkReport {
     this.nonSeRefrigerantType = '',
     this.nonSeRefrigerantAmountKg = '',
     ProWanReportDetail? proWanReportDetail,
+    this.caseRolePreset = '',
+    this.caseRoleNote = '',
     Map<String, String>? fieldSources,
     this.manualReviewNeeded = false,
     this.matchedCacheJobNumber = '',
@@ -239,6 +278,8 @@ class WorkReport {
       'non_se_refrigerant_type': nonSeRefrigerantType,
       'non_se_refrigerant_amount_kg': nonSeRefrigerantAmountKg,
       'pro_wan_report_detail': proWanReportDetail.toMap(),
+      'case_role_preset': caseRolePreset,
+      'case_role_note': caseRoleNote,
       'field_sources': fieldSources,
       'manual_review_needed': manualReviewNeeded,
       'matched_cache_job_number': matchedCacheJobNumber,
@@ -287,6 +328,8 @@ class WorkReport {
       proWanReportDetail: ProWanReportDetail.fromMap(
         map['pro_wan_report_detail'] as Map<String, dynamic>?,
       ),
+      caseRolePreset: map['case_role_preset'] as String? ?? '',
+      caseRoleNote: map['case_role_note'] as String? ?? '',
       fieldSources: (map['field_sources'] as Map<String, dynamic>? ?? {}).map(
         (k, v) => MapEntry(k, v.toString()),
       ),

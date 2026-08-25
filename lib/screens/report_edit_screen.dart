@@ -48,6 +48,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   // (店舗住所・部門・系統番号・障害内容・障害機器・原因・依頼内容・訪問結果・
   // 今後の予定・技術者氏名・訪問日)の受け皿(ProWanReportDetail)用コントローラ。
   late Map<String, TextEditingController> _pwCtrls;
+  // 「案件においての役割」自由記述用コントローラ(2026-08導入・人事評価データ収集用)
+  late TextEditingController _caseRoleNoteCtrl;
+  // 「案件においての役割」プルダウン選択値。未選択は null。
+  String? _caseRolePreset;
 
   String? _selectedStoreId;
   final List<String> _selectedCoWorkerIds = [];
@@ -157,6 +161,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       'recoveryAmount': TextEditingController(text: ss.recoveryAmount),
     };
     _tagInputCtrl = TextEditingController();
+    _caseRoleNoteCtrl = TextEditingController(text: e?.caseRoleNote ?? '');
+    _caseRolePreset =
+        (e != null && e.caseRolePreset.isNotEmpty) ? e.caseRolePreset : null;
 
     if (e != null) {
       _visitDate = e.visitDate;
@@ -432,6 +439,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       c.dispose();
     }
     _tagInputCtrl.dispose();
+    _caseRoleNoteCtrl.dispose();
     super.dispose();
   }
 
@@ -864,6 +872,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       r.nonSeRefrigerantType = _nonSeRefrigerantTypeCtrl.text.trim();
       r.nonSeRefrigerantAmountKg = _nonSeRefrigerantAmountCtrl.text.trim();
       r.proWanReportDetail = pwDetail;
+      r.caseRolePreset = _caseRolePreset ?? '';
+      r.caseRoleNote = _caseRoleNoteCtrl.text.trim();
       r.fieldSources = _fieldSources;
       r.manualReviewNeeded = _manualReviewNeeded;
       r.matchedCacheJobNumber = _matchedCacheJobNumber;
@@ -893,6 +903,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         nonSeRefrigerantType: _nonSeRefrigerantTypeCtrl.text.trim(),
         nonSeRefrigerantAmountKg: _nonSeRefrigerantAmountCtrl.text.trim(),
         proWanReportDetail: pwDetail,
+        caseRolePreset: _caseRolePreset ?? '',
+        caseRoleNote: _caseRoleNoteCtrl.text.trim(),
         fieldSources: _fieldSources,
         manualReviewNeeded: _manualReviewNeeded,
         matchedCacheJobNumber: _matchedCacheJobNumber,
@@ -1061,6 +1073,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               ),
             const SizedBox(height: 12),
             _buildCoWorkerField(),
+            const SizedBox(height: 12),
+            _buildCaseRoleField(),
 
             // 【2026-08 導線改善】修理・故障対応の場合、他の項目を入力する前に
             // まず「作業報告書をお持ちならスキャン」という導線を最上部付近に
@@ -2265,6 +2279,42 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             hint: '協力会社・臨時作業者など、リストにない方の氏名',
           ),
         ],
+      ],
+    );
+  }
+
+  /// 「案件においての役割」フィールド(プルダウン+自由記述の併用・2026-08導入)
+  ///
+  /// 【今後の開発方向】人事評価制度の項目として、将来的には評価指標との紐づけ・
+  /// 点数化を視野に入れているが、現段階ではまず案件ごとの役割データを
+  /// 収集できればよい、という位置づけ。そのためUI上も必須項目とはせず、
+  /// 「作業内容」に近いこのエリア(基本情報の一部)に軽量に配置している。
+  Widget _buildCaseRoleField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String?>(
+          initialValue: _caseRolePreset,
+          decoration: const InputDecoration(
+            labelText: '案件においての役割(任意・人事評価データ収集用)',
+            prefixIcon: Icon(Icons.badge_outlined),
+          ),
+          items: [
+            const DropdownMenuItem<String?>(value: null, child: Text('未選択')),
+            ...CaseRoleOptions.presets.map(
+              (v) => DropdownMenuItem<String?>(value: v, child: Text(v)),
+            ),
+          ],
+          onChanged: (v) => setState(() => _caseRolePreset = v),
+        ),
+        const SizedBox(height: 8),
+        _buildField(
+          controller: _caseRoleNoteCtrl,
+          label: '役割の補足(自由記述・任意)',
+          icon: Icons.edit_note,
+          hint: '例: 新人の同行指導を兼ねて主担当を務めた 等',
+          maxLines: 2,
+        ),
       ],
     );
   }

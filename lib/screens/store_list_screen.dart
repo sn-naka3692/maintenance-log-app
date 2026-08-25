@@ -5,7 +5,7 @@ import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 
 /// 店舗マスタ一覧・管理画面
-/// 管理者/一般作業員問わず閲覧可能。新規店舗の追加・編集ができる。
+/// 管理者/一般ユーザー問わず閲覧可能。新規店舗の追加・編集ができる。
 class StoreListScreen extends StatefulWidget {
   const StoreListScreen({super.key});
 

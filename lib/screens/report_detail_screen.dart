@@ -145,6 +145,30 @@ class ReportDetailScreen extends StatelessWidget {
               ),
             ],
           ),
+          if (report.caseRolePreset.isNotEmpty ||
+              report.caseRoleNote.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.badge_outlined,
+                  size: 16,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '案件においての役割: ${[
+                      report.caseRolePreset,
+                      report.caseRoleNote,
+                    ].where((s) => s.isNotEmpty).join(' / ')}',
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (report.coWorkerIds.isNotEmpty) ...[
             const SizedBox(height: 6),
             Row(

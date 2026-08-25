@@ -31,7 +31,7 @@ class UserManagementScreen extends StatelessWidget {
 
     final users = List<AppUser>.from(appState.users)
       ..sort((a, b) {
-        // 最高管理者 → 一般管理者 → 一般作業員の順、同じ役割内では氏名順
+        // 最高管理者 → 一般管理者 → 一般ユーザーの順、同じ役割内では氏名順
         int rank(UserRole r) => switch (r) {
           UserRole.superAdmin => 0,
           UserRole.admin => 1,
@@ -67,7 +67,7 @@ class UserManagementScreen extends StatelessWidget {
                   child: Text(
                     '管理者権限には「最高管理者」「一般管理者」の2階層があります。\n'
                     '・最高管理者:役割変更・社員削除など全ての管理操作が可能\n'
-                    '・一般管理者:管理ダッシュボードの閲覧、一般作業員の追加のみ可能\n'
+                    '・一般管理者:管理ダッシュボードの閲覧、一般ユーザーの追加のみ可能\n'
                     '自分自身の役割変更・削除、および最後の最高管理者の降格・削除はできません。',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                   ),
@@ -217,7 +217,7 @@ class UserManagementScreen extends StatelessWidget {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.person_outline),
-                    title: const Text('一般作業員にする'),
+                    title: const Text('一般ユーザーにする'),
                     enabled: user.role != UserRole.staff,
                     onTap: () => _confirmAndChangeRole(
                       context,

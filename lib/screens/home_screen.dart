@@ -19,6 +19,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _hasUnseenUpdate = false;
+  // 【権限拡張・2026-08】一般ユーザーも他ユーザーの日報・業務内容を
+  // 閲覧できるようにするための表示切替(true=全員の日報、false=自分の日報)。
+  // アクセス制御自体はFirestore側で既に全ユーザーに開放されているため、
+  // ここはあくまでホーム画面上の「見る対象」を切り替えるUIスイッチ。
+  bool _showAllReports = false;
 
   @override
   void initState() {
@@ -44,6 +49,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final myReports = appState.myReports;
+    // 「全員の日報」表示時は appState.reports(全社員分)、それ以外は自分の日報のみ。
+    final displayedReports = _showAllReports ? appState.reports : myReports;
     final today = DateTime.now();
     final todayReports = myReports
         .where(
@@ -130,28 +137,56 @@ class _HomeScreenState extends State<HomeScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '最近の日報',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          _showAllReports ? '全社員の日報' : '最近の日報',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '全${displayedReports.length}件',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                    const Spacer(),
-                    Text(
-                      '全${myReports.length}件',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 12,
+                    const SizedBox(height: 8),
+                    // 【権限拡張・2026-08】一般ユーザーも他ユーザーの日報・業務内容を
+                    // 閲覧できるように、日報一覧の表示対象を切り替えるトグル。
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: false,
+                          label: Text('自分の日報'),
+                          icon: Icon(Icons.person_outline, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          label: Text('全員の日報'),
+                          icon: Icon(Icons.groups_outlined, size: 16),
+                        ),
+                      ],
+                      selected: {_showAllReports},
+                      onSelectionChanged: (s) =>
+                          setState(() => _showAllReports = s.first),
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            if (myReports.isEmpty)
+            if (displayedReports.isEmpty)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 60),
@@ -167,14 +202,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         'まだ日報がありません',
                         style: TextStyle(color: Colors.grey.shade600),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '右下の+ボタンから作成してください',
-                        style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 12,
+                      if (!_showAllReports) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '右下の+ボタンから作成してください',
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -184,11 +221,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate((context, index) {
-                    final report = myReports[index];
+                    final report = displayedReports[index];
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: ReportCard(
                         report: report,
+                        showAuthor: _showAllReports,
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
@@ -199,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                     );
-                  }, childCount: myReports.length),
+                  }, childCount: displayedReports.length),
                 ),
               ),
           ],

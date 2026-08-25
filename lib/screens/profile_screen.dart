@@ -534,7 +534,7 @@ class ProfileScreen extends StatelessWidget {
   // ------------------------------------------------------------------
   // 社員追加(Firebase Authアカウントも同時作成)
   //
-  // 事故防止: 一般管理者は「一般作業員」としてのみ新規社員を追加できる。
+  // 事故防止: 一般管理者は「一般ユーザー」としてのみ新規社員を追加できる。
   // 管理者権限(一般管理者/最高管理者)を持つ社員の新規作成は最高管理者のみ可能
   // (一般管理者が他人に管理者権限を付与してしまう事故を防止するため)。
   // ------------------------------------------------------------------
@@ -598,7 +598,7 @@ class ProfileScreen extends StatelessWidget {
                   items: [
                     const DropdownMenuItem(
                       value: UserRole.staff,
-                      child: Text('一般作業員'),
+                      child: Text('一般ユーザー'),
                     ),
                     if (isSuperAdmin) ...const [
                       DropdownMenuItem(
