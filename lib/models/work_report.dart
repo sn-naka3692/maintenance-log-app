@@ -10,7 +10,7 @@ enum ResponseType {
   installation, // 新設・設置
   officeWork, // 事務
   fieldOffice, // 現場事務
-  warehouseWork, // 倉庫作業
+  warehouseWork, // 倉庫作業(倉庫整理・在庫管理を含む)
   environmentalMaintenance, // 環境整備(清掃・整理整頓・草刈り等)
   other, // その他
 }

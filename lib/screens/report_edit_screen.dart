@@ -964,6 +964,57 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           children: [
             _SectionTitle('基本情報'),
             const SizedBox(height: 8),
+            // 【2026-08 導線改善】まず「何の作業か」(対応区分)を最初に選んで
+            // もらう方が日報として自然な入力順のため、対応区分の選択を
+            // 店舗・訪問日より前に配置する。事務・現場事務・倉庫作業・環境整備
+            // (バックオフィス業務)を選んだ場合は、後続の店舗選択欄が
+            // 「対象・場所(任意)」の自由入力欄に切り替わる。
+            DropdownButtonFormField<ResponseType>(
+              initialValue: _responseType,
+              decoration: const InputDecoration(
+                labelText: '対応区分',
+                prefixIcon: Icon(Icons.category),
+              ),
+              items: ResponseType.values
+                  .map(
+                    (t) => DropdownMenuItem(
+                      value: t,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            t == ResponseType.environmentalMaintenance
+                                ? Icons.cleaning_services
+                                : t.isBackOffice
+                                ? Icons.apartment
+                                : Icons.build_circle_outlined,
+                            size: 16,
+                            color: responseTypeColor(t.label),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(t.label),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) => setState(() => _responseType = v!),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                _responseType.isBackOffice
+                    ? '事務・現場事務・倉庫作業(在庫管理含む)・環境整備(清掃・整理整頓等)は、'
+                          '店舗・案件に紐づかない社内業務として記録できます。'
+                          '機器型番・プロワン管理番号の入力は不要です(任意)。'
+                    : '現場でのお客様対応(定期点検・故障対応・修理・新設)は、'
+                          '下の店舗・案件の選択欄で対象を指定してください。'
+                          '事務作業や倉庫整理・環境整備など、店舗に紐づかない社内業務の'
+                          '場合は、上のプルダウンで該当する区分を選んでください。',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ),
+            const SizedBox(height: 12),
             if (_responseType.isBackOffice)
               _buildField(
                 controller: _clientNameCtrl,
@@ -1031,46 +1082,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<ResponseType>(
-              initialValue: _responseType,
-              decoration: const InputDecoration(
-                labelText: '対応区分',
-                prefixIcon: Icon(Icons.category),
-              ),
-              items: ResponseType.values
-                  .map(
-                    (t) => DropdownMenuItem(
-                      value: t,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            t == ResponseType.environmentalMaintenance
-                                ? Icons.cleaning_services
-                                : t.isBackOffice
-                                ? Icons.apartment
-                                : Icons.build_circle_outlined,
-                            size: 16,
-                            color: responseTypeColor(t.label),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(t.label),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => _responseType = v!),
-            ),
-            if (_responseType.isBackOffice)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  'バックオフィス業務は機器型番・プロワン管理番号の入力は不要です(任意)。',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-              ),
             const SizedBox(height: 12),
             _buildCoWorkerField(),
             const SizedBox(height: 12),
