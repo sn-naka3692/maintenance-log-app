@@ -366,12 +366,25 @@ class _StoreSystemReportView extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <MapEntry<String, String>>[
       MapEntry('弊社受付No.', data.receiptNumber),
+      // 【AIスキャン機能で追加】店番・住所・TELは作業報告書AIスキャン
+      // (Azure Document Intelligence)で読み取った内容。
+      MapEntry('店番', data.storeNumber),
+      MapEntry('住所(報告書記載)', data.scannedAddress),
+      MapEntry('TEL(報告書記載)', data.scannedTel),
       MapEntry('冷媒種類', data.refrigerantType),
       MapEntry('充填量', data.refrigerantAmount),
+      MapEntry('冷媒回収量', data.recoveryAmount),
       MapEntry('依頼内容', data.requestContent),
       MapEntry('設備名称', data.equipmentName),
       MapEntry('メーカー', data.maker),
       MapEntry('型式', data.modelNumber),
+      // 【AIスキャン機能で追加】機番・資産管理No・バーコード・納品日・
+      // 作業者氏名も報告書AIスキャンで読み取った内容。
+      MapEntry('機番', data.machineNo),
+      MapEntry('資産管理No', data.assetNo),
+      MapEntry('バーコード', data.barcode),
+      MapEntry('納品日', data.deliveryDate),
+      MapEntry('作業者氏名', data.workerName),
       MapEntry('部位', data.part),
       MapEntry('詳細部位', data.detailPart),
       MapEntry('事象', data.phenomenon),
