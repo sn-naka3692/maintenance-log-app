@@ -11,6 +11,7 @@ import '../models/store_system_report.dart';
 import '../models/user.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
+import '../services/photo_upload_service.dart';
 import '../services/prowan_job_cache_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/document_scan_flow.dart';
@@ -90,11 +91,20 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
   bool get isEditing => widget.existing != null;
 
+  // 写真のアップロード先パス(report_photos/{reportId}/...)を決めるために、
+  // 新規作成時もこの画面を開いた時点でIDを確定させておく
+  // (従来は保存時にappState.newId()を呼んでいたが、それでは写真アップロード
+  // 時にまだIDが存在しないため、initStateで先に確定させる方式に変更)。
+  late String _reportId;
+  // 保存前に選択された写真をアップロード中かどうか(保存ボタンの多重押下防止用)。
+  bool _isUploadingPhoto = false;
+
   @override
   void initState() {
     super.initState();
     _initSpeech();
     final e = widget.existing;
+    _reportId = e?.id ?? context.read<AppState>().newId();
     _selectedStoreId = e?.storeId;
     _clientNameCtrl = TextEditingController(text: e?.clientName ?? '');
     // storeIdが設定されている場合、自由入力欄は空。それ以外はclientNameを自由入力の初期値とする
@@ -786,23 +796,59 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     }
   }
 
+  /// 写真を選択し、Firebase StorageへアップロードしてダウンロードURLを
+  /// _photoPathsに追加する。
+  ///
+  /// 【不具合修正・2026-08】従来はimage_pickerが返すローカルファイルパス
+  /// (file.path)をそのまま保存していたため、撮影した端末以外では画像が
+  /// 一切表示できなかった。Firebase Storageへアップロードし、誰の端末
+  /// からでも参照可能なダウンロードURLを保存する方式に変更。
   Future<void> _pickPhoto() async {
     final picker = ImagePicker();
+    XFile? file;
     try {
-      final file = await picker.pickImage(
+      file = await picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 70,
       );
-      if (file != null) {
-        setState(() => _photoPaths.add(file.path));
-      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('写真の選択に失敗しました(Web環境では制限があります)')),
         );
       }
+      return;
     }
+    if (file == null) return;
+
+    setState(() => _isUploadingPhoto = true);
+    try {
+      final url = await PhotoUploadService.instance.uploadPhoto(
+        file: file,
+        reportId: _reportId,
+      );
+      if (mounted) {
+        setState(() {
+          _photoPaths.add(url);
+          _isUploadingPhoto = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('写真のアップロードに失敗しました: $e')),
+        );
+      }
+    }
+  }
+
+  /// 写真を一覧から削除する。アップロード済み(URL形式)の場合は
+  /// Storage側の実体も削除し、ゴミファイルが残らないようにする。
+  Future<void> _removePhotoAt(int index) async {
+    final removed = _photoPaths.removeAt(index);
+    setState(() {});
+    await PhotoUploadService.instance.deletePhoto(removed);
   }
 
   Future<void> _save() async {
@@ -880,7 +926,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       await appState.updateReport(r);
     } else {
       final report = WorkReport(
-        id: appState.newId(),
+        id: _reportId,
         authorId: user.id,
         authorName: user.name,
         coWorkerIds: List<String>.from(_selectedCoWorkerIds),
@@ -1316,9 +1362,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 const Text('写真', style: TextStyle(fontWeight: FontWeight.w700)),
                 const Spacer(),
                 TextButton.icon(
-                  onPressed: _pickPhoto,
-                  icon: const Icon(Icons.add_a_photo, size: 18),
-                  label: const Text('追加'),
+                  onPressed: _isUploadingPhoto ? null : _pickPhoto,
+                  icon: _isUploadingPhoto
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.add_a_photo, size: 18),
+                  label: Text(_isUploadingPhoto ? 'アップロード中...' : '追加'),
                 ),
               ],
             ),
@@ -1339,6 +1391,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   itemCount: _photoPaths.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (context, i) {
+                    final url = _photoPaths[i];
                     return Stack(
                       children: [
                         ClipRRect(
@@ -1347,15 +1400,44 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                             width: 90,
                             height: 90,
                             color: Colors.grey.shade200,
-                            child: const Icon(Icons.image, color: Colors.grey),
+                            child: url.startsWith('http')
+                                ? Image.network(
+                                    url,
+                                    width: 90,
+                                    height: 90,
+                                    fit: BoxFit.cover,
+                                    loadingBuilder:
+                                        (context, child, progress) {
+                                          if (progress == null) return child;
+                                          return const Center(
+                                            child: SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                    errorBuilder: (context, error, stack) =>
+                                        const Icon(
+                                          Icons.broken_image,
+                                          color: Colors.grey,
+                                        ),
+                                  )
+                                // アップロード前の旧データ(ローカルパスのみ保存されていた
+                                // 過去のレコード)は、実体が存在しないため表示できない。
+                                : const Icon(
+                                    Icons.image_not_supported,
+                                    color: Colors.grey,
+                                  ),
                           ),
                         ),
                         Positioned(
                           top: 2,
                           right: 2,
                           child: GestureDetector(
-                            onTap: () =>
-                                setState(() => _photoPaths.removeAt(i)),
+                            onTap: () => _removePhotoAt(i),
                             child: const CircleAvatar(
                               radius: 10,
                               backgroundColor: Colors.black54,

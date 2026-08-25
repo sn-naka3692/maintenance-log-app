@@ -5,6 +5,7 @@ import '../models/prowan_report_detail.dart';
 import '../models/store_system_report.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
+import '../services/photo_upload_service.dart';
 import '../theme/app_theme.dart';
 import 'report_edit_screen.dart';
 
@@ -79,6 +80,11 @@ class ReportDetailScreen extends StatelessWidget {
                   ),
                 );
                 if (confirm == true) {
+                  // 日報削除時、Storageに残った写真ファイルもまとめて
+                  // 削除する(ゴミファイルとしてStorage容量を消費しないようにする)。
+                  for (final url in report!.photoPaths) {
+                    await PhotoUploadService.instance.deletePhoto(url);
+                  }
                   await appState.deleteReport(reportId);
                   if (context.mounted) Navigator.pop(context);
                 }
@@ -280,6 +286,13 @@ class ReportDetailScreen extends StatelessWidget {
               child: Text(report.issuesPoints),
             ),
 
+          if (report.photoPaths.isNotEmpty)
+            _SectionCard(
+              title: '写真',
+              icon: Icons.photo_library,
+              child: _PhotoGalleryView(report.photoPaths),
+            ),
+
           if (report.tags.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -319,6 +332,168 @@ class ReportDetailScreen extends StatelessWidget {
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 日報に添付された写真のサムネイル一覧。タップすると全画面表示になる。
+///
+/// 【不具合修正・2026-08】旧データ(Firebase Storage対応前に保存された、
+/// ローカルファイルパスのみのレコード)はURL形式でないため実体が存在せず、
+/// 表示できない。その場合は「(この写真は他の端末では表示できません)」
+/// という案内を表示し、単に空白/エラーアイコンだけになるのを防ぐ。
+class _PhotoGalleryView extends StatelessWidget {
+  final List<String> photoUrls;
+  const _PhotoGalleryView(this.photoUrls);
+
+  @override
+  Widget build(BuildContext context) {
+    final legacyCount = photoUrls.where((p) => !p.startsWith('http')).length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 90,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: photoUrls.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final url = photoUrls[i];
+              final isRemote = url.startsWith('http');
+              return GestureDetector(
+                onTap: isRemote
+                    ? () => _openFullScreen(context, photoUrls, i)
+                    : null,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    width: 90,
+                    height: 90,
+                    color: Colors.grey.shade200,
+                    child: isRemote
+                        ? Image.network(
+                            url,
+                            width: 90,
+                            height: 90,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, progress) {
+                              if (progress == null) return child;
+                              return const Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stack) =>
+                                const Icon(
+                                  Icons.broken_image,
+                                  color: Colors.grey,
+                                ),
+                          )
+                        : const Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey,
+                          ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        if (legacyCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '※ 一部の写真($legacyCount枚)は撮影した端末以外では'
+              '表示できません(アップデート前に保存されたデータのため)。',
+              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _openFullScreen(
+    BuildContext context,
+    List<String> photoUrls,
+    int initialIndex,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _PhotoFullScreenView(
+          photoUrls: photoUrls,
+          initialIndex: initialIndex,
+        ),
+      ),
+    );
+  }
+}
+
+/// 写真の全画面表示(左右スワイプで複数枚を切り替え可能)。
+class _PhotoFullScreenView extends StatefulWidget {
+  final List<String> photoUrls;
+  final int initialIndex;
+  const _PhotoFullScreenView({
+    required this.photoUrls,
+    required this.initialIndex,
+  });
+
+  @override
+  State<_PhotoFullScreenView> createState() => _PhotoFullScreenViewState();
+}
+
+class _PhotoFullScreenViewState extends State<_PhotoFullScreenView> {
+  late final PageController _controller;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _controller = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('${_currentIndex + 1} / ${widget.photoUrls.length}'),
+      ),
+      body: PageView.builder(
+        controller: _controller,
+        itemCount: widget.photoUrls.length,
+        onPageChanged: (i) => setState(() => _currentIndex = i),
+        itemBuilder: (context, i) {
+          return InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4,
+            child: Center(
+              child: Image.network(
+                widget.photoUrls[i],
+                errorBuilder: (context, error, stack) => const Icon(
+                  Icons.broken_image,
+                  color: Colors.white,
+                  size: 48,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
