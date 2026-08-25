@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/user.dart';
+import '../models/work_report.dart';
 import '../providers/app_state.dart';
+import '../services/monthly_export_status_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_card.dart';
 import '../utils/csv_exporter.dart';
@@ -19,6 +22,171 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   String? _selectedAuthorId;
   bool _isExporting = false;
   bool _isSaving = false;
+
+  // ------------------------------------------------------------
+  // 月次CSVエクスポート(SE店舗分・プロワン案件分・社内業務分)関連
+  // ------------------------------------------------------------
+  final MonthlyExportStatusService _monthlyExportService =
+      MonthlyExportStatusService.instance;
+  MonthlyExportStatus? _monthlyStatus;
+  bool _monthlyStatusLoading = true;
+  bool _monthlyExportRunning = false;
+  // リマインドの対象は「前月」(まだ月末まで作業日が確定していない今月分は対象外)。
+  late final DateTime _targetMonth = _computePreviousMonth(DateTime.now());
+
+  static DateTime _computePreviousMonth(DateTime now) {
+    return now.month == 1
+        ? DateTime(now.year - 1, 12)
+        : DateTime(now.year, now.month - 1);
+  }
+
+  String get _targetMonthKey => DateFormat('yyyy-MM').format(_targetMonth);
+  String get _targetMonthLabel => DateFormat('yyyy年M月').format(_targetMonth);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMonthlyStatus());
+  }
+
+  Future<void> _loadMonthlyStatus() async {
+    setState(() => _monthlyStatusLoading = true);
+    try {
+      final status = await _monthlyExportService.fetchStatus(_targetMonthKey);
+      if (mounted) setState(() => _monthlyStatus = status);
+    } finally {
+      if (mounted) setState(() => _monthlyStatusLoading = false);
+    }
+  }
+
+  /// 対象月(前月)の日報を3分類(SE/プロワン/社内業務)に振り分けたうえで、
+  /// それぞれCSVを生成・共有(または保存)し、実施結果をFirestoreに記録する。
+  Future<void> _runMonthlyExport(
+    List<WorkReport> allReports, {
+    required bool saveToDevice,
+  }) async {
+    final appState = context.read<AppState>();
+    final monthly = CsvExporter.filterByMonth(
+      allReports,
+      _targetMonth.year,
+      _targetMonth.month,
+    );
+    final byCategory = CsvExporter.splitByCategory(monthly, appState.stores);
+    final authorName = appState.currentUser?.name ?? '';
+
+    setState(() => _monthlyExportRunning = true);
+
+    final resultCounts = <MonthlyExportCategory, int>{};
+    final errors = <String>[];
+
+    for (final category in MonthlyExportCategory.values) {
+      final reports = byCategory[category] ?? [];
+      resultCounts[category] = reports.length;
+      if (reports.isEmpty) {
+        // 対象0件のカテゴリも「出力済み」として記録し、翌月以降
+        // 意味のないリマインドが出続けないようにする。
+        try {
+          await _monthlyExportService.markExported(
+            monthKey: _targetMonthKey,
+            category: category.key,
+            count: 0,
+            exportedByName: authorName,
+          );
+        } catch (e) {
+          errors.add('${category.label}: 記録に失敗しました($e)');
+        }
+        continue;
+      }
+      try {
+        final prefix = '日報データ_${_targetMonthKey}_${category.label}';
+        if (saveToDevice) {
+          await CsvExporter.exportAndSaveToDevice(
+            reports,
+            fileNamePrefix: prefix,
+          );
+        } else {
+          await CsvExporter.exportAndShare(reports, fileNamePrefix: prefix);
+        }
+        await _monthlyExportService.markExported(
+          monthKey: _targetMonthKey,
+          category: category.key,
+          count: reports.length,
+          exportedByName: authorName,
+        );
+      } catch (e) {
+        errors.add('${category.label}: 出力に失敗しました($e)');
+      }
+    }
+
+    if (mounted) setState(() => _monthlyExportRunning = false);
+    await _loadMonthlyStatus();
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              errors.isEmpty ? Icons.check_circle : Icons.warning_amber,
+              color: errors.isEmpty ? AppColors.success : AppColors.warning,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('月次CSVエクスポート結果')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '対象月: $_targetMonthLabel(訪問日基準)',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              for (final category in MonthlyExportCategory.values)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.description_outlined, size: 16),
+                      const SizedBox(width: 6),
+                      Text('${category.label}: ${resultCounts[category] ?? 0}件'),
+                    ],
+                  ),
+                ),
+              if (errors.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'エラー:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.danger,
+                  ),
+                ),
+                for (final e in errors)
+                  Text('・$e', style: TextStyle(color: AppColors.danger)),
+              ],
+              const SizedBox(height: 10),
+              Text(
+                saveToDevice
+                    ? 'このデバイスに保存しました。データが蓄積してきたら、保存されたCSVファイルを会社のNASへ移動してください。'
+                    : '共有シートから、保存・送信先を選んでください。データが蓄積してきたら会社のNASへ移動してください。',
+                style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _exportCsv(List filtered, {required bool isAll}) async {
     if (filtered.isEmpty) {
@@ -73,6 +241,145 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  /// 月次CSVエクスポート(SE店舗分・プロワン案件分・社内業務分)の
+  /// リマインド表示+実行ボタンのカード。
+  Widget _buildMonthlyExportCard() {
+    final status = _monthlyStatus;
+    final allExported = status?.allExported ?? false;
+    final appState = context.watch<AppState>();
+    final monthlyReportCount = CsvExporter.filterByMonth(
+      appState.reports,
+      _targetMonth.year,
+      _targetMonth.month,
+    ).length;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: allExported
+            ? AppColors.success.withValues(alpha: 0.06)
+            : AppColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: allExported
+              ? AppColors.success.withValues(alpha: 0.25)
+              : AppColors.warning.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                allExported ? Icons.check_circle_outline : Icons.event_note,
+                color: allExported ? AppColors.success : AppColors.warning,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '月次CSVエクスポート($_targetMonthLabel分)',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_monthlyStatusLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(),
+            )
+          else if (allExported)
+            Text(
+              '$_targetMonthLabel分($monthlyReportCount件)は、SE店舗分・プロワン案件分・社内業務分すべて出力済みです。',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$_targetMonthLabel分($monthlyReportCount件)のCSVがまだ出力されていません。'
+                  '「対応区分」に応じてSE店舗分・プロワン案件分・社内業務分の3ファイルに'
+                  '自動で振り分けて出力します。データが蓄積したら会社のNASへ移してください。',
+                  style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+                ),
+                if (status != null) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      _exportStatusChip('SE店舗分', status.seExported),
+                      _exportStatusChip('プロワン案件分', status.prowanExported),
+                      _exportStatusChip('社内業務分', status.backofficeExported),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _monthlyExportRunning
+                      ? null
+                      : () => _runMonthlyExport(
+                          appState.reports,
+                          saveToDevice: false,
+                        ),
+                  icon: const Icon(Icons.ios_share, size: 18),
+                  label: const Text('共有で出力'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _monthlyExportRunning
+                      ? null
+                      : () => _runMonthlyExport(
+                          appState.reports,
+                          saveToDevice: true,
+                        ),
+                  icon: const Icon(Icons.save_alt, size: 18),
+                  label: const Text('保存で出力'),
+                ),
+              ),
+            ],
+          ),
+          if (_monthlyExportRunning)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _exportStatusChip(String label, bool exported) {
+    return Chip(
+      avatar: Icon(
+        exported ? Icons.check : Icons.close,
+        size: 14,
+        color: exported ? AppColors.success : Colors.grey.shade600,
+      ),
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      backgroundColor: exported
+          ? AppColors.success.withValues(alpha: 0.1)
+          : Colors.grey.shade200,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      side: BorderSide.none,
+    );
   }
 
   @override
@@ -335,6 +642,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ],
           ),
           const SizedBox(height: 10),
+          _buildMonthlyExportCard(),
+          const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(

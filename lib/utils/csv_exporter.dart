@@ -2,7 +2,40 @@ import 'dart:convert';
 import 'package:file_saver/file_saver.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import '../models/store.dart';
 import '../models/work_report.dart';
+
+/// 月次CSVエクスポートの3分類。
+///
+/// - se: SE店舗(コンビニ側システム入力控えあり)の日報
+/// - prowan: プロワン管轄案件(SE店舗以外の現場作業)の日報
+/// - backoffice: 事務・現場事務・倉庫作業・環境整備など店舗に紐づかない社内業務
+enum MonthlyExportCategory { se, prowan, backoffice }
+
+extension MonthlyExportCategoryLabel on MonthlyExportCategory {
+  String get label {
+    switch (this) {
+      case MonthlyExportCategory.se:
+        return 'SE店舗分';
+      case MonthlyExportCategory.prowan:
+        return 'プロワン案件分';
+      case MonthlyExportCategory.backoffice:
+        return '社内業務分';
+    }
+  }
+
+  /// Firestore記録用のキー('se' | 'prowan' | 'backoffice')
+  String get key {
+    switch (this) {
+      case MonthlyExportCategory.se:
+        return 'se';
+      case MonthlyExportCategory.prowan:
+        return 'prowan';
+      case MonthlyExportCategory.backoffice:
+        return 'backoffice';
+    }
+  }
+}
 
 /// 日報データをCSV形式に変換し、共有(ダウンロード/送信)するユーティリティ。
 ///
@@ -13,6 +46,58 @@ class CsvExporter {
   static final DateFormat _dateFmt = DateFormat('yyyy/MM/dd');
   static final DateFormat _timeFmt = DateFormat('HH:mm');
   static final DateFormat _dateTimeFmt = DateFormat('yyyy/MM/dd HH:mm');
+
+  /// 指定した対象月(yyyy年MM月、訪問日=作業日基準)の日報のみを抜き出す。
+  ///
+  /// 【月の区切り基準】訪問日(visitDate、=実際に作業を行った日)を基準とする。
+  /// 登録日(createdAt)ではない点に注意(月末に作業して翌月に登録するケース等でも
+  /// 「その作業が行われた月」で正しく集計できるようにするため)。
+  static List<WorkReport> filterByMonth(
+    List<WorkReport> reports,
+    int year,
+    int month,
+  ) {
+    return reports.where((r) {
+      return r.visitDate.year == year && r.visitDate.month == month;
+    }).toList();
+  }
+
+  /// 日報リストを「SE店舗分」「プロワン案件分」「社内業務分」の3分類に振り分ける。
+  ///
+  /// - 対応区分がバックオフィス系(事務・現場事務・倉庫作業・環境整備)の場合は
+  ///   店舗のSE/プロワン区別に関わらず「社内業務分」に分類する。
+  /// - それ以外(現場作業:定期点検・故障対応・修理・新設・設置・その他)は、
+  ///   store_idから店舗マスタを引いて isSE を判定する。
+  ///   店舗マスタに存在しない/未選択(自由入力のみ)の場合は「プロワン案件分」
+  ///   (SE店舗以外)として扱う。
+  static Map<MonthlyExportCategory, List<WorkReport>> splitByCategory(
+    List<WorkReport> reports,
+    List<Store> stores,
+  ) {
+    final storeById = {for (final s in stores) s.id: s};
+    final se = <WorkReport>[];
+    final prowan = <WorkReport>[];
+    final backoffice = <WorkReport>[];
+
+    for (final r in reports) {
+      if (r.responseType.isBackOffice) {
+        backoffice.add(r);
+        continue;
+      }
+      final store = r.storeId != null ? storeById[r.storeId] : null;
+      if (store?.isSE ?? false) {
+        se.add(r);
+      } else {
+        prowan.add(r);
+      }
+    }
+
+    return {
+      MonthlyExportCategory.se: se,
+      MonthlyExportCategory.prowan: prowan,
+      MonthlyExportCategory.backoffice: backoffice,
+    };
+  }
 
   /// 1つのフィールド値をCSV仕様に沿ってエスケープする。
   static String _escape(Object? value) {

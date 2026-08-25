@@ -70,6 +70,17 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // ------------------------------------------------------------
+    // monthly_export_status: 月次CSVエクスポート(SE/プロワン/社内業務)の
+    // 実施状況記録(管理者ダッシュボードのリマインド表示用)
+    // - 読み取り: ログイン済みなら誰でも可(リマインド表示に必要)
+    // - 書き込み: 管理者(一般/最高)のみ
+    // ------------------------------------------------------------
+    match /monthly_export_status/{monthKey} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // その他の未定義コレクションはデフォルトで拒否
     match /{document=**} {
       allow read, write: if false;
