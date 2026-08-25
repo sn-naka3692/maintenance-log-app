@@ -2,6 +2,17 @@
 import java.util.Properties
 import java.io.FileInputStream
 
+// リリース署名情報の読み込み(android/key.properties)。
+// このファイルは秘密情報を含むため.gitignoreでgit管理外になっている。
+// ファイルが存在しない場合(CI環境等)はnullのままとし、debug署名に
+// フォールバックする(ローカル開発時に build.gradle.kts がエラーにならないため)。
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+val hasReleaseSigningConfig = keystorePropertiesFile.exists()
+if (hasReleaseSigningConfig) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -49,11 +60,28 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // 【2026-08 正式切替】android/key.properties + release-key.jks が
+            // 存在する場合は正式なリリース署名を使用する。存在しない場合
+            // (万一の欠落・CI環境等)はdebug署名にフォールバックし、
+            // ビルド自体は失敗させない(ただし配布用ビルドとしては不可)。
+            signingConfig = if (hasReleaseSigningConfig) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

@@ -51,3 +51,8 @@ app.*.map.json
 # デプロイ手順は scripts/deploy_web_and_apk.sh を参照)
 web/downloads/*.data
 web/downloads/*.apk
+
+# リリース署名情報(秘密情報のため絶対にgit管理下に置かない)
+android/key.properties
+android/release-key.jks
+android/*.jks
