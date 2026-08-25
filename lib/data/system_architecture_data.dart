@@ -35,10 +35,22 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.13',
+    buildNumber: 22,
+    releaseDate: '2026-08-26',
+    summary: 'ホーム画面に「新しいバージョンがあります」お知らせバナーを追加(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
+    versionName: '1.2.12',
+    buildNumber: 21,
+    releaseDate: '2026-08-25',
+    summary: '月次CSVエクスポート機能を追加(管理者ダッシュボード)',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.3',
     buildNumber: 12,
     releaseDate: '2026-08-24',
-    summary: 'マニュアル(PDF/Web/MD)にAPK版QRコード・インストール手順を追加(★配布中の最新版)',
+    summary: 'マニュアル(PDF/Web/MD)にAPK版QRコード・インストール手順を追加',
   ),
   VersionBuildRecord(
     versionName: '1.2.2',

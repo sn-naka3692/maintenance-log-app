@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../data/changelog_data.dart';
 import '../providers/app_state.dart';
+import '../services/app_config_service.dart';
 import '../services/update_notice_service.dart';
+import '../utils/apk_update_flow.dart';
 import '../widgets/report_card.dart';
 import 'changelog_screen.dart';
 import 'report_detail_screen.dart';
@@ -19,6 +22,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _hasUnseenUpdate = false;
+
+  // 【更新お知らせ・v1.2.13で追加】サーバー側(Firestore)に登録されている
+  // 「現在配布中の最新バージョン」と、実機のビルド番号を比較し、
+  // 本当に未ダウンロードの新バージョンがある場合のみ true にする。
+  // 上の `_hasUnseenUpdate`(既にアプリ内に入っている更新履歴の未読フラグ)とは
+  // 目的が違い、こちらは「まだ一度も更新していない古い端末」にも
+  // 気づかせることができる。
+  bool _hasServerUpdate = false;
+  String _serverLatestVersion = '';
+
   // 【権限拡張・2026-08】一般ユーザーも他ユーザーの日報・業務内容を
   // 閲覧できるようにするための表示切替(true=全員の日報、false=自分の日報)。
   // アクセス制御自体はFirestore側で既に全ユーザーに開放されているため、
@@ -29,11 +42,23 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _checkUnseenUpdate();
+    _checkServerUpdate();
   }
 
   Future<void> _checkUnseenUpdate() async {
     final has = await UpdateNoticeService.hasUnseenUpdate();
     if (mounted) setState(() => _hasUnseenUpdate = has);
+  }
+
+  Future<void> _checkServerUpdate() async {
+    if (kIsWeb) return; // Web版は常に最新がサーブされるため対象外
+    final result = await AppConfigService.instance.checkUpdateAvailability();
+    if (mounted) {
+      setState(() {
+        _hasServerUpdate = result.hasNewerVersion;
+        _serverLatestVersion = result.latestVersion;
+      });
+    }
   }
 
   Future<void> _openChangelog() async {
@@ -88,7 +113,17 @@ class _HomeScreenState extends State<HomeScreen> {
         onRefresh: () async => appState.refreshReports(),
         child: CustomScrollView(
           slivers: [
-            if (_hasUnseenUpdate)
+            // 【更新お知らせ・v1.2.13】サーバー側で本当に新しいバージョンが
+            // 配布されている場合はこちらを優先表示(未ダウンロードの端末にも
+            // 気づかせる)。それ以外は従来の「更新履歴・未読」バナーを表示する。
+            if (_hasServerUpdate)
+              SliverToBoxAdapter(
+                child: _NewVersionBanner(
+                  latestVersion: _serverLatestVersion,
+                  onTap: () => downloadAndInstallLatestApkWithDialog(context),
+                ),
+              )
+            else if (_hasUnseenUpdate)
               SliverToBoxAdapter(child: _UpdateBanner(onTap: _openChangelog)),
             SliverToBoxAdapter(
               child: Padding(
@@ -251,6 +286,79 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         icon: const Icon(Icons.add),
         label: const Text('日報作成'),
+      ),
+    );
+  }
+}
+
+/// 【更新お知らせ・v1.2.13で追加】サーバー側で本当に新しいバージョンが
+/// 配布されている場合に表示するバナー。
+///
+/// `_UpdateBanner`(既にアプリ内に入っている更新履歴の未読フラグ)とは異なり、
+/// こちらはFirestoreに登録された「現在配布中の最新バージョン」と実機の
+/// ビルド番号を直接比較しているため、まだ一度も更新していない古い端末にも
+/// 正しく表示される。タップすると最新版APKのダウンロードが始まる。
+class _NewVersionBanner extends StatelessWidget {
+  final String latestVersion;
+  final VoidCallback onTap;
+  const _NewVersionBanner({required this.latestVersion, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.system_update_alt,
+                size: 18,
+                color: Colors.orange.shade800,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    latestVersion.isNotEmpty
+                        ? '新しいバージョン(v$latestVersion)があります'
+                        : '新しいバージョンがあります',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'タップして最新版をダウンロード',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.orange.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.orange.shade400),
+          ],
+        ),
       ),
     );
   }

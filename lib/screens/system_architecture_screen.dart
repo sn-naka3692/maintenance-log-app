@@ -27,8 +27,8 @@ class SystemArchitectureScreen extends StatelessWidget {
 
           _SectionHeader(
             icon: Icons.shield_outlined,
-            title: '強制アップデートゲート',
-            subtitle: '古いバージョンのアプリの利用をブロックする設定',
+            title: '強制アップデートゲート・更新お知らせ',
+            subtitle: '古いアプリの利用ブロック(強制)/新バージョンのお知らせ(任意)',
           ),
           const SizedBox(height: 10),
           const _ForceUpdateGateSection(),
@@ -440,11 +440,17 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
     );
     final messageCtrl = TextEditingController(text: _config.message);
     final urlCtrl = TextEditingController(text: _config.downloadUrl);
+    final latestVersionCtrl = TextEditingController(text: _config.latestVersion);
+    final latestBuildCtrl = TextEditingController(
+      text: _config.latestBuildNumber > 0
+          ? _config.latestBuildNumber.toString()
+          : '',
+    );
 
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('強制アップデートゲートの設定'),
+        title: const Text('強制アップデートゲート・更新お知らせの設定'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -480,6 +486,31 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
                   labelText: '新しいAPKのダウンロードURL(任意)',
                 ),
               ),
+              const Divider(height: 28),
+              const Text(
+                '下記は【更新お知らせ】(強制ではない)の設定です。'
+                '実機のビルド番号がここで入力したもの未満の場合、'
+                'ホーム画面上部に「新しいバージョンがあります」バナーが表示されます。'
+                'ブロックはされません。',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: latestVersionCtrl,
+                decoration: const InputDecoration(
+                  labelText: '現在配布中の最新バージョン名(任意、例: 1.2.13)',
+                  helperText: 'ホーム画面のバナーに表示される文字(表示用)',
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: latestBuildCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '現在配布中の最新ビルド番号(任意)',
+                  helperText: '空欄の場合は更新お知らせ機能を使用しない',
+                ),
+              ),
             ],
           ),
         ),
@@ -493,9 +524,21 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
               final parsed = int.tryParse(buildCtrl.text.trim());
               if (parsed == null || parsed < 0) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('ビルド番号は0以上の整数で入力してください。')),
+                  const SnackBar(content: Text('最低利用可能ビルド番号は0以上の整数で入力してください。')),
                 );
                 return;
+              }
+              final latestBuildText = latestBuildCtrl.text.trim();
+              if (latestBuildText.isNotEmpty) {
+                final parsedLatest = int.tryParse(latestBuildText);
+                if (parsedLatest == null || parsedLatest < 0) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(
+                      content: Text('最新ビルド番号は0以上の整数で入力してください。'),
+                    ),
+                  );
+                  return;
+                }
               }
               Navigator.pop(ctx, true);
             },
@@ -511,6 +554,8 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
       minSupportedBuild: int.parse(buildCtrl.text.trim()),
       message: messageCtrl.text.trim(),
       downloadUrl: urlCtrl.text.trim(),
+      latestVersion: latestVersionCtrl.text.trim(),
+      latestBuildNumber: int.tryParse(latestBuildCtrl.text.trim()) ?? 0,
     );
 
     if (!mounted) return;
@@ -521,7 +566,9 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
         content: Text(
           '最低利用可能ビルド番号を「${newConfig.minSupportedBuild}」に設定します。\n\n'
           'これより古いアプリを使っている社員は、次回ログイン時からアプリを'
-          '使用できなくなります(最高管理者は対象外)。',
+          '使用できなくなります(最高管理者は対象外)。\n\n'
+          '【更新お知らせ】最新ビルド番号: '
+          '${newConfig.latestBuildNumber > 0 ? newConfig.latestBuildNumber : "未設定"}',
         ),
         actions: [
           TextButton(
@@ -620,10 +667,49 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
               _InfoRow(label: 'お知らせ文', value: _config.message),
             if (_config.downloadUrl.isNotEmpty)
               _InfoRow(label: 'ダウンロードURL', value: _config.downloadUrl),
+            const Divider(height: 18),
+            Row(
+              children: [
+                Icon(
+                  _config.latestBuildNumber > 0
+                      ? Icons.notifications_active_outlined
+                      : Icons.notifications_off_outlined,
+                  size: 18,
+                  color: _config.latestBuildNumber > 0
+                      ? Colors.orange.shade700
+                      : Colors.grey,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _config.latestBuildNumber > 0
+                        ? '更新お知らせ: 有効(ホーム画面にバナー表示)'
+                        : '更新お知らせ: 未設定(バナーは表示されません)',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: _config.latestBuildNumber > 0
+                          ? Colors.orange.shade700
+                          : Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_config.latestVersion.isNotEmpty)
+              _InfoRow(label: '最新バージョン名', value: _config.latestVersion),
+            if (_config.latestBuildNumber > 0)
+              _InfoRow(
+                label: '最新ビルド番号',
+                value: '${_config.latestBuildNumber}',
+              ),
             const SizedBox(height: 8),
             Text(
-              '※ 新しいAPKをビルドするたびに、ここでビルド番号を更新してください。'
-              '更新しない場合、古いアプリでもそのまま使えてしまいます。',
+              '※ 新しいAPKをビルドするたびに、ここで「最低ビルド番号」と'
+              '「最新ビルド番号(更新お知らせ用)」の両方を更新してください。'
+              '更新しない場合、古いアプリでもそのまま使えてしまう/'
+              '新バージョンのお知らせが表示されないままになります。',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 10),
