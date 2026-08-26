@@ -225,6 +225,23 @@ class AppState extends ChangeNotifier {
     return result;
   }
 
+  /// 複数の案件を1つにまとめる(管理者用・案件一覧のまとめ機能)。
+  ///
+  /// [targetCaseId] に [sourceCaseIds] の内容(紐づく日報)を統合する。
+  /// まとめ元の案件ドキュメントは削除される。
+  Future<void> mergeCases({
+    required String targetCaseId,
+    required List<String> sourceCaseIds,
+  }) async {
+    await _caseService.mergeCases(
+      targetCaseId: targetCaseId,
+      sourceCaseIds: sourceCaseIds,
+    );
+    await _service.refreshAll();
+    _reports = _service.getAllReports();
+    notifyListeners();
+  }
+
   Future<AppUser> addUser({
     required String name,
     required String employeeCode,

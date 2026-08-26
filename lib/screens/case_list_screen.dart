@@ -27,6 +27,8 @@ class _CaseListScreenState extends State<CaseListScreen> {
   bool _onlySuggested = false;
   bool _onlyRefrigerantFilling = false;
   bool _resyncing = false;
+  bool _mergeMode = false;
+  final Set<String> _selectedForMerge = {};
 
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
@@ -63,11 +65,11 @@ class _CaseListScreenState extends State<CaseListScreen> {
     try {
       final appState = context.read<AppState>();
       final cases = await appState.getAllCases();
-      // 1件しか日報が紐づいていない案件は「グルーピングの意味がない」ため
-      // 一覧のノイズを減らす目的で除外する。
-      final filtered = cases.where((c) => c.linkedReportIds.length > 1).toList();
+      // 【2026-08変更】案件管理の観点から、単独対応の案件も含めて
+      // 全件表示する(以前は複数日報が紐づく案件のみ表示していたが、
+      // 経営側から「案件数の実態を把握したい」という要望のため撤廃)。
       setState(() {
-        _cases = filtered;
+        _cases = cases;
         _loading = false;
       });
     } catch (e) {
@@ -160,6 +162,151 @@ class _CaseListScreenState extends State<CaseListScreen> {
     }
   }
 
+  void _toggleMergeMode() {
+    setState(() {
+      _mergeMode = !_mergeMode;
+      _selectedForMerge.clear();
+    });
+  }
+
+  void _toggleSelectForMerge(String caseId) {
+    setState(() {
+      if (_selectedForMerge.contains(caseId)) {
+        _selectedForMerge.remove(caseId);
+      } else {
+        _selectedForMerge.add(caseId);
+      }
+    });
+  }
+
+  /// 選択した複数案件を1つにまとめる(管理者用)。
+  ///
+  /// 【背景】案件一覧を全件表示にしたことで、本来同じ案件なのに
+  /// 伝票No/受付Noの入力漏れ等により別々に分かれて表示されるケースが
+  /// 見えるようになった。これを管理者が手動で統合できるようにする。
+  Future<void> _mergeSelected() async {
+    if (_selectedForMerge.length < 2) return;
+    final selectedCases = _cases
+        .where((c) => _selectedForMerge.contains(c.id))
+        .toList();
+
+    // まとめ先を選ぶ(デフォルトは確実判定・日報数最多のものを推奨)
+    selectedCases.sort((a, b) {
+      if (a.isConfirmed != b.isConfirmed) {
+        return a.isConfirmed ? -1 : 1;
+      }
+      return b.linkedReportIds.length.compareTo(a.linkedReportIds.length);
+    });
+    String targetId = selectedCases.first.id;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        String selected = targetId;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: Text('${selectedCases.length}件の案件をまとめる'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'どの案件を「まとめ先」にしますか?\n'
+                    '他の案件はここに統合され、削除されます。',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  ...selectedCases.map(
+                    (c) => RadioListTile<String>(
+                      value: c.id,
+                      groupValue: selected,
+                      dense: true,
+                      title: Text(
+                        c.storeName.isNotEmpty ? c.storeName : '(店舗不明)',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      subtitle: Text(
+                        '${c.isConfirmed ? "確実" : "推測"} ・ '
+                        '日報${c.linkedReportIds.length}件'
+                        '${c.primaryKeyValue.isNotEmpty ? " ・ ${c.primaryKeyValue}" : ""}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      onChanged: (v) {
+                        if (v != null) setDialogState(() => selected = v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('キャンセル'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(selected),
+                child: const Text('この案件にまとめる'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (result == null) return;
+    targetId = result;
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('まとめてよろしいですか?'),
+        content: const Text(
+          '選択した案件を1つにまとめます。まとめ元の案件は削除され、'
+          '紐づく日報はすべてまとめ先に付け替えられます。\n\n'
+          'この操作は取り消せません(まとめ元に戻すには、日報を個別に'
+          '案件から切り離す必要があります)。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('まとめる'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    try {
+      final appState = context.read<AppState>();
+      await appState.mergeCases(
+        targetCaseId: targetId,
+        sourceCaseIds: _selectedForMerge.toList(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _mergeMode = false;
+        _selectedForMerge.clear();
+      });
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('案件をまとめました')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('まとめる処理に失敗しました: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('yyyy/M/d');
@@ -183,9 +330,22 @@ class _CaseListScreenState extends State<CaseListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('案件一覧'),
+        title: Text(_mergeMode ? '${_selectedForMerge.length}件選択中' : '案件一覧'),
+        leading: _mergeMode
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: 'まとめモードを終了',
+                onPressed: _toggleMergeMode,
+              )
+            : null,
         actions: [
-          if (isAdmin)
+          if (isAdmin && !_mergeMode)
+            IconButton(
+              icon: const Icon(Icons.merge_type),
+              tooltip: '案件をまとめる',
+              onPressed: _toggleMergeMode,
+            ),
+          if (isAdmin && !_mergeMode)
             IconButton(
               icon: _resyncing
                   ? const SizedBox(
@@ -197,7 +357,8 @@ class _CaseListScreenState extends State<CaseListScreen> {
               tooltip: '未グルーピング日報を再判定',
               onPressed: _resyncing ? null : _resyncUngrouped,
             ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+          if (!_mergeMode)
+            IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
         ],
       ),
       body: Column(
@@ -232,7 +393,9 @@ class _CaseListScreenState extends State<CaseListScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    '複数の日報が紐づいた案件のみを表示しています。伝票No・受付Noが一致した場合は確実な紐付け、番号がない場合は内容の類似度から自動的に推測しています。',
+                    _mergeMode
+                        ? 'まとめたい案件を2件以上選択してください。伝票No・受付Noが一致した場合は確実な紐付け、番号がない場合は内容の類似度から自動的に推測しています。'
+                        : '全ての案件を表示しています。伝票No・受付Noが一致した場合は確実な紐付け、番号がない場合は内容の類似度から自動的に推測しています。',
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ),
@@ -320,10 +483,16 @@ class _CaseListScreenState extends State<CaseListScreen> {
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final c = displayed[index];
+                      final selected = _selectedForMerge.contains(c.id);
                       return Card(
+                        color: selected ? AppColors.primary.withValues(alpha: 0.08) : null,
                         child: InkWell(
                           borderRadius: BorderRadius.circular(14),
                           onTap: () {
+                            if (_mergeMode) {
+                              _toggleSelectForMerge(c.id);
+                              return;
+                            }
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => CaseDetailScreen(caseId: c.id),
@@ -337,6 +506,14 @@ class _CaseListScreenState extends State<CaseListScreen> {
                               children: [
                                 Row(
                                   children: [
+                                    if (_mergeMode) ...[
+                                      Checkbox(
+                                        value: selected,
+                                        onChanged: (_) =>
+                                            _toggleSelectForMerge(c.id),
+                                      ),
+                                      const SizedBox(width: 4),
+                                    ],
                                     _statusBadge(c),
                                     if (c.hasRefrigerantFilling) ...[
                                       const SizedBox(width: 6),
@@ -422,6 +599,27 @@ class _CaseListScreenState extends State<CaseListScreen> {
                     },
                   ),
           ),
+          if (_mergeMode)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.merge_type),
+                    label: Text(
+                      _selectedForMerge.length >= 2
+                          ? '${_selectedForMerge.length}件をまとめる'
+                          : '2件以上選択してください',
+                    ),
+                    onPressed: _selectedForMerge.length >= 2
+                        ? _mergeSelected
+                        : null,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

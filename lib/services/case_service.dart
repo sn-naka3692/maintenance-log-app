@@ -368,6 +368,81 @@ class CaseService {
   }
 
   // ------------------------------------------------------------
+  // 案件を手動でまとめる(管理画面用・2026-08追加)
+  // ------------------------------------------------------------
+  //
+  // 【背景】案件一覧を「全件表示」にしたことで、実際は同じ案件なのに
+  // 伝票No/受付Noの入力漏れ等により別々の案件として表示されてしまう
+  // ケースが見えるようになった。これを管理者が手動で1つに統合できる
+  // ようにするための機能。
+  //
+  // 【設計】
+  // - まとめ先(targetCaseId)を1つ指定し、まとめ元(sourceCaseIds)に
+  //   紐づく日報をすべてまとめ先へ付け替える。
+  // - まとめ元の中に「確実」判定(伝票No/受付No一致)の案件が含まれ、
+  //   まとめ先がまだ「推測」判定だった場合は、その確実な判定情報を
+  //   まとめ先に引き継ぐ(より正確な情報を優先する)。
+  // - 統合後、まとめ元の案件ドキュメントは削除する。
+  // - 参加者・合計作業時間などは、加算方式による二重計上を避けるため
+  //   recalculateCase() で紐づく日報から正確に再計算する。
+  Future<void> mergeCases({
+    required String targetCaseId,
+    required List<String> sourceCaseIds,
+  }) async {
+    final otherIds = sourceCaseIds.where((id) => id != targetCaseId).toSet().toList();
+    if (otherIds.isEmpty) return;
+
+    final targetRef = _casesCol.doc(targetCaseId);
+    final targetSnap = await targetRef.get();
+    if (!targetSnap.exists) {
+      throw Exception('まとめ先の案件が見つかりません');
+    }
+    final targetCase = WorkCase.fromMap(targetSnap.id, targetSnap.data()!);
+
+    final allReportIds = <String>{...targetCase.linkedReportIds};
+
+    for (final srcId in otherIds) {
+      final srcSnap = await _casesCol.doc(srcId).get();
+      if (!srcSnap.exists) continue;
+      final srcCase = WorkCase.fromMap(srcSnap.id, srcSnap.data()!);
+      allReportIds.addAll(srcCase.linkedReportIds);
+
+      // まとめ先がまだ「推測」で、まとめ元が「確実」なら、確実な判定情報を引き継ぐ。
+      if (!targetCase.isConfirmed && srcCase.isConfirmed) {
+        targetCase.primaryKeyType = srcCase.primaryKeyType;
+        targetCase.primaryKeyValue = srcCase.primaryKeyValue;
+        targetCase.status = 'confirmed';
+      }
+    }
+
+    // 日報側のcase_idをまとめ先へ付け替える(Firestoreのバッチ上限を考慮し分割)
+    final reportIds = allReportIds.toList();
+    const chunkSize = 400;
+    for (var i = 0; i < reportIds.length; i += chunkSize) {
+      final end = (i + chunkSize > reportIds.length) ? reportIds.length : i + chunkSize;
+      final batch = _db.batch();
+      for (final rid in reportIds.sublist(i, end)) {
+        batch.update(_reportsCol.doc(rid), {'case_id': targetCaseId});
+      }
+      await batch.commit();
+    }
+
+    // まとめ先の案件情報(判定情報・紐づく日報一覧)を先に反映しておく
+    targetCase.linkedReportIds = reportIds;
+    await targetRef.set(targetCase.toMap());
+
+    // まとめ元の案件ドキュメントを削除
+    final deleteBatch = _db.batch();
+    for (final srcId in otherIds) {
+      deleteBatch.delete(_casesCol.doc(srcId));
+    }
+    await deleteBatch.commit();
+
+    // 紐づく日報から正確に再計算(参加者・合計作業時間等の整合性を保証)
+    await recalculateCase(targetCaseId);
+  }
+
+  // ------------------------------------------------------------
   // 未グルーピング日報の再判定(管理画面用・2026-08追加)
   // ------------------------------------------------------------
   //
