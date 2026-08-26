@@ -26,6 +26,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
   List<WorkReport> _results = [];
 
+  // 【検索結果のフォルダー化・2026-08追加】案件一覧と同様の方靈で、
+  // 検索結果(日報)も訪問日の年→月のフォルダー(ExpansionTile)に
+  // 分類して表示する。一番新しい年・年月のフォルダーだけを初期展開する。
+  int? _newestYear;
+  String? _newestYearMonthKey; // "yyyy-M" 形式
+
   @override
   void initState() {
     super.initState();
@@ -34,18 +40,53 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _runSearch() {
     final appState = context.read<AppState>();
+    final results = appState.search(
+      keyword: _keywordCtrl.text,
+      storeId: _filterStoreId,
+      responseType: _filterType,
+      from: _from,
+      to: _to,
+      onlySuccess: _onlySuccess,
+      onlyIssues: _onlyIssues,
+      onlyRefrigerantFilling: _onlyRefrigerantFilling,
+    );
+    _computeNewestYearMonth(results);
     setState(() {
-      _results = appState.search(
-        keyword: _keywordCtrl.text,
-        storeId: _filterStoreId,
-        responseType: _filterType,
-        from: _from,
-        to: _to,
-        onlySuccess: _onlySuccess,
-        onlyIssues: _onlyIssues,
-        onlyRefrigerantFilling: _onlyRefrigerantFilling,
-      );
+      _results = results;
     });
+  }
+
+  /// 一番新しい年・年月を算出し、フォルダーの初期展開状態の基準にする。
+  void _computeNewestYearMonth(List<WorkReport> reports) {
+    if (reports.isEmpty) {
+      _newestYear = null;
+      _newestYearMonthKey = null;
+      return;
+    }
+    final sorted = List<WorkReport>.from(reports)
+      ..sort((a, b) => b.visitDate.compareTo(a.visitDate));
+    final newest = sorted.first.visitDate;
+    _newestYear = newest.year;
+    _newestYearMonthKey = '${newest.year}-${newest.month}';
+  }
+
+  /// 検索結果(日報)を訪問日の年→月の階層マップに分類する。
+  /// 戻り値: {年: {月: [日報一覧(訪問日新しい順)]}}
+  Map<int, Map<int, List<WorkReport>>> _groupByYearMonth(
+    List<WorkReport> reports,
+  ) {
+    final map = <int, Map<int, List<WorkReport>>>{};
+    for (final r in reports) {
+      final date = r.visitDate;
+      final monthMap = map.putIfAbsent(date.year, () => {});
+      monthMap.putIfAbsent(date.month, () => []).add(r);
+    }
+    for (final monthMap in map.values) {
+      for (final list in monthMap.values) {
+        list.sort((a, b) => b.visitDate.compareTo(a.visitDate));
+      }
+    }
+    return map;
   }
 
   Future<void> _pickRange() async {
@@ -71,7 +112,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('M/d');
     return Scaffold(
-      appBar: AppBar(title: const Text('日報検索・ナレッジ検索')),
+      appBar: AppBar(title: const Text('日報・ナレッジ')),
       body: Column(
         children: [
           Padding(
@@ -230,27 +271,110 @@ class _SearchScreenState extends State<SearchScreen> {
                       ],
                     ),
                   )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    itemCount: _results.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final r = _results[index];
-                      return ReportCard(
-                        report: r,
-                        showAuthor: true,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  ReportDetailScreen(reportId: r.id),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
+                : _buildGroupedResults(),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// 【検索結果のフォルダー化】検索結果(日報)を訪問日の年→月フォルダーに
+  /// 分類して表示する。案件一覧画面と同じ設計思想(最新の年・年月だけ
+  /// 初期展開)。
+  Widget _buildGroupedResults() {
+    final grouped = _groupByYearMonth(_results);
+    final years = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      children: [
+        for (final year in years) _buildYearFolder(year, grouped[year]!),
+      ],
+    );
+  }
+
+  /// 「年」フォルダー(ExpansionTile)。その下に「月」フォルダーを内包する。
+  Widget _buildYearFolder(int year, Map<int, List<WorkReport>> monthMap) {
+    final months = monthMap.keys.toList()..sort((a, b) => b.compareTo(a));
+    final totalCount = monthMap.values.fold<int>(0, (sum, l) => sum + l.length);
+    final initiallyExpanded = year == _newestYear;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: PageStorageKey('report_year_$year'),
+          initiallyExpanded: initiallyExpanded,
+          leading: const Icon(Icons.folder_outlined, color: Colors.indigo),
+          title: Text(
+            '$year年',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$totalCount件',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.expand_more),
+            ],
+          ),
+          children: [
+            for (final month in months)
+              _buildMonthFolder(year, month, monthMap[month]!),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 「月」フォルダー(ExpansionTile)。日報カード一覧を内包する。
+  Widget _buildMonthFolder(int year, int month, List<WorkReport> reports) {
+    final monthKey = '$year-$month';
+    final initiallyExpanded = monthKey == _newestYearMonthKey;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 8),
+      child: ExpansionTile(
+        key: PageStorageKey('report_month_$monthKey'),
+        initiallyExpanded: initiallyExpanded,
+        leading: const Icon(Icons.folder_open_outlined, size: 20),
+        title: Text(
+          '$month月',
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${reports.length}件',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.expand_more, size: 20),
+          ],
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+        children: [
+          for (final r in reports)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ReportCard(
+                report: r,
+                showAuthor: true,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ReportDetailScreen(reportId: r.id),
+                    ),
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );

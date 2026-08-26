@@ -78,7 +78,7 @@ class _MainNavigationState extends State<MainNavigation> {
       const BottomNavigationBarItem(
         icon: Icon(Icons.search_outlined),
         activeIcon: Icon(Icons.search),
-        label: '検索',
+        label: '日報・ナレッジ',
       ),
       const BottomNavigationBarItem(
         icon: Icon(Icons.folder_outlined),
