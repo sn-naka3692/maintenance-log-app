@@ -20,7 +20,7 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(js|css)",
+        "source": "**/canvaskit/**",
         "headers": [
           {
             "key": "Cache-Control",
@@ -29,11 +29,29 @@
         ]
       },
       {
-        "source": "**/*.@(pdf|html|md)",
+        "source": "assets/**",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache"
+            "value": "max-age=31536000"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(js|css|html|md|pdf|json)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
           }
         ]
       }

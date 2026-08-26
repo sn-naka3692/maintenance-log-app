@@ -87,6 +87,40 @@
     <button class="close-btn" id="pwa-install-close" aria-label="閉じる">×</button>
   </div>
 
+  <script>
+    // ------------------------------------------------------------
+    // 【重要・2026-08-26追記】過去のバージョンで登録されたPWA用の
+    // Service Workerが端末に残っていると、サーバー側を更新しても
+    // 古いキャッシュがずっと表示され続けてしまう不具合があった
+    // (v1.2.15で「Web版がv1.2.13のまま更新されない」問い合わせが発生)。
+    // v1.2.15以降は --pwa-strategy=none でService Workerの新規登録を
+    // 止めたが、それだけでは「既に登録済みの古いService Worker」は
+    // 消えないため、ここで明示的に登録解除 + 関連キャッシュの削除を
+    // 行い、まだ一度も踏んでいない端末を自動的に正常化する。
+    // この処理自体は数回実行されても副作用がないため、恒久的に
+    // 残しておいて問題ない。
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.getRegistrations().then(function (registrations) {
+        if (!registrations.length) return;
+        var hadServiceWorker = true;
+        registrations.forEach(function (registration) {
+          registration.unregister();
+        });
+        if ('caches' in window) {
+          caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+          }).finally(function () {
+            if (hadServiceWorker) window.location.reload();
+          });
+        } else if (hadServiceWorker) {
+          window.location.reload();
+        }
+      }).catch(function (e) {
+        console.warn('Service Worker解除処理でエラー:', e);
+      });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
   <script>
     (function () {
