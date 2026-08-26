@@ -271,6 +271,12 @@ class BatchScanResult {
 class PageScanResult {
   final int pageNumber;
   final String status; // "ok" | "low_confidence" | "error"
+
+  /// サーバー側(function_app.py)がSE用・プロワン用の2モデルを並行解析し、
+  /// confidence比較の結果判定した書式種別。
+  /// "SEDocType" | "ProWanDocType"。月末チェックは全案件対象のため、
+  /// このdocTypeに応じて突合キー(弊社受付No or 伝票No)を切り替えること。
+  final String docType;
   final double documentConfidence;
   final Map<String, String> values;
   final Map<String, double> confidences;
@@ -279,6 +285,7 @@ class PageScanResult {
   const PageScanResult({
     required this.pageNumber,
     required this.status,
+    required this.docType,
     required this.documentConfidence,
     required this.values,
     required this.confidences,
@@ -289,10 +296,24 @@ class PageScanResult {
   bool get isLowConfidence => status == 'low_confidence';
   bool get isError => status == 'error';
 
-  /// この抽出結果を突合キーとして使う「弊社受付No」
+  bool get isSeDocument => docType == 'SEDocType';
+  bool get isProWanDocument => docType == 'ProWanDocType';
+
+  /// SE店舗案件の突合キーとして使う「弊社受付No」(SEDocTypeの場合のみ意味を持つ)
   String get companyReceiptNumber => values['CompanyReceiptNumber'] ?? '';
 
-  /// 「他◯名」の人数部分(数字文字列、未検出は空文字)
+  /// プロワン管轄案件の突合キーとして使う「伝票No(案件管理番号)」
+  /// (ProWanDocTypeの場合のみ意味を持つ)
+  String get proWanRefNumber => values['ProWanRefNumber'] ?? '';
+
+  /// このページ種別に応じた突合キーを返す(未判定の場合は空文字)。
+  String get matchingKey {
+    if (isProWanDocument) return proWanRefNumber;
+    if (isSeDocument) return companyReceiptNumber;
+    return '';
+  }
+
+  /// 「他◯名」の人数部分(数字文字列、未検出は空文字)。SE用モデルのみ抽出。
   String get otherWorkersCount => values['OtherWorkersCount'] ?? '';
 
   factory PageScanResult.fromMap(Map<String, dynamic> map) {
@@ -301,6 +322,7 @@ class PageScanResult {
     return PageScanResult(
       pageNumber: (map['pageNumber'] as num?)?.toInt() ?? 0,
       status: map['status'] as String? ?? 'error',
+      docType: map['docType'] as String? ?? '',
       documentConfidence:
           (map['documentConfidence'] as num?)?.toDouble() ?? 0.0,
       values: {

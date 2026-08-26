@@ -13,15 +13,20 @@ import '../theme/app_theme.dart';
 ///
 /// 管理者が月末に、紙の作業報告書をコピー機でまとめてスキャンした
 /// PDF(1ページ=1案件)をアップロードすると、ページ単位に分割して
-/// AI-OCR解析し、各ページの「弊社受付No」を主キーにアプリ側の
-/// 日報データ(WorkReport.storeSystemReportCopy.receiptNumber)と
-/// 自動突合する。突合できなかったページ = 未提出(記入漏れ)の
-/// 可能性がある案件として一覧表示する。
+/// AI-OCR解析し、アプリ側の日報データと自動突合する。突合できなかった
+/// ページ = 未提出(記入漏れ)の可能性がある案件として一覧表示する。
+///
+/// 【全案件対応・SE店舗分/プロワン管轄分の両対応】
+/// 1ページごとにSE用モデル・プロワン用モデルの両方で解析し、
+/// confidenceが高い方を採用した書式判定結果(docType)に応じて、
+/// 突合キーを切り替える:
+///   - SEDocType   : 弊社受付No (WorkReport.storeSystemReportCopy.receiptNumber)
+///   - ProWanDocType: 伝票No/案件管理番号 (WorkReport.proWanRefNumber)
 ///
 /// 【設計方針】
-/// - 弊社受付Noのみを主キーとした突合。「他◯名」はヘルパー個人の
-///   特定まではできないため、あくまで参考情報(人数の目安)として
-///   表示するのみに留める。
+/// - 主キー(受付No or 伝票No)のみを突合対象とする。「他◯名」(SE用紙のみ
+///   記載)はヘルパー個人の特定まではできないため、あくまで参考情報
+///   (人数の目安)として表示するのみに留める。
 /// - Azure Functions側の実行時間上限対策として、1回のリクエストで
 ///   最大 DocumentScanService.maxPagesPerRequest ページまでしか
 ///   処理できないため、進捗バーを見せながら分割リクエストする。
@@ -149,7 +154,7 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
     }
   }
 
-  /// 弊社受付Noを主キーとして、アプリ側の日報データと突合する。
+  /// docType(SE/プロワン)に応じた主キーで、アプリ側の日報データと突合する。
   _PageCheckResult _matchAgainstReports(
     PageScanResult scan,
     List<WorkReport> reports,
@@ -164,16 +169,30 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
       );
     }
 
-    final receiptNumber = scan.companyReceiptNumber.trim();
-    if (receiptNumber.isEmpty) {
+    // 【全案件対応】書式種別(docType)に応じて突合キーを切り替える。
+    // - SE店舗案件: 弊社受付No (WorkReport.storeSystemReportCopy.receiptNumber)
+    // - プロワン管轄案件: 伝票No/案件管理番号 (WorkReport.proWanRefNumber)
+    final matchingKey = scan.matchingKey.trim();
+    if (matchingKey.isEmpty) {
       return _PageCheckResult(scan: scan, matchStatus: _MatchStatus.unmatched);
     }
 
     WorkReport? found;
-    for (final r in reports) {
-      if (r.storeSystemReportCopy.receiptNumber.trim() == receiptNumber) {
-        found = r;
-        break;
+    if (scan.isProWanDocument) {
+      for (final r in reports) {
+        if (r.proWanRefNumber.trim() == matchingKey) {
+          found = r;
+          break;
+        }
+      }
+    } else {
+      // isSeDocument、または将来docType未設定の古いレスポンスへの
+      // 後方互換フォールバックとしてもSE側キーで突合を試みる。
+      for (final r in reports) {
+        if (r.storeSystemReportCopy.receiptNumber.trim() == matchingKey) {
+          found = r;
+          break;
+        }
       }
     }
 
@@ -213,8 +232,9 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
             children: [
               Text(
                 '紙の作業報告書をまとめてスキャンしたPDF(1ページ=1案件)を'
-                'アップロードしてください。弊社受付Noを読み取り、アプリ側の'
-                '日報データと自動で突合します。',
+                'アップロードしてください。SE店舗分(弊社受付No)・プロワン'
+                '管轄分(伝票No)の両方を自動判定し、アプリ側の日報データと'
+                '突合します。',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
               ),
               const SizedBox(height: 16),
@@ -398,7 +418,8 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
         break;
     }
 
-    final receiptNumber = scan.companyReceiptNumber;
+    final matchingKey = scan.matchingKey;
+    final keyLabel = scan.isProWanDocument ? '伝票No' : '受付No';
     final otherWorkers = scan.otherWorkersCount;
 
     return Card(
@@ -406,9 +427,9 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
       child: ListTile(
         leading: Icon(icon, color: color),
         title: Text(
-          receiptNumber.isNotEmpty
-              ? '受付No: $receiptNumber'
-              : 'ページ${scan.pageNumber}(受付No未読取)',
+          matchingKey.isNotEmpty
+              ? '$keyLabel: $matchingKey'
+              : 'ページ${scan.pageNumber}($keyLabel未読取)',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         subtitle: Text(
