@@ -99,6 +99,19 @@ service cloud.firestore {
       allow read, create, update, delete: if isSignedIn();
     }
 
+    // ------------------------------------------------------------
+    // submission_checks: 月末チェック(日報記入率)機能の突合結果
+    // 紙報告書PDFをOCR解析し、アプリ側日報データと突合した結果を
+    // 月(check_month, "yyyy-MM")ごとに記録する。
+    // - 読み取り: ログイン済みなら誰でも可(結果確認のため)
+    // - 書き込み: 管理者(一般/最高)のみ。月末チェック機能自体が
+    //   管理画面からのみ実行可能なため、書き込み権限も管理者に限定する。
+    // ------------------------------------------------------------
+    match /submission_checks/{recordId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
     // その他の未定義コレクションはデフォルトで拒否
     match /{document=**} {
       allow read, write: if false;

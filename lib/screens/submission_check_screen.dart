@@ -2,11 +2,14 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../models/submission_check_record.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../services/document_scan_service.dart';
+import '../services/submission_check_service.dart';
 import '../theme/app_theme.dart';
 
 /// 【月末チェック(日報記入率)機能】
@@ -43,12 +46,19 @@ class _PageCheckResult {
   final PageScanResult scan;
   final _MatchStatus matchStatus;
   final WorkReport? matchedReport;
+  // Firestoreから復元した場合、matchedReportそのものは保持しないため
+  // 表示用に作成者名だけをキャッシュしておく。
+  final String? matchedReportAuthorName;
 
   const _PageCheckResult({
     required this.scan,
     required this.matchStatus,
     this.matchedReport,
+    this.matchedReportAuthorName,
   });
+
+  String get displayAuthorName =>
+      matchedReport?.authorName ?? matchedReportAuthorName ?? '';
 }
 
 class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
@@ -60,7 +70,82 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
   int _processedPages = 0;
   String? _errorMessage;
 
+  bool _saving = false;
+  bool _saved = false;
+
   final List<_PageCheckResult> _results = [];
+
+  /// この画面で扱う対象月(実行時点の年月、"yyyy-MM")。
+  /// 保存/履歴読込のキーとして使う。
+  late final String _checkMonth = DateFormat('yyyy-MM').format(DateTime.now());
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSavedResults());
+  }
+
+  /// 今月分の突合結果が既にFirestoreに保存されていれば読み込んで表示する
+  /// (画面を閉じて再度開いた場合に前回結果を確認できるようにするため)。
+  Future<void> _loadSavedResults() async {
+    final saved = await SubmissionCheckService.instance.fetchResultsForMonth(
+      _checkMonth,
+    );
+    if (!mounted || saved.isEmpty) return;
+    setState(() {
+      _results
+        ..clear()
+        ..addAll(saved.map(_toPageCheckResult));
+      _totalPages = saved.length;
+      _saved = true;
+    });
+  }
+
+  /// Firestoreから読み込んだ保存済みレコードを、画面表示用の
+  /// _PageCheckResult(スキャン直後の形式と同じ)に変換する。
+  /// PDF再アップロードなしで一覧表示するための簡易的な変換であり、
+  /// confidencesマップ等の詳細情報までは復元しない。
+  _PageCheckResult _toPageCheckResult(SubmissionCheckRecord record) {
+    final scan = PageScanResult(
+      pageNumber: record.pageNumber,
+      status: record.matchStatus == SubmissionMatchStatus.error
+          ? 'error'
+          : record.matchStatus == SubmissionMatchStatus.lowConfidence
+          ? 'low_confidence'
+          : 'ok',
+      docType: record.docType,
+      documentConfidence: record.documentConfidence,
+      values: {
+        if (record.isProWan) 'ProWanRefNumber': record.matchingKey,
+        if (!record.isProWan) 'CompanyReceiptNumber': record.matchingKey,
+        'StoreName': record.storeName,
+        'OtherWorkersCount': record.otherWorkersCount,
+      },
+      confidences: const {},
+      error: record.errorMessage,
+    );
+    late final _MatchStatus matchStatus;
+    switch (record.matchStatus) {
+      case SubmissionMatchStatus.matched:
+        matchStatus = _MatchStatus.matched;
+        break;
+      case SubmissionMatchStatus.unmatched:
+        matchStatus = _MatchStatus.unmatched;
+        break;
+      case SubmissionMatchStatus.lowConfidence:
+        matchStatus = _MatchStatus.lowConfidence;
+        break;
+      case SubmissionMatchStatus.error:
+        matchStatus = _MatchStatus.error;
+        break;
+    }
+    return _PageCheckResult(
+      scan: scan,
+      matchStatus: matchStatus,
+      matchedReport: null,
+      matchedReportAuthorName: record.matchedReportAuthorName,
+    );
+  }
 
   Future<void> _pickPdf() async {
     setState(() {
@@ -105,6 +190,7 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
       _processing = true;
       _processedPages = 0;
       _errorMessage = null;
+      _saved = false;
       _results.clear();
     });
 
@@ -143,6 +229,12 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
 
         startPage = endPage + 1;
       }
+
+      // 全ページの解析が完了したら、突合結果をFirestoreに永続化する。
+      // (同月の既存結果があれば内部で上書きされる)
+      if (mounted && _results.isNotEmpty) {
+        await _saveResultsToFirestore();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -152,6 +244,76 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
     } finally {
       if (mounted) setState(() => _processing = false);
     }
+  }
+
+  /// 突合結果一覧をFirestore `submission_checks` コレクションに保存する。
+  /// 対象月は実行時点の年月(_checkMonth)。同月の既存レコードがあれば
+  /// サービス側で自動的に削除→差し替えされる。
+  Future<void> _saveResultsToFirestore() async {
+    final appState = context.read<AppState>();
+    final currentUser = appState.currentUser;
+
+    setState(() => _saving = true);
+    try {
+      final records = _results
+          .map((r) => _toSubmissionCheckRecord(r, currentUser))
+          .toList();
+      await SubmissionCheckService.instance.saveResults(
+        checkMonth: _checkMonth,
+        records: records,
+      );
+      if (mounted) {
+        setState(() => _saved = true);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('突合結果を保存しました')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('突合結果の保存に失敗しました: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  SubmissionCheckRecord _toSubmissionCheckRecord(
+    _PageCheckResult result,
+    dynamic currentUser,
+  ) {
+    final scan = result.scan;
+    late final SubmissionMatchStatus status;
+    switch (result.matchStatus) {
+      case _MatchStatus.matched:
+        status = SubmissionMatchStatus.matched;
+        break;
+      case _MatchStatus.unmatched:
+        status = SubmissionMatchStatus.unmatched;
+        break;
+      case _MatchStatus.lowConfidence:
+        status = SubmissionMatchStatus.lowConfidence;
+        break;
+      case _MatchStatus.error:
+        status = SubmissionMatchStatus.error;
+        break;
+    }
+    return SubmissionCheckRecord(
+      checkMonth: _checkMonth,
+      docType: scan.docType,
+      matchingKey: scan.matchingKey,
+      matchStatus: status,
+      storeName: scan.values['StoreName'] ?? '',
+      otherWorkersCount: scan.otherWorkersCount,
+      documentConfidence: scan.documentConfidence,
+      pageNumber: scan.pageNumber,
+      matchedReportId: result.matchedReport?.id,
+      matchedReportAuthorName: result.matchedReport?.authorName,
+      errorMessage: scan.error,
+      uploadedById: currentUser?.id ?? '',
+      uploadedByName: currentUser?.name ?? '',
+    );
   }
 
   /// docType(SE/プロワン)に応じた主キーで、アプリ側の日報データと突合する。
@@ -223,7 +385,32 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
     final unmatchedCount = _unmatchedResults.length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('月末チェック(日報記入率)')),
+      appBar: AppBar(
+        title: const Text('月末チェック(日報記入率)'),
+        actions: [
+          if (_saving)
+            const Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            )
+          else if (_saved)
+            const Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Center(
+                child: Icon(Icons.cloud_done_outlined, color: Colors.white),
+              ),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -234,9 +421,31 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
                 '紙の作業報告書をまとめてスキャンしたPDF(1ページ=1案件)を'
                 'アップロードしてください。SE店舗分(弊社受付No)・プロワン'
                 '管轄分(伝票No)の両方を自動判定し、アプリ側の日報データと'
-                '突合します。',
+                '突合します。結果は対象月($_checkMonth)ごとにFirestoreへ'
+                '自動保存され、同月内に再実行すると前回結果が上書きされます。',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
               ),
+              if (_saved && !_processing) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.cloud_done_outlined,
+                      size: 16,
+                      color: AppColors.success,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$_checkMonth 分の結果は保存済みです',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 16),
               Card(
                 child: Padding(
@@ -399,7 +608,7 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
       case _MatchStatus.matched:
         icon = Icons.check_circle_outline;
         color = AppColors.success;
-        statusLabel = '突合OK(${result.matchedReport?.authorName ?? ''})';
+        statusLabel = '突合OK(${result.displayAuthorName})';
         break;
       case _MatchStatus.unmatched:
         icon = Icons.help_outline;
