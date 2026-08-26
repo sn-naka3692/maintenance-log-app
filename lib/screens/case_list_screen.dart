@@ -30,6 +30,14 @@ class _CaseListScreenState extends State<CaseListScreen> {
   bool _mergeMode = false;
   final Set<String> _selectedForMerge = {};
 
+  // 【案件フォルダー化・2026-08追加】案件が増えてきた際の一覧性対策として、
+  // 確定案件(status != 'suggested')を年→月のフォルダー(ExpansionTile)に
+  // 分類して表示する。「要確認(推測)」の案件は判定が曖昧で見落とし厳禁の
+  // ため、年月を問わず常に画面上部に平置き表示する(フォルダーの中に
+  // 埋もれさせない)。
+  int? _newestYear;
+  String? _newestYearMonthKey; // "yyyy-M" 形式(初期展開の基準)
+
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
 
@@ -68,6 +76,7 @@ class _CaseListScreenState extends State<CaseListScreen> {
       // 【2026-08変更】案件管理の観点から、単独対応の案件も含めて
       // 全件表示する(以前は複数日報が紐づく案件のみ表示していたが、
       // 経営側から「案件数の実態を把握したい」という要望のため撤廃)。
+      _computeNewestYearMonth(cases);
       setState(() {
         _cases = cases;
         _loading = false;
@@ -78,6 +87,45 @@ class _CaseListScreenState extends State<CaseListScreen> {
         _loading = false;
       });
     }
+  }
+
+  /// 案件の「日付」を1つに定める共通ロジック(グルーピング・並び替え用)。
+  /// 訪問日が無い(=まだ日報が紐づいていない)ケースは更新日時で代替する。
+  DateTime _caseSortDate(WorkCase c) =>
+      c.lastVisitDate ?? c.firstVisitDate ?? c.updatedAt;
+
+  /// 一番新しい年・年月を算出し、フォルダーの初期展開状態の基準にする。
+  /// 確定案件(status != 'suggested')を優先的に基準にする(「要確認」は
+  /// フォルダー化の対象外のため)。確定案件が1件も無い場合のみ全件から算出。
+  void _computeNewestYearMonth(List<WorkCase> cases) {
+    final confirmed = cases.where((c) => c.status != 'suggested').toList();
+    final source = confirmed.isNotEmpty ? confirmed : cases;
+    if (source.isEmpty) {
+      _newestYear = null;
+      _newestYearMonthKey = null;
+      return;
+    }
+    source.sort((a, b) => _caseSortDate(b).compareTo(_caseSortDate(a)));
+    final newest = _caseSortDate(source.first);
+    _newestYear = newest.year;
+    _newestYearMonthKey = '${newest.year}-${newest.month}';
+  }
+
+  /// 確定案件(要確認以外)を年→月の階層マップに分類する。
+  /// 戻り値: {年: {月: [案件一覧(日付新しい順)]}}
+  Map<int, Map<int, List<WorkCase>>> _groupByYearMonth(List<WorkCase> cases) {
+    final map = <int, Map<int, List<WorkCase>>>{};
+    for (final c in cases) {
+      final date = _caseSortDate(c);
+      final monthMap = map.putIfAbsent(date.year, () => {});
+      monthMap.putIfAbsent(date.month, () => []).add(c);
+    }
+    for (final monthMap in map.values) {
+      for (final list in monthMap.values) {
+        list.sort((a, b) => _caseSortDate(b).compareTo(_caseSortDate(a)));
+      }
+    }
+    return map;
   }
 
   /// 未グルーピングの日報を一括で再判定する(管理者用)。
@@ -154,9 +202,9 @@ class _CaseListScreenState extends State<CaseListScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('再判定処理に失敗しました: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('再判定処理に失敗しました: $e')));
     } finally {
       if (mounted) setState(() => _resyncing = false);
     }
@@ -296,9 +344,9 @@ class _CaseListScreenState extends State<CaseListScreen> {
       });
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('案件をまとめました')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('案件をまとめました')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -477,127 +525,7 @@ class _CaseListScreenState extends State<CaseListScreen> {
                       ],
                     ),
                   )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    itemCount: displayed.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final c = displayed[index];
-                      final selected = _selectedForMerge.contains(c.id);
-                      return Card(
-                        color: selected ? AppColors.primary.withValues(alpha: 0.08) : null,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () {
-                            if (_mergeMode) {
-                              _toggleSelectForMerge(c.id);
-                              return;
-                            }
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => CaseDetailScreen(caseId: c.id),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    if (_mergeMode) ...[
-                                      Checkbox(
-                                        value: selected,
-                                        onChanged: (_) =>
-                                            _toggleSelectForMerge(c.id),
-                                      ),
-                                      const SizedBox(width: 4),
-                                    ],
-                                    _statusBadge(c),
-                                    if (c.hasRefrigerantFilling) ...[
-                                      const SizedBox(width: 6),
-                                      _refrigerantBadge(),
-                                    ],
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        c.storeName.isNotEmpty
-                                            ? c.storeName
-                                            : '(店舗不明)',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (c.primaryKeyValue.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '伝票/受付No: ${c.primaryKeyValue}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.groups,
-                                      size: 14,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      c.participants
-                                          .map((p) => p.authorName)
-                                          .join('・'),
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    const Icon(
-                                      Icons.access_time,
-                                      size: 14,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '合計${c.totalWorkHours.toStringAsFixed(1)}h',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  c.firstVisitDate != null
-                                      ? (c.firstVisitDate == c.lastVisitDate
-                                            ? dateFmt.format(c.firstVisitDate!)
-                                            : '${dateFmt.format(c.firstVisitDate!)} 〜 ${dateFmt.format(c.lastVisitDate ?? c.firstVisitDate!)}')
-                                      : '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                : _buildGroupedList(displayed, dateFmt),
           ),
           if (_mergeMode)
             SafeArea(
@@ -621,6 +549,253 @@ class _CaseListScreenState extends State<CaseListScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// 【案件フォルダー化】絞り込み後の案件一覧を、
+  /// 「要確認(推測)を上部に常時表示」+「確定案件を年→月フォルダーに分類」
+  /// の形で組み立てる。
+  Widget _buildGroupedList(List<WorkCase> displayed, DateFormat dateFmt) {
+    // 「要確認(推測)」は判定が曖昧で見落とし厳禁のため、年月を問わず
+    // 常に画面上部に平置き表示する(フォルダーの中に埋もれさせない)。
+    final suggested = displayed.where((c) => c.status == 'suggested').toList()
+      ..sort((a, b) => _caseSortDate(b).compareTo(_caseSortDate(a)));
+    final confirmed = displayed.where((c) => c.status != 'suggested').toList();
+
+    final grouped = _groupByYearMonth(confirmed);
+    final years = grouped.keys.toList()
+      ..sort((a, b) => b.compareTo(a)); // 新しい年順
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      children: [
+        if (suggested.isNotEmpty) ...[
+          Row(
+            children: [
+              const Icon(
+                Icons.help_outline,
+                size: 16,
+                color: AppColors.warning,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '要確認(推測) ${suggested.length}件',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.warning,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...suggested.map(
+            (c) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildCaseCard(c, dateFmt),
+            ),
+          ),
+          if (years.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            const Divider(height: 24),
+          ],
+        ],
+        for (final year in years)
+          _buildYearFolder(year, grouped[year]!, dateFmt),
+      ],
+    );
+  }
+
+  /// 「年」フォルダー(ExpansionTile)。その下に「月」フォルダーを内包する。
+  Widget _buildYearFolder(
+    int year,
+    Map<int, List<WorkCase>> monthMap,
+    DateFormat dateFmt,
+  ) {
+    final months = monthMap.keys.toList()..sort((a, b) => b.compareTo(a));
+    final totalCount = monthMap.values.fold<int>(0, (sum, l) => sum + l.length);
+    final initiallyExpanded = year == _newestYear;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        // ExpansionTileの開閉インジケーター下線を非表示にして
+        // カード枠と馴染ませる。
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: PageStorageKey('case_year_$year'),
+          initiallyExpanded: initiallyExpanded,
+          leading: const Icon(Icons.folder_outlined, color: AppColors.primary),
+          title: Text(
+            '$year年',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$totalCount件',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.expand_more),
+            ],
+          ),
+          children: [
+            for (final month in months)
+              _buildMonthFolder(year, month, monthMap[month]!, dateFmt),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 「月」フォルダー(ExpansionTile)。案件カード一覧を内包する。
+  Widget _buildMonthFolder(
+    int year,
+    int month,
+    List<WorkCase> cases,
+    DateFormat dateFmt,
+  ) {
+    final monthKey = '$year-$month';
+    final initiallyExpanded = monthKey == _newestYearMonthKey;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 8),
+      child: ExpansionTile(
+        key: PageStorageKey('case_month_$monthKey'),
+        initiallyExpanded: initiallyExpanded,
+        leading: const Icon(Icons.folder_open_outlined, size: 20),
+        title: Text(
+          '$month月',
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${cases.length}件',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.expand_more, size: 20),
+          ],
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+        children: [
+          for (final c in cases)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildCaseCard(c, dateFmt),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 案件1件分のカード表示(既存の一覧表示から切り出し、フォルダー表示・
+  /// 「要確認」平置き表示の両方から再利用する)。
+  Widget _buildCaseCard(WorkCase c, DateFormat dateFmt) {
+    final selected = _selectedForMerge.contains(c.id);
+    return Card(
+      color: selected ? AppColors.primary.withValues(alpha: 0.08) : null,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          if (_mergeMode) {
+            _toggleSelectForMerge(c.id);
+            return;
+          }
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => CaseDetailScreen(caseId: c.id)),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (_mergeMode) ...[
+                    Checkbox(
+                      value: selected,
+                      onChanged: (_) => _toggleSelectForMerge(c.id),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  _statusBadge(c),
+                  if (c.hasRefrigerantFilling) ...[
+                    const SizedBox(width: 6),
+                    _refrigerantBadge(),
+                  ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      c.storeName.isNotEmpty ? c.storeName : '(店舗不明)',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              if (c.primaryKeyValue.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '伝票/受付No: ${c.primaryKeyValue}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.groups,
+                    size: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    c.participants.map((p) => p.authorName).join('・'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.access_time,
+                    size: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '合計${c.totalWorkHours.toStringAsFixed(1)}h',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                c.firstVisitDate != null
+                    ? (c.firstVisitDate == c.lastVisitDate
+                          ? dateFmt.format(c.firstVisitDate!)
+                          : '${dateFmt.format(c.firstVisitDate!)} 〜 ${dateFmt.format(c.lastVisitDate ?? c.firstVisitDate!)}')
+                    : '',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -655,8 +830,9 @@ class _CaseListScreenState extends State<CaseListScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: (isConfirmed ? AppColors.success : AppColors.warning)
-            .withValues(alpha: 0.12),
+        color: (isConfirmed ? AppColors.success : AppColors.warning).withValues(
+          alpha: 0.12,
+        ),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
