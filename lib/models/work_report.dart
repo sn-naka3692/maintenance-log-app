@@ -249,7 +249,7 @@ class WorkReport {
     }
     final nonSeType = nonSeRefrigerantType.trim();
     final nonSeAmount = nonSeRefrigerantAmountKg.trim();
-    const notFilledValues = {'', 'なし', '0', '0.0', '0.00'};
+    const notFilledValues = {'', 'なし', '無し', '0', '0.0', '0.00'};
     if (!notFilledValues.contains(nonSeType) ||
         !notFilledValues.contains(nonSeAmount)) {
       return true;
