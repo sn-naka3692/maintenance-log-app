@@ -160,6 +160,159 @@ class DocumentScanService {
       docType: docType,
     );
   }
+
+  // ------------------------------------------------------------
+  // 【月末チェック(日報記入率)機能】複数ページPDF一括解析
+  // ------------------------------------------------------------
+  //
+  // 管理者が月末に紙の作業報告書をコピー機でまとめてスキャンしたPDF
+  // (1ページ=1案件)をアップロードし、ページ単位に分割して一括OCR解析する。
+  // Azure Functions側の実行時間上限対策のため、[maxPagesPerRequest]件ずつ
+  // ページ範囲を指定して複数回リクエストする。
+  static const String _batchProxyEndpoint =
+      'https://nakano-scan-proxy.azurewebsites.net/api/scanBatch';
+
+  /// サーバー側(Azure Function)の1リクエストあたりページ数上限。
+  /// function_app.py の BATCH_MAX_PAGES_PER_REQUEST と一致させること。
+  static const int maxPagesPerRequest = 15;
+
+  /// 1ページあたりの解析に要する見込み秒数(タイムアウト算出用)。
+  /// サーバー側は1ページごとに最大45秒ポーリングするため、
+  /// 直列換算での安全マージンを見て設定する。
+  static const int _perPageTimeoutSeconds = 50;
+
+  /// PDFバイト列のうち [startPage]〜[endPage](1始まり・両端含む)の範囲を
+  /// バッチ解析する。1回の呼び出しで最大 [maxPagesPerRequest] ページまで。
+  static Future<BatchScanResult> analyzeBatch(
+    Uint8List pdfBytes, {
+    required int startPage,
+    required int endPage,
+  }) async {
+    final pageCount = endPage - startPage + 1;
+    if (pageCount > maxPagesPerRequest) {
+      throw DocumentScanException(
+        '1回のリクエストで処理できるページ数は$maxPagesPerRequestページまでです',
+      );
+    }
+
+    final uri = Uri.parse(
+      '$_batchProxyEndpoint?code=$_functionKey&startPage=$startPage&endPage=$endPage',
+    );
+
+    http.Response? resp;
+    Object? lastError;
+
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      try {
+        resp = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/pdf'},
+              body: pdfBytes,
+            )
+            .timeout(Duration(seconds: pageCount * _perPageTimeoutSeconds));
+        break;
+      } on TimeoutException catch (e) {
+        lastError = e;
+      } catch (e) {
+        lastError = e;
+      }
+
+      if (attempt < _maxAttempts) {
+        await Future.delayed(Duration(seconds: attempt * 2));
+      }
+    }
+
+    if (resp == null) {
+      final errorType = lastError?.runtimeType.toString() ?? '';
+      final errorDetail = lastError?.toString() ?? '';
+      throw DocumentScanException(
+        'サーバーへの接続に失敗しました($_maxAttempts回再送しましたが成功しませんでした)。\n'
+        'しばらく時間をおくか、通信環境の良い場所でもう一度お試しください。\n'
+        '[対象ページ: $startPage-$endPage]'
+        '${errorType.isNotEmpty ? '\n[エラー種別: $errorType]' : ''}'
+        '${errorDetail.isNotEmpty && errorDetail != errorType ? '\n[詳細: $errorDetail]' : ''}',
+      );
+    }
+
+    Map<String, dynamic> body;
+    try {
+      body = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    } catch (_) {
+      throw DocumentScanException(
+        'サーバーからの応答を解釈できませんでした (HTTP ${resp.statusCode})',
+      );
+    }
+
+    if (resp.statusCode != 200) {
+      final errorMsg = body['error'] as String? ?? 'PDF一括解析に失敗しました';
+      throw DocumentScanException('$errorMsg (HTTP ${resp.statusCode})');
+    }
+
+    final totalPages = (body['totalPages'] as num?)?.toInt() ?? 0;
+    final resultsRaw = body['results'] as List<dynamic>? ?? [];
+    final pageResults = resultsRaw
+        .map((e) => PageScanResult.fromMap(e as Map<String, dynamic>))
+        .toList();
+
+    return BatchScanResult(totalPages: totalPages, pageResults: pageResults);
+  }
+}
+
+/// PDF一括解析の結果(全体)
+class BatchScanResult {
+  final int totalPages;
+  final List<PageScanResult> pageResults;
+
+  const BatchScanResult({required this.totalPages, required this.pageResults});
+}
+
+/// PDF一括解析の1ページ分の結果
+class PageScanResult {
+  final int pageNumber;
+  final String status; // "ok" | "low_confidence" | "error"
+  final double documentConfidence;
+  final Map<String, String> values;
+  final Map<String, double> confidences;
+  final String? error;
+
+  const PageScanResult({
+    required this.pageNumber,
+    required this.status,
+    required this.documentConfidence,
+    required this.values,
+    required this.confidences,
+    this.error,
+  });
+
+  bool get isOk => status == 'ok';
+  bool get isLowConfidence => status == 'low_confidence';
+  bool get isError => status == 'error';
+
+  /// この抽出結果を突合キーとして使う「弊社受付No」
+  String get companyReceiptNumber => values['CompanyReceiptNumber'] ?? '';
+
+  /// 「他◯名」の人数部分(数字文字列、未検出は空文字)
+  String get otherWorkersCount => values['OtherWorkersCount'] ?? '';
+
+  factory PageScanResult.fromMap(Map<String, dynamic> map) {
+    final valuesRaw = map['values'] as Map<String, dynamic>? ?? {};
+    final confidencesRaw = map['confidences'] as Map<String, dynamic>? ?? {};
+    return PageScanResult(
+      pageNumber: (map['pageNumber'] as num?)?.toInt() ?? 0,
+      status: map['status'] as String? ?? 'error',
+      documentConfidence:
+          (map['documentConfidence'] as num?)?.toDouble() ?? 0.0,
+      values: {
+        for (final e in valuesRaw.entries) e.key: e.value as String? ?? '',
+      },
+      confidences: {
+        for (final e in confidencesRaw.entries)
+          e.key: (e.value as num?)?.toDouble() ?? 0.0,
+      },
+      error: map['error'] as String?,
+    );
+  }
 }
 
 /// スキャン解析結果
@@ -240,6 +393,11 @@ const List<ScanFieldDef> kScanFieldDefinitions = [
   ScanFieldDef('SymptomDetail', '事象補足'),
   ScanFieldDef('Cause', '原因'),
   ScanFieldDef('ActionContent', '処置内容'),
+  // 【2026-XX追加】月末チェック(日報記入率)機能のための2項目。
+  // 案件マッチングの主キーとなる「弊社受付No」と、紙報告書に記載された
+  // 「他◯名」の人数(ヘルパー個人特定はアプリ側データとの突合が必要)。
+  ScanFieldDef('CompanyReceiptNumber', '弊社受付No'),
+  ScanFieldDef('OtherWorkersCount', '他◯名(人数)'),
 ];
 
 /// プロワン作業報告書用の抽出フィールド定義。

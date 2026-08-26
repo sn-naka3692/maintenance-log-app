@@ -80,6 +80,10 @@ dependencies:
   # インストーラーを自動起動するために使用(Android intentベース)。
   open_filex: 4.7.0
 
+  # 月末チェック(日報記入率)機能: 紙報告書をまとめてスキャンしたPDFを
+  # 選択するために使用。
+  file_picker: 11.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -5,11 +5,13 @@ import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
+import '../services/app_config_service.dart';
 import '../services/monthly_export_status_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_card.dart';
 import '../utils/csv_exporter.dart';
 import 'report_detail_screen.dart';
+import 'submission_check_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -34,6 +36,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // リマインドの対象は「前月」(まだ月末まで作業日が確定していない今月分は対象外)。
   late final DateTime _targetMonth = _computePreviousMonth(DateTime.now());
 
+  // ------------------------------------------------------------
+  // 【月末チェック(日報記入率)機能】ON/OFFトグル関連
+  // ------------------------------------------------------------
+  bool _submissionCheckEnabled = false;
+  bool _submissionCheckLoading = true;
+  bool _submissionCheckToggling = false;
+
   static DateTime _computePreviousMonth(DateTime now) {
     return now.month == 1
         ? DateTime(now.year - 1, 12)
@@ -47,6 +56,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadMonthlyStatus());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _loadSubmissionCheckEnabled(),
+    );
+  }
+
+  Future<void> _loadSubmissionCheckEnabled() async {
+    setState(() => _submissionCheckLoading = true);
+    try {
+      final enabled = await AppConfigService.instance
+          .fetchSubmissionCheckEnabled();
+      if (mounted) setState(() => _submissionCheckEnabled = enabled);
+    } finally {
+      if (mounted) setState(() => _submissionCheckLoading = false);
+    }
+  }
+
+  Future<void> _toggleSubmissionCheckEnabled(bool value) async {
+    setState(() => _submissionCheckToggling = true);
+    try {
+      await AppConfigService.instance.updateSubmissionCheckEnabled(value);
+      if (mounted) setState(() => _submissionCheckEnabled = value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('設定の更新に失敗しました: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _submissionCheckToggling = false);
+    }
   }
 
   Future<void> _loadMonthlyStatus() async {
@@ -152,7 +191,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     children: [
                       const Icon(Icons.description_outlined, size: 16),
                       const SizedBox(width: 6),
-                      Text('${category.label}: ${resultCounts[category] ?? 0}件'),
+                      Text(
+                        '${category.label}: ${resultCounts[category] ?? 0}件',
+                      ),
                     ],
                   ),
                 ),
@@ -190,9 +231,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _exportCsv(List filtered, {required bool isAll}) async {
     if (filtered.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('エクスポート対象の日報がありません')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('エクスポート対象の日報がありません')));
       return;
     }
     setState(() => _isExporting = true);
@@ -203,9 +244,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('CSV出力に失敗しました: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('CSV出力に失敗しました: $e')));
       }
     } finally {
       if (mounted) setState(() => _isExporting = false);
@@ -216,9 +257,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   /// 直接CSVを保存する。
   Future<void> _saveCsvToDevice(List filtered, {required bool isAll}) async {
     if (filtered.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('保存対象の日報がありません')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('保存対象の日報がありません')));
       return;
     }
     setState(() => _isSaving = true);
@@ -228,15 +269,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         fileNamePrefix: isAll ? '日報データ_全社員' : '日報データ_絞り込み',
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('このデバイスに保存しました: $savedName')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('このデバイスに保存しました: $savedName')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('CSV保存に失敗しました: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('CSV保存に失敗しました: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -359,6 +400,97 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: LinearProgressIndicator(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 【月末チェック(日報記入率)機能】導線カード。
+  ///
+  /// 紙の作業報告書をコピー機でまとめてスキャンしたPDFをOCR解析し、
+  /// 弊社受付Noを主キーとしてアプリ側の日報データと突合することで
+  /// 「未提出の日報」を検知する機能。段階導入のためON/OFFトグルを
+  /// 設け、既定はOFF(最高管理者のみ変更可能)。
+  Widget _buildSubmissionCheckCard() {
+    final appState = context.watch<AppState>();
+    final canToggle = appState.isSuperAdmin;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.fact_check_outlined,
+                color: AppColors.primary,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  '月末チェック(日報記入率)',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                ),
+              ),
+              if (_submissionCheckLoading || _submissionCheckToggling)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Switch(
+                  value: _submissionCheckEnabled,
+                  onChanged: canToggle ? _toggleSubmissionCheckEnabled : null,
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '紙の作業報告書をまとめてスキャンしたPDFをアップロードし、AI-OCRで'
+            '弊社受付Noを読み取ってアプリ側の日報データと自動突合します。'
+            '未提出(記入漏れ)の日報を検知するための機能です。',
+            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+          ),
+          if (!canToggle) ...[
+            const SizedBox(height: 6),
+            Text(
+              'ON/OFFの切り替えは最高管理者のみ行えます。',
+              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade500),
+            ),
+          ],
+          const SizedBox(height: 10),
+          if (_submissionCheckEnabled)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SubmissionCheckScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.upload_file, size: 18),
+                label: const Text('月末チェックを開始(PDFアップロード)'),
+              ),
+            )
+          else
+            Text(
+              '現在この機能はOFFになっています。',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade500,
+                fontStyle: FontStyle.italic,
+              ),
             ),
         ],
       ),
@@ -753,6 +885,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               padding: EdgeInsets.only(top: 8),
               child: LinearProgressIndicator(),
             ),
+          const SizedBox(height: 20),
+          _buildSubmissionCheckCard(),
           const SizedBox(height: 8),
           if (filtered.isEmpty)
             Padding(

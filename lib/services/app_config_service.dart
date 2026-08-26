@@ -109,6 +109,35 @@ class AppConfigService {
       return UpdateAvailability.none;
     }
   }
+
+  // ------------------------------------------------------------
+  // 【月末チェック(日報記入率)機能】
+  // 紙の作業報告書をOCR解析し、弊社受付Noを主キーとしてアプリ側の
+  // 日報データと突合することで「未提出の日報」を検知する機能。
+  // 全案件が対象だが、運用開始時の混乱を避けるため、最高管理者が
+  // ON/OFFを切り替えられる段階導入方式とする(既定はOFF=fail-safe)。
+  // ------------------------------------------------------------
+
+  /// 月末チェック機能が有効かどうかを取得する。
+  /// ドキュメント未設定・読み込み失敗時は false(無効)を返す(fail-safe)。
+  Future<bool> fetchSubmissionCheckEnabled() async {
+    try {
+      final snap = await _doc.get();
+      if (!snap.exists) return false;
+      final data = snap.data();
+      return (data?['submission_check_enabled'] as bool?) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 最高管理者が月末チェック機能のON/OFFを切り替える。
+  Future<void> updateSubmissionCheckEnabled(bool enabled) async {
+    await _doc.set({
+      'submission_check_enabled': enabled,
+      'submission_check_updated_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
 }
 
 /// 「更新お知らせ(強制ではない)」の判定結果。
@@ -124,7 +153,10 @@ class UpdateAvailability {
     required this.latestVersion,
   });
 
-  static const none = UpdateAvailability(hasNewerVersion: false, latestVersion: '');
+  static const none = UpdateAvailability(
+    hasNewerVersion: false,
+    latestVersion: '',
+  );
 }
 
 /// 強制アップデートゲート及び更新お知らせの設定値。
