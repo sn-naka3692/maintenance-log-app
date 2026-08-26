@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web版が更新されないときの対処方法(キャッシュの消し方)</title>
+<style>
+  :root {
+    --primary: #1565ef;
+    --bg: #f4f7fb;
+    --text: #1a1a1a;
+    --muted: #667085;
+    --border: #e3e8ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    line-height: 1.75;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; }
+  header.hero {
+    background: linear-gradient(135deg, var(--primary), #3b82f6);
+    color: #fff;
+    border-radius: 16px;
+    padding: 28px 24px;
+    margin-bottom: 24px;
+  }
+  header.hero h1 { margin: 0 0 6px; font-size: 20px; }
+  header.hero p { margin: 0; font-size: 13px; opacity: 0.92; }
+  .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 999px;
+    padding: 3px 12px;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  section {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+  }
+  h2 {
+    font-size: 16px;
+    margin: 0 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--primary);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h2 .num {
+    background: var(--primary);
+    color: #fff;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 14px; margin: 18px 0 8px; color: #333; display: flex; align-items: center; gap: 8px; }
+  h3 .browser-icon {
+    width: 22px; height: 22px;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  h3 .browser-icon.chrome { background: #4285F4; }
+  h3 .browser-icon.edge { background: #0078D7; }
+  p { font-size: 13.5px; margin: 6px 0; }
+  ol, ul { font-size: 13.5px; padding-left: 22px; margin: 8px 0; }
+  li { margin-bottom: 4px; }
+  .note {
+    background: #fff8e6;
+    border: 1px solid #f5d78e;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12.5px;
+    color: #6b5300;
+    margin-top: 10px;
+  }
+  .important {
+    background: #fdecec;
+    border: 1px solid #f3b4b4;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #8a1f1f;
+    margin-bottom: 10px;
+  }
+  .tip {
+    background: #eafaf0;
+    border: 1px solid #a7e3c1;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #135c33;
+    margin-bottom: 10px;
+  }
+  .kbd {
+    display: inline-block;
+    background: #2d2d2d;
+    color: #fff;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0 2px;
+    box-shadow: 0 2px 0 #111;
+  }
+  .kbd-row {
+    text-align: center;
+    padding: 14px 0;
+    background: #f7f9fc;
+    border-radius: 10px;
+    margin: 10px 0;
+  }
+  .kbd-row .os-label {
+    display: block;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps li {
+    position: relative;
+    padding-left: 30px;
+    margin-bottom: 12px;
+    font-size: 13.5px;
+  }
+  .steps li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0;
+    background: var(--primary);
+    color: #fff;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .steps.edge li::before { background: #0078D7; }
+  .steps li .sub {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .steps li code.url {
+    display: inline-block;
+    background: #eef3fc;
+    color: var(--primary);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 12.5px;
+    font-family: "Courier New", monospace;
+    word-break: break-all;
+  }
+  .browser-block {
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .browser-block.chrome { border-color: #4285F4; background: #f5f9ff; }
+  .browser-block.edge { border-color: #0078D7; background: #f2f8fd; }
+  .method-tag {
+    display: inline-block;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .recommend {
+    display: inline-block;
+    background: #ffedd5;
+    color: #9a4b00;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 6px;
+  }
+  footer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 28px;
+  }
+  .toc {
+    background: #f7f9fc;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 13px;
+  }
+  .toc a { color: var(--primary); text-decoration: none; }
+  .toc ul { margin: 6px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="badge">トラブル対処ガイド</span>
+    <h1>Web版が更新されないときの対処方法</h1>
+    <p>ブラウザに保存された古いデータ(キャッシュ)を消して、最新版を表示させる手順です。</p>
+  </header>
+
+  <section>
+    <p style="margin:0;">以前アプリを開いたことがあるパソコンでは、ブラウザが「前に見た画面」を保存していて、新しいバージョンに更新されないことがあります。以下の手順で、保存された古いデータを消すと解決します。</p>
+    <div class="note">
+      所要時間の目安:1〜2分程度です。パソコンやアプリの専門知識は不要です。手順どおりにクリックしていくだけで完了します。
+    </div>
+  </section>
+
+  <div class="toc">
+    📌 目次
+    <ul>
+      <li><a href="#quick">まずはこちらをお試しください(最も簡単な方法)</a></li>
+      <li><a href="#chrome">Google Chrome での消し方</a></li>
+      <li><a href="#edge">Microsoft Edge での消し方</a></li>
+      <li><a href="#qa">よくある質問</a></li>
+    </ul>
+  </div>
+
+  <section id="quick">
+    <h2><span class="num">1</span>まずはこちらをお試しください(最も簡単な方法)</h2>
+    <p>設定画面を開かなくても、キーボードのボタンを押すだけで直ることがあります。まずはこちらを試してみてください。</p>
+
+    <div class="kbd-row">
+      <span class="os-label">Windowsパソコンの場合</span>
+      <span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">R</span>
+    </div>
+    <div class="kbd-row">
+      <span class="os-label">Macパソコンの場合</span>
+      <span class="kbd">command ⌘</span> + <span class="kbd">shift ⇧</span> + <span class="kbd">R</span>
+    </div>
+
+    <p><strong>手順:</strong></p>
+    <ol class="steps">
+      <li>アプリのWeb版のページ(<code class="url">https://sn-report.web.app/</code>)を開いた状態にする<span class="sub">既に開いている場合はそのままでOKです</span></li>
+      <li>そのままキーボードで上記のボタンを3つ同時に押す<span class="sub">3つのキーを同時に押したままにしてから、指を離してください</span></li>
+      <li>画面が一瞬白くなり、読み込みが始まれば成功です</li>
+    </ol>
+
+    <div class="tip">
+      これで直らない場合のみ、下の「Chromeでの消し方」「Edgeでの消し方」を参考に、より確実な方法をお試しください。
+    </div>
+  </section>
+
+  <section id="chrome">
+    <h2><span class="num">2</span>Google Chrome での消し方</h2>
+
+    <div class="browser-block chrome">
+      <h3><span class="browser-icon chrome">C</span>方法A:設定画面から消す<span class="recommend">確実</span></h3>
+      <ol class="steps">
+        <li>Chromeの右上にある <strong>点が3つ縦に並んだマーク(⋮)</strong> をクリックする</li>
+        <li>メニューの中から <strong>「履歴」</strong> にマウスを合わせ、出てきた一覧から <strong>「閲覧履歴を消去...」</strong> をクリックする</li>
+        <li>「期間」を <strong>「全期間」</strong> に変更する<span class="sub">最初は「過去1時間」等になっていることが多いので、必ず「全期間」に変更してください</span></li>
+        <li><strong>「キャッシュされた画像とファイル」</strong> にチェックが入っていることを確認する<span class="sub">「閲覧履歴」「Cookie」は外したままで問題ありません(ログイン情報が消えるのを防ぐため)</span></li>
+        <li>右下の <strong>「データを削除」</strong> ボタンをクリックする</li>
+        <li>もう一度アプリのページ(<code class="url">https://sn-report.web.app/</code>)を開き直す</li>
+      </ol>
+    </div>
+
+    <div class="browser-block chrome">
+      <h3><span class="browser-icon chrome">C</span>方法B:アドレスバーから直接開く</h3>
+      <p>手順2の「設定 → 履歴」を探す手間を省き、直接ショートカット画面を開く方法です。</p>
+      <ol class="steps">
+        <li>Chromeのアドレスバー(URLを入力する欄)をクリックする</li>
+        <li>次のURLを入力してEnterキーを押す<br><code class="url">chrome://settings/clearBrowserData</code></li>
+        <li>あとは方法Aの手順3以降と同じです(全期間・キャッシュされた画像とファイル・データを削除)</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="edge">
+    <h2><span class="num">3</span>Microsoft Edge での消し方</h2>
+
+    <div class="browser-block edge">
+      <h3><span class="browser-icon edge">E</span>方法A:設定画面から消す<span class="recommend">確実</span></h3>
+      <ol class="steps edge">
+        <li>Edgeの右上にある <strong>点が3つ横に並んだマーク(...)</strong> をクリックする</li>
+        <li>メニューの中から <strong>「設定」</strong> をクリックする</li>
+        <li>左側のメニューから <strong>「プライバシー、検索、サービス」</strong> をクリックする</li>
+        <li><strong>「閲覧データをクリア」</strong> の項目にある <strong>「クリアするデータの選択」</strong> ボタンをクリックする</li>
+        <li>「時間の範囲」を <strong>「すべての期間」</strong> に変更する</li>
+        <li><strong>「キャッシュされた画像とファイル」</strong> にチェックが入っていることを確認する<span class="sub">「閲覧の履歴」「Cookieおよびその他のサイトデータ」は外したままで問題ありません(ログイン情報が消えるのを防ぐため)</span></li>
+        <li><strong>「今すぐクリア」</strong> ボタンをクリックする</li>
+        <li>もう一度アプリのページ(<code class="url">https://sn-report.web.app/</code>)を開き直す</li>
+      </ol>
+    </div>
+
+    <div class="browser-block edge">
+      <h3><span class="browser-icon edge">E</span>方法B:アドレスバーから直接開く</h3>
+      <p>手順2〜4の「設定」を探す手間を省き、直接ショートカット画面を開く方法です。</p>
+      <ol class="steps edge">
+        <li>Edgeのアドレスバー(URLを入力する欄)をクリックする</li>
+        <li>次のURLを入力してEnterキーを押す<br><code class="url">edge://settings/clearBrowserData</code></li>
+        <li>あとは方法Aの手順5以降と同じです(すべての期間・キャッシュされた画像とファイル・今すぐクリア)</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="qa">
+    <h2><span class="num">4</span>よくある質問</h2>
+
+    <h3 style="color:var(--primary);">Q. データを削除すると、ログインし直しが必要になりますか?</h3>
+    <p>A. 上記の手順どおり「キャッシュされた画像とファイル」だけにチェックを入れた場合は、ログイン情報(Cookie)は消えないため、基本的にはそのまま使い続けられます。もし万が一ログイン画面が表示された場合は、いつも通りのメールアドレスとパスワードでログインし直してください。</p>
+
+    <h3 style="color:var(--primary);">Q. 手順を実行しても画面が変わりません。</h3>
+    <p>A. 一度パソコンを再起動してから、もう一度アプリのページを開いてみてください。それでも変わらない場合はご連絡ください。</p>
+
+    <h3 style="color:var(--primary);">Q. スマートフォンのブラウザ(Chrome/Edgeアプリ)でも同じ症状が出た場合は?</h3>
+    <p>A. 恐れ入りますが、スマートフォンをお使いの場合は、Web版ではなく<strong>APK版(アプリ本体)のご利用</strong>をおすすめします。APK版はこのような表示不具合が起きない仕組みになっています。マニュアルの「Web版とAPK版の違い」をご参照ください。</p>
+
+    <div class="important">
+      ご不明な点がありましたら、遠慮なくご連絡ください。手順を一緒に確認しながら対応いたします。
+    </div>
+  </section>
+
+  <footer>
+    札幌中野冷機 業務日報アプリ<br>
+    Web版キャッシュ対処ガイド
+  </footer>
+
+</div>
+</body>
+</html>
