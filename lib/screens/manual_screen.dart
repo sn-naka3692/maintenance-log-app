@@ -34,6 +34,10 @@ IconData _iconFor(String key) {
       return Icons.lightbulb_outline;
     case 'system_update':
       return Icons.system_update;
+    case 'folder_shared':
+      return Icons.folder_shared;
+    case 'search':
+      return Icons.search;
     default:
       return Icons.info_outline;
   }
