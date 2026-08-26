@@ -1531,22 +1531,19 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 icon: Icons.store_outlined,
               ),
               const SizedBox(height: 16),
-              Text(
-                '冷媒情報',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '半角英数で入力してください(充填していない場合は「NONE」、充填量は「0」)。',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                  height: 1.4,
-                ),
+              Row(
+                children: [
+                  Icon(Icons.ac_unit, size: 16, color: Colors.teal.shade800),
+                  const SizedBox(width: 6),
+                  Text(
+                    '冷媒情報(請求業務用・必須)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.teal.shade800,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Row(
@@ -1556,7 +1553,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['refrigerantType']!,
                       label: '冷媒種類',
                       icon: Icons.ac_unit,
-                      hint: '例: R410A',
+                      hint: '例: R410A / NONE',
                       inputFormatters: [_halfWidthAlphaNumFormatter],
                       validator: _halfWidthAlphaNumValidator,
                     ),
@@ -1565,14 +1562,18 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   Expanded(
                     child: _buildField(
                       controller: _ssCtrls['refrigerantAmount']!,
-                      label: '充填量',
+                      label: '充填量(kg)',
                       icon: Icons.opacity,
-                      hint: '例: 1.5',
+                      hint: '例: 1.5 / 0',
                       inputFormatters: [_halfWidthAlphaNumFormatter],
                       validator: _halfWidthAlphaNumValidator,
                     ),
                   ),
                 ],
+              ),
+              _buildRefrigerantNotice(
+                '半角英数のみ入力できます。充填していない場合は「冷媒種類」に'
+                '「NONE」、「充填量」に「0」と入力してください。',
               ),
               const SizedBox(height: 16),
               Text(
@@ -1936,6 +1937,43 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     return null;
   }
 
+  /// 冷媒充填の入力欄の直下に表示する統一デザインの注意書き。
+  ///
+  /// 【表記統一・2026-08】以前は「冷媒情報」セクションの説明文の位置が
+  /// 画面によって「入力欄の上」「枠で囲って強調」など不統一だった。
+  /// 未充填時の入力ルールを見落とされにくくするため、入力欄のすぐ下に
+  /// 統一デザイン(注意アイコン+オレンジ系の枠)で表示するようにした。
+  Widget _buildRefrigerantNotice(String message) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.warning.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, size: 15, color: AppColors.warning),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: Colors.grey.shade800,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// プロワン管轄案件(SE店舗以外)専用の冷媒種類・冷媒量入力セクション。
   /// 請求業務効率化のため事務からの要望で追加。充填有無に関わらず必須入力
   /// (未充填時は種類「なし」・量「0」を入力してもらう運用)。
@@ -1968,17 +2006,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            '充填していない場合は「冷媒種類」に「なし」、「冷媒量」に「0」と入力してください。'
-            '充填有無に関わらず両方の入力が必須です。',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.teal.shade900,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2008,6 +2036,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 ),
               ),
             ],
+          ),
+          _buildRefrigerantNotice(
+            '充填していない場合は「冷媒種類」に「なし」、「冷媒量」に「0」と'
+            '入力してください。充填有無に関わらず両方の入力が必須です。',
           ),
         ],
       ),

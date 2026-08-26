@@ -234,24 +234,56 @@ class WorkReport {
   bool get hasIssues => issuesPoints.trim().isNotEmpty;
   bool get hasSuccess => successPoints.trim().isNotEmpty;
 
+  /// 「未充填」を意味する入力値の一覧(冷媒種類欄用)。
+  ///
+  /// 【表記統一・2026-08修正】
+  /// - プロワン管轄案件側の入力欄は自由入力のため「なし」「無し」等の
+  ///   漢字表記も許容する。
+  /// - SE店舗側(コンビニ側システム入力控え)の入力欄は半角英数のみ許可
+  ///   のバリデーションがあるため、日本語は入力できない。そのため
+  ///   「NONE」(大文字/小文字問わず)を未充填の統一表記として扱う。
+  /// 【不具合修正・2026-08】以前はSE店舗側で「NONE」と入力しても
+  /// この一覧に含まれておらず、単に「入力欄が空でなければ充填あり」と
+  /// 誤判定していた(=正しく「未充填」と入力したのに「充填あり」扱いに
+  /// なってしまうバグ)。両ルートで同じ判定基準を使うよう統一する。
+  static const Set<String> _notFilledTypeValues = {
+    '',
+    'なし',
+    '無し',
+    'none',
+  };
+
+  /// 「未充填」を意味する入力値の一覧(充填量欄用)。
+  static const Set<String> _notFilledAmountValues = {'', '0', '0.0', '0.00'};
+
+  static bool _isNotFilledType(String v) =>
+      _notFilledTypeValues.contains(v.trim().toLowerCase());
+  static bool _isNotFilledAmount(String v) =>
+      _notFilledAmountValues.contains(v.trim());
+
+  /// [_isNotFilledType]の公開版。日報詳細画面など他画面から「未充填」表記の
+  /// 統一表示に使うための入口(表記統一・2026-08)。
+  static bool isNotFilledType(String v) => _isNotFilledType(v);
+
+  /// [_isNotFilledAmount]の公開版。日報詳細画面など他画面から「未充填」表記の
+  /// 統一表示に使うための入口(表記統一・2026-08)。
+  static bool isNotFilledAmount(String v) => _isNotFilledAmount(v);
+
   /// 冷媒充填を行った案件かどうか。
   ///
   /// SE店舗案件(storeSystemReportCopy.refrigerantType/refrigerantAmount)と
   /// プロワン管轄案件(nonSeRefrigerantType/nonSeRefrigerantAmountKg)の
-  /// 両方をチェックする。
-  /// プロワン管轄案件側は「充填していない場合は種類「なし」・量「0」を入力する
-  /// 運用(空欄は不可)」のため、"なし"・"0"・空文字はすべて「未充填」扱いとする。
+  /// 両方をチェックする。種類・量のいずれか一方でも「充填あり」を示す値
+  /// であれば充填ありと判定する(両方が未充填の値である場合のみ未充填)。
   bool get hasRefrigerantFilling {
-    final seType = storeSystemReportCopy.refrigerantType.trim();
-    final seAmount = storeSystemReportCopy.refrigerantAmount.trim();
-    if (seType.isNotEmpty || seAmount.isNotEmpty) {
+    final seType = storeSystemReportCopy.refrigerantType;
+    final seAmount = storeSystemReportCopy.refrigerantAmount;
+    if (!_isNotFilledType(seType) || !_isNotFilledAmount(seAmount)) {
       return true;
     }
-    final nonSeType = nonSeRefrigerantType.trim();
-    final nonSeAmount = nonSeRefrigerantAmountKg.trim();
-    const notFilledValues = {'', 'なし', '無し', '0', '0.0', '0.00'};
-    if (!notFilledValues.contains(nonSeType) ||
-        !notFilledValues.contains(nonSeAmount)) {
+    final nonSeType = nonSeRefrigerantType;
+    final nonSeAmount = nonSeRefrigerantAmountKg;
+    if (!_isNotFilledType(nonSeType) || !_isNotFilledAmount(nonSeAmount)) {
       return true;
     }
     return false;

@@ -214,6 +214,8 @@ class ReportDetailScreen extends StatelessWidget {
             ),
           // プロワン管轄案件(SE店舗以外)専用の冷媒種類・充填量。
           // SE店舗分は下部の「コンビニ側システム入力控え」内(冷媒種類/充填量)に表示される。
+          // 【表記統一・2026-08】「なし」「無し」等の未充填表記はここで統一して
+          // 「未充填」とわかりやすく表示する(編集画面の注意書きと表記を揃える)。
           if (report.nonSeRefrigerantType.isNotEmpty ||
               report.nonSeRefrigerantAmountKg.isNotEmpty) ...[
             _InfoRow(
@@ -221,14 +223,20 @@ class ReportDetailScreen extends StatelessWidget {
               label: '冷媒種類',
               value: report.nonSeRefrigerantType.isEmpty
                   ? '(未記入)'
-                  : report.nonSeRefrigerantType,
+                  : (WorkReport.isNotFilledType(report.nonSeRefrigerantType)
+                        ? '未充填'
+                        : report.nonSeRefrigerantType),
             ),
             _InfoRow(
               icon: Icons.propane_tank,
               label: '冷媒充填量',
               value: report.nonSeRefrigerantAmountKg.isEmpty
                   ? '(未記入)'
-                  : '${report.nonSeRefrigerantAmountKg} kg',
+                  : (WorkReport.isNotFilledAmount(
+                          report.nonSeRefrigerantAmountKg,
+                        )
+                        ? '未充填(0kg)'
+                        : '${report.nonSeRefrigerantAmountKg} kg'),
             ),
           ],
 
@@ -554,8 +562,24 @@ class _StoreSystemReportView extends StatelessWidget {
       MapEntry('店番', data.storeNumber),
       MapEntry('住所(報告書記載)', data.scannedAddress),
       MapEntry('TEL(報告書記載)', data.scannedTel),
-      MapEntry('冷媒種類', data.refrigerantType),
-      MapEntry('充填量', data.refrigerantAmount),
+      // 【表記統一・2026-08】SE店舗側は半角英数のみ入力可のため「NONE」が
+      // 未充填の統一表記。日報詳細画面でも「未充填」とわかりやすく表示する。
+      // (未入力=空文字の場合は従来通り行自体を非表示にするため、ここでは
+      // 判定せず後段のisNotEmptyフィルタに委ねる)
+      MapEntry(
+        '冷媒種類',
+        (data.refrigerantType.isNotEmpty &&
+                WorkReport.isNotFilledType(data.refrigerantType))
+            ? '未充填'
+            : data.refrigerantType,
+      ),
+      MapEntry(
+        '充填量',
+        (data.refrigerantAmount.isNotEmpty &&
+                WorkReport.isNotFilledAmount(data.refrigerantAmount))
+            ? '未充填(0kg)'
+            : data.refrigerantAmount,
+      ),
       MapEntry('冷媒回収量', data.recoveryAmount),
       MapEntry('依頼内容', data.requestContent),
       MapEntry('設備名称', data.equipmentName),
