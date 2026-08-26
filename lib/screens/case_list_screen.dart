@@ -26,10 +26,42 @@ class _CaseListScreenState extends State<CaseListScreen> {
   bool _onlyMultiPerson = false;
   bool _onlySuggested = false;
 
+  final _searchCtrl = TextEditingController();
+  bool _searchExpanded = false;
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _searchExpanded = !_searchExpanded;
+      if (!_searchExpanded) {
+        _searchCtrl.clear();
+        _searchQuery = '';
+      }
+    });
+  }
+
+  /// 店舗名・伝票No/受付No・参加者名のいずれかに部分一致するかを判定する。
+  bool _matchesQuery(WorkCase c, String query) {
+    if (query.isEmpty) return true;
+    final q = query.toLowerCase();
+    if (c.storeName.toLowerCase().contains(q)) return true;
+    if (c.primaryKeyValue.toLowerCase().contains(q)) return true;
+    for (final p in c.participants) {
+      if (p.authorName.toLowerCase().contains(q)) return true;
+    }
+    return false;
   }
 
   Future<void> _load() async {
@@ -65,16 +97,52 @@ class _CaseListScreenState extends State<CaseListScreen> {
     if (_onlySuggested) {
       displayed = displayed.where((c) => c.status == 'suggested').toList();
     }
+    if (_searchQuery.trim().isNotEmpty) {
+      displayed = displayed
+          .where((c) => _matchesQuery(c, _searchQuery.trim()))
+          .toList();
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('案件一覧'),
         actions: [
+          IconButton(
+            icon: Icon(_searchExpanded ? Icons.search_off : Icons.search),
+            tooltip: '案件を検索',
+            onPressed: _toggleSearch,
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
         ],
       ),
       body: Column(
         children: [
+          if (_searchExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: '店舗名・伝票No/受付No・担当者名で検索',
+                  prefixIcon: const Icon(Icons.search),
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: (v) => setState(() => _searchQuery = v),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Row(
@@ -138,14 +206,19 @@ class _CaseListScreenState extends State<CaseListScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.inbox_outlined,
+                          _searchQuery.trim().isNotEmpty
+                              ? Icons.search_off
+                              : Icons.inbox_outlined,
                           size: 48,
                           color: Colors.grey.shade400,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '該当する案件がありません',
+                          _searchQuery.trim().isNotEmpty
+                              ? '「$_searchQuery」に一致する案件がありません'
+                              : '該当する案件がありません',
                           style: TextStyle(color: Colors.grey.shade600),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
