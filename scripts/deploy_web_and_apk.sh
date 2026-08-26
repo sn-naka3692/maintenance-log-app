@@ -18,6 +18,20 @@
 # 事前に setup_github_environment 相当の認証設定を済ませておくこと。
 # また、既に同名タグのリリースがある場合は手動で削除するか、
 # バージョンを更新してから実行すること。
+#
+# 【重要・2026-08-27追記】Flutter Webは標準でService Worker(オフライン
+# キャッシュ)を組み込むため、既にアプリを開いたことがあるブラウザは
+# サーバー側を更新しても古い画面をキャッシュから表示し続けてしまう
+# 不具合が過去に実際発生した(v1.2.15で「Web版がv1.2.13のまま更新され
+# ない」という問い合わせが発生)。これを防ぐため、Web版ビルド時は必ず
+# --pwa-strategy=none を付けてService Worker登録自体を無効化すること。
+# このフラグを忘れると同じ不具合が再発するため、絶対に外さないこと。
+#
+# 【重要】このスクリプトの実行後は、必ず
+#   python3 scripts/release_version_config.py <version> <build_number>
+# を実行し、Firestore app_config/settings の latest_version /
+# latest_build_number / download_url を更新すること(アプリ内の
+# 「新しいバージョンがあります」通知バナーが機能しなくなるため)。
 
 set -e
 cd "$(dirname "$0")/.."
@@ -36,23 +50,29 @@ else
   echo "⚠️  警告: $SECRETS_FILE が見つかりません。スキャン機能は401エラーになります。"
 fi
 
-echo "▶ 1/4 配布用APK(arm64-v8a専用)をビルドします..."
+echo "▶ 1/5 配布用APK(arm64-v8a専用)をビルドします..."
 bash scripts/build_release_apk.sh
 APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
 
-echo "▶ 2/4 Web版をビルドします..."
+echo "▶ 2/5 Web版をビルドします(Service Workerキャッシュ無効化 --pwa-strategy=none)..."
 flutter build web --release \
+  --pwa-strategy=none \
   --dart-define=SCAN_PROXY_FUNCTION_KEY="${SCAN_PROXY_FUNCTION_KEY:-}"
 
-echo "▶ 3/4 Web版をFirebase Hostingへデプロイします..."
+echo "▶ 3/5 Web版をFirebase Hostingへデプロイします..."
 GOOGLE_APPLICATION_CREDENTIALS=/opt/flutter/firebase-admin-sdk.json \
   firebase deploy --only hosting --project sn-report
 
-echo "▶ 4/4 APKをGitHub Releasesへ公開します(tag: ${TAG})..."
+echo "▶ 4/5 APKをGitHub Releasesへ公開します(tag: ${TAG})..."
 gh release create "${TAG}" "${APK_PATH}" \
   --title "${TAG}" \
   --notes "自動生成リリース。詳細はアプリ内の更新履歴画面を参照してください。" \
   || gh release upload "${TAG}" "${APK_PATH}" --clobber
+
+echo "▶ 5/5 app_config/settings の最新バージョン情報を更新します(更新通知バナー用)..."
+BUILD_NUMBER=$(grep -m1 '^version:' pubspec.yaml | sed 's/.*+//')
+python3 scripts/release_version_config.py "${VERSION}" "${BUILD_NUMBER}" \
+  || echo "⚠️  警告: app_config/settings の更新に失敗しました。手動で release_version_config.py を実行してください。"
 
 echo ""
 echo "✅ デプロイ完了"
