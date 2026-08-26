@@ -25,6 +25,7 @@ class _CaseListScreenState extends State<CaseListScreen> {
   String? _error;
   bool _onlyMultiPerson = false;
   bool _onlySuggested = false;
+  bool _onlyRefrigerantFilling = false;
 
   final _searchCtrl = TextEditingController();
   bool _searchExpanded = false;
@@ -96,6 +97,9 @@ class _CaseListScreenState extends State<CaseListScreen> {
     }
     if (_onlySuggested) {
       displayed = displayed.where((c) => c.status == 'suggested').toList();
+    }
+    if (_onlyRefrigerantFilling) {
+      displayed = displayed.where((c) => c.hasRefrigerantFilling).toList();
     }
     if (_searchQuery.trim().isNotEmpty) {
       displayed = displayed
@@ -175,6 +179,14 @@ class _CaseListScreenState extends State<CaseListScreen> {
                     selected: _onlySuggested,
                     onSelected: (v) => setState(() => _onlySuggested = v),
                   ),
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    label: const Text('冷媒充填のみ'),
+                    avatar: const Icon(Icons.ac_unit, size: 16),
+                    selected: _onlyRefrigerantFilling,
+                    onSelected: (v) =>
+                        setState(() => _onlyRefrigerantFilling = v),
+                  ),
                 ],
               ),
             ),
@@ -247,6 +259,10 @@ class _CaseListScreenState extends State<CaseListScreen> {
                                 Row(
                                   children: [
                                     _statusBadge(c),
+                                    if (c.hasRefrigerantFilling) ...[
+                                      const SizedBox(width: 6),
+                                      _refrigerantBadge(),
+                                    ],
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
@@ -326,6 +342,31 @@ class _CaseListScreenState extends State<CaseListScreen> {
                       );
                     },
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _refrigerantBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.ac_unit, size: 12, color: Colors.blue.shade700),
+          const SizedBox(width: 3),
+          Text(
+            '冷媒充填',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.blue.shade700,
+            ),
           ),
         ],
       ),

@@ -276,6 +276,10 @@ class CaseService {
         report.visitDate.isAfter(caseObj.lastVisitDate!)) {
       caseObj.lastVisitDate = report.visitDate;
     }
+    // 紐づく日報のいずれか1件でも冷媒充填を行っていれば案件全体として true。
+    if (report.hasRefrigerantFilling) {
+      caseObj.hasRefrigerantFilling = true;
+    }
     caseObj.updatedAt = DateTime.now();
   }
 

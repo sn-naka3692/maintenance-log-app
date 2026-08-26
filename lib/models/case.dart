@@ -32,6 +32,10 @@ class WorkCase {
   DateTime? lastVisitDate;
   DateTime createdAt;
   DateTime updatedAt;
+  // 紐づく日報のいずれか1件でも冷媒充填を行っていれば true(自動集計)。
+  // 「案件内容での絞り込み」ニーズ(特に冷媒充填の有無)に対応するため、
+  // 日報1件ずつの WorkReport.hasRefrigerantFilling を OR で集約したもの。
+  bool hasRefrigerantFilling;
 
   WorkCase({
     required this.id,
@@ -47,6 +51,7 @@ class WorkCase {
     this.lastVisitDate,
     required this.createdAt,
     required this.updatedAt,
+    this.hasRefrigerantFilling = false,
   }) : linkedReportIds = linkedReportIds ?? [],
        participants = participants ?? [];
 
@@ -67,6 +72,7 @@ class WorkCase {
       'last_visit_date': lastVisitDate?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'has_refrigerant_filling': hasRefrigerantFilling,
     };
   }
 
@@ -91,6 +97,7 @@ class WorkCase {
       lastVisitDate: _parseDate(map['last_visit_date']),
       createdAt: _parseDate(map['created_at']) ?? DateTime.now(),
       updatedAt: _parseDate(map['updated_at']) ?? DateTime.now(),
+      hasRefrigerantFilling: map['has_refrigerant_filling'] as bool? ?? false,
     );
   }
 
