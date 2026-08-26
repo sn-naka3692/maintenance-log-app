@@ -2215,6 +2215,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     late String note;
     late List<String> items;
     late MaterialColor color;
+    // 【業務ルール追記・2026-08】特定の取引先(ロピア案件等)向けの特記事項。
+    // 通常の記入ヒント一覧に混ぜると重要度が伝わりにくいため、
+    // 該当モードの場合のみ専用の強調ボックスとして分けて表示する。
+    String? specialNotice;
     switch (mode) {
       case _WorkSupportMode.seRepair:
         title = '記入サポート(SE店舗・修理・故障対応)';
@@ -2244,6 +2248,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         note =
             '修理・故障対応の詳細はプロワン側システムに記録されているため、ここでは重複入力を避け、ナレッジ共有に役立つ概要・気づきを中心に記載してください。';
         color = Colors.teal;
+        specialNotice =
+            'ロピア案件については、プロワン案件画面で手入力対応。'
+            '同時に中野冷機(株)提出の紙の作業報告書も提出してください。';
         items = [
           'どんな状況・依頼だったか(概要)',
           '対応の判断ポイント・工夫した点',
@@ -2288,6 +2295,41 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               height: 1.4,
             ),
           ),
+          if (specialNotice != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.warning.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.priority_high_rounded,
+                    size: 16,
+                    color: AppColors.warning,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      specialNotice,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade900,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           ...items.map(
             (it) => Padding(
