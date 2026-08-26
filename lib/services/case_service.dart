@@ -366,4 +366,84 @@ class CaseService {
     if (!snap.exists) return null;
     return WorkCase.fromMap(snap.id, snap.data()!);
   }
+
+  // ------------------------------------------------------------
+  // 未グルーピング日報の再判定(管理画面用・2026-08追加)
+  // ------------------------------------------------------------
+  //
+  // 【背景】
+  // 日報保存直後の自動グルーピング処理(syncCaseForReport)はベストエフォート
+  // であり、保存時点でブラウザが古いキャッシュ版アプリを使っていた等の理由で
+  // 実行されないまま日報が保存されるケースがあることが判明した(2026-08-26)。
+  // このメソッドは、既存の全日報を対象に「案件への紐付けがまだ済んでいない
+  // もの」だけを抽出し、現在のグルーピングロジックで再判定する。
+  //
+  // 【安全のための設計】
+  // - 既に caseId が設定済みの日報には一切手を触れない(既存の正しい
+  //   紐付けを壊さないことを最優先する)。
+  // - 判定順は作成日時の昇順(古い日報から)とし、実際の保存時と同じ順序
+  //   関係を再現する。
+  // - 各日報ごとに syncCaseForReport を呼ぶだけであり、判定ロジック自体は
+  //   通常の保存時と完全に同一(二重実装を避ける)。
+  Future<CaseResyncResult> resyncUngroupedReports() async {
+    final snap = await _reportsCol.get();
+    final targets = <WorkReport>[];
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      // 'case_id' フィールド自体が存在しない、または値がnull/空文字の
+      // 日報のみを対象とする(=既にグルーピング済みのものは変更しない)。
+      final raw = data['case_id'];
+      final caseId = raw is String ? raw.trim() : '';
+      if (caseId.isNotEmpty) continue;
+      targets.add(WorkReport.fromMap(doc.id, data));
+    }
+    targets.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+    var linkedCount = 0;
+    var noMatchCount = 0;
+    var errorCount = 0;
+    final errors = <String>[];
+
+    for (final report in targets) {
+      try {
+        final caseId = await syncCaseForReport(report);
+        if (caseId.isNotEmpty) {
+          linkedCount++;
+        } else {
+          noMatchCount++;
+        }
+      } catch (e) {
+        errorCount++;
+        errors.add('日報ID ${report.id}: $e');
+      }
+    }
+
+    return CaseResyncResult(
+      totalTargets: targets.length,
+      linkedCount: linkedCount,
+      noMatchCount: noMatchCount,
+      errorCount: errorCount,
+      errors: errors,
+    );
+  }
+}
+
+/// [CaseService.resyncUngroupedReports] の実行結果。
+class CaseResyncResult {
+  final int totalTargets; // 再判定対象だった日報数
+  final int linkedCount; // 新たに案件へ紐付けられた件数
+  final int noMatchCount; // 判定した結果、該当する案件がなかった件数(=正常)
+  final int errorCount; // 処理中にエラーが発生した件数
+  final List<String> errors; // エラー内容(先頭数件程度を想定)
+
+  const CaseResyncResult({
+    required this.totalTargets,
+    required this.linkedCount,
+    required this.noMatchCount,
+    required this.errorCount,
+    required this.errors,
+  });
+
+  bool get hasTargets => totalTargets > 0;
+  bool get hasErrors => errorCount > 0;
 }

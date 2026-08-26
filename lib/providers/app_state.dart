@@ -211,6 +211,20 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 未グルーピングの日報を一括で再判定する(管理者用)。
+  ///
+  /// 【想定シナリオ】ブラウザのキャッシュが古いままだった等の理由で、
+  /// 日報保存時の自動グルーピングが実行されなかった日報が後から
+  /// 見つかった場合に、管理者がこの操作で一括リカバリできるようにする。
+  /// 既に案件へ紐付いている日報には影響しない(安全設計)。
+  Future<CaseResyncResult> resyncUngroupedCases() async {
+    final result = await _caseService.resyncUngroupedReports();
+    await _service.refreshAll();
+    _reports = _service.getAllReports();
+    notifyListeners();
+    return result;
+  }
+
   Future<AppUser> addUser({
     required String name,
     required String employeeCode,

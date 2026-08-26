@@ -26,6 +26,7 @@ class _CaseListScreenState extends State<CaseListScreen> {
   bool _onlyMultiPerson = false;
   bool _onlySuggested = false;
   bool _onlyRefrigerantFilling = false;
+  bool _resyncing = false;
 
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
@@ -77,6 +78,88 @@ class _CaseListScreenState extends State<CaseListScreen> {
     }
   }
 
+  /// 未グルーピングの日報を一括で再判定する(管理者用)。
+  ///
+  /// 【背景】日報保存時、ブラウザが古いキャッシュ版アプリを使っていた等の
+  /// 理由で、自動グルーピングが実行されないまま日報が保存されてしまう
+  /// ケースがあることが判明した(2026-08-26)。このボタンは、既に案件へ
+  /// 紐付いている日報には一切影響を与えず、未グルーピングの日報だけを
+  /// 現在のロジックで再判定するための復旧手段。
+  Future<void> _resyncUngrouped() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('未グルーピング日報の再判定'),
+        content: const Text(
+          'まだ案件に紐付いていない日報を対象に、現在の判定ロジックで'
+          '再チェックします。\n\n'
+          '・既に案件へ紐付いている日報には一切影響しません\n'
+          '・伝票No/受付Noが一致するものは自動的に紐付けます\n'
+          '・一致するものが見つからない日報はそのまま(未グルーピング)です\n\n'
+          '実行してよろしいですか?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('実行する'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    setState(() => _resyncing = true);
+    try {
+      final appState = context.read<AppState>();
+      final result = await appState.resyncUngroupedCases();
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('再判定が完了しました'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('対象の日報数: ${result.totalTargets}件'),
+              Text('新たに案件へ紐付いた: ${result.linkedCount}件'),
+              Text('一致なし(未グルーピングのまま): ${result.noMatchCount}件'),
+              if (result.hasErrors)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'エラー: ${result.errorCount}件\n'
+                    '${result.errors.take(3).join('\n')}',
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('再判定処理に失敗しました: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _resyncing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('yyyy/M/d');
@@ -96,10 +179,24 @@ class _CaseListScreenState extends State<CaseListScreen> {
           .toList();
     }
 
+    final isAdmin = context.watch<AppState>().isAdmin;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('案件一覧'),
         actions: [
+          if (isAdmin)
+            IconButton(
+              icon: _resyncing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.sync_problem_outlined),
+              tooltip: '未グルーピング日報を再判定',
+              onPressed: _resyncing ? null : _resyncUngrouped,
+            ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
         ],
       ),
