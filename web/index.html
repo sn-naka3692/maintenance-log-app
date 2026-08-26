@@ -89,37 +89,25 @@
 
   <script>
     // ------------------------------------------------------------
-    // 【重要・2026-08-26追記】過去のバージョンで登録されたPWA用の
-    // Service Workerが端末に残っていると、サーバー側を更新しても
-    // 古いキャッシュがずっと表示され続けてしまう不具合があった
-    // (v1.2.15で「Web版がv1.2.13のまま更新されない」問い合わせが発生)。
-    // v1.2.15以降は --pwa-strategy=none でService Workerの新規登録を
-    // 止めたが、それだけでは「既に登録済みの古いService Worker」は
-    // 消えないため、ここで明示的に登録解除 + 関連キャッシュの削除を
-    // 行い、まだ一度も踏んでいない端末を自動的に正常化する。
-    // この処理自体は数回実行されても副作用がないため、恒久的に
-    // 残しておいて問題ない。
-    (function () {
-      if (!('serviceWorker' in navigator)) return;
-      navigator.serviceWorker.getRegistrations().then(function (registrations) {
-        if (!registrations.length) return;
-        var hadServiceWorker = true;
-        registrations.forEach(function (registration) {
-          registration.unregister();
-        });
-        if ('caches' in window) {
-          caches.keys().then(function (keys) {
-            return Promise.all(keys.map(function (key) { return caches.delete(key); }));
-          }).finally(function () {
-            if (hadServiceWorker) window.location.reload();
-          });
-        } else if (hadServiceWorker) {
-          window.location.reload();
-        }
-      }).catch(function (e) {
-        console.warn('Service Worker解除処理でエラー:', e);
-      });
-    })();
+    // 【重要・2026-08-26、緊急事態を受けて完全撤去】
+    // 過去、ここには「古いService Workerを検出したら自動的に登録解除+
+    // キャッシュ削除+ページ再読み込みを行う」処理を入れていたが、これが
+    // 実際の障害(高速リトライ・無限読み込み・ログイン不可)を引き起こした。
+    //
+    // 原因: 古いバージョンのFlutter Web(既にキャッシュ済みの古いJS)が
+    // 内部的に持つ「Service Workerの管理者(controller)が切り替わったら
+    // 自動的にページを再読み込みする」処理と衝突し、
+    //   ここでunregister()を呼ぶ→管理者切り替わりを検知→古いJSが自動
+    //   リロード→リロード後も古いJSがSWを再登録→再度ここでunregister()
+    //   →…(終わらない無限ループ)
+    // という自己増殖ループになることを再現実験で確認した。
+    //
+    // 【絶対に守ること】ここに再びService Workerの登録解除処理や
+    // ページ再読み込み処理を追加しないこと。もし将来的に古いService
+    // Workerの自動整理が必要になった場合は、必ずサンドボックス環境で
+    // 「古いService Worker登録済みの状態からの遷移」を再現実験で検証し、
+    // 無限ループが発生しないことを確認した上で導入すること。
+    // ------------------------------------------------------------
   </script>
   <script src="flutter_bootstrap.js" async></script>
   <script>

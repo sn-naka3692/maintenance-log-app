@@ -19,41 +19,43 @@
 # また、既に同名タグのリリースがある場合は手動で削除するか、
 # バージョンを更新してから実行すること。
 #
-# 【重要・2026-08-27追記、2026-08-27再追記】Flutter Webは標準で
-# Service Worker(オフラインキャッシュ)を組み込むため、既にアプリを
-# 開いたことがあるブラウザはサーバー側を更新しても古い画面をキャッシュ
-# から表示し続けてしまう不具合が過去に実際発生した(v1.2.15で「Web版が
-# v1.2.13のまま更新されない」という問い合わせが発生)。
-# この問題は2段構えで対策済み:
-#   1) --pwa-strategy=none でService Workerの新規登録を止める(下記)
-#   2) web/index.html 内のスクリプトで、既に登録済みの古いService
-#      Workerを検出したら自動的に登録解除+キャッシュ削除+再読込を行う
-#      (これが無いと、対策1だけでは「既存ユーザー」には効果がない)
-# さらに、firebase.json のCache-Controlも合わせて確認すること。
-# main.dart.js 等はファイル名にハッシュが付かないため、誤って長期
-# キャッシュ(max-age=31536000等)を設定するとCDN・ブラウザ双方で
-# 更新が反映されなくなる。js/css/html/md/pdf/jsonは必ず
+# 【重要・2026-08-26】Flutter Webは標準でService Worker(オフライン
+# キャッシュ)を組み込むため、既にアプリを開いたことがあるブラウザは
+# サーバー側を更新しても古い画面をキャッシュから表示し続けてしまう
+# 不具合が過去に実際発生した(v1.2.15で「Web版がv1.2.13のまま更新
+# されない」という問い合わせが発生)。
+# 対策として --pwa-strategy=none でService Workerの新規登録を止めて
+# いる(下記)。さらに firebase.json のCache-Controlも合わせて確認
+# すること。main.dart.js 等はファイル名にハッシュが付かないため、
+# 誤って長期キャッシュ(max-age=31536000等)を設定するとCDN・ブラウザ
+# 双方で更新が反映されなくなる。js/css/html/md/pdf/jsonは必ず
 # no-cache, no-store, must-revalidate にすること
 # (ハッシュ付きの canvaskit/ や assets/ のみ長期キャッシュ可)。
 # --pwa-strategy=none を付け忘れても、外しても、このフラグ単体では
 # 既存ユーザーの不具合は解決しないため、絶対に外さないこと。
 #
-# 【重要・2026-08-26さらに追記】上記の対策(1)(2)を実施しても、
-# 「すでに古いService Workerがブラウザで有効化されたまま動いている
-# ユーザー」には効果がないことが判明した(ブラウザの仕様で、新しい
-# Service Worker検出後も「全タブを閉じるまで」待機状態になるため)。
-# これを解決するため、scripts/kill_switch_service_worker.js という
-# 「自分自身を強制的に有効化→全キャッシュ削除→登録解除→強制リロード」
-# を行う特殊なService Workerを用意し、ビルド後の
-# build/web/flutter_service_worker.js をこれで上書きしてデプロイする
-# (下記ステップ参照)。
-# この仕組みなら、ユーザーは何もしなくても(タブを閉じる必要すら
-# なく)、ブラウザが自動的に行うService Worker更新チェック
-# (最大24時間以内に発生、ページ側JSの実行に依存しない
-# ブラウザ自体の内部処理のため、古いキャッシュに一切干渉されない)
-# によって、次回アクセス時までに自動的に正常な状態へ復帰する。
-# 【注意】このステップは絶対に削除しないこと。削除すると、今後
-# 旧バージョンのService Workerが残っている全ユーザーが更新不能になる。
+# 【重要・2026-08-26 障害発生とその教訓】上記の対策でも「すでに古い
+# Service Workerがブラウザで有効化済みのユーザー」には効果がないため、
+# 一時的に「古いService Workerを検出したら自動的に強制有効化・登録
+# 解除・強制リロードする」キルスイッチ的な仕組みを導入したが、これが
+# 実際の障害(ログイン画面が高速リトライを繰り返し、読み込みが完了
+# しない)を引き起こしてしまった。
+# 原因: 古いバージョンのFlutter Webは「Service Workerの管理者が
+# 切り替わったら(controllerchangeイベント)自動的にページを再読み込み
+# する」処理を内部的に持っている。新しいService Workerがactivate時に
+# 自分自身をunregister()すると、この「管理者切り替わり」を誘発し、
+# 古いJSの自動リロードが発火→リロード後も古いJSがSWを再登録→再度
+# unregister→再度管理者切り替わり検知→…という終わらない無限ループ
+# になることを再現実験で確認した。
+# このため、scripts/kill_switch_service_worker.js は「何もしない、
+# 完全に無害な空のService Worker」に変更し、以下を徹底している:
+#   - skipWaiting() を呼ばない(通常のブラウザの待機ルールに従う)
+#   - unregister() を呼ばない(controllerchangeを誘発しない)
+#   - clients.claim() を呼ばない(開いているタブに影響を与えない)
+# 【絶対に守ること】この教訓を踏まえ、Service Worker関連の「自動で
+# 強制的に何かする」仕組みを再導入する場合は、必ずローカルで
+# 「古いService Worker登録済み状態からの切り替え」を再現実験し、
+# 無限ループが発生しないことを確認してからデプロイすること。
 #
 # 【重要】このスクリプトの実行後は、必ず
 #   python3 scripts/release_version_config.py <version> <build_number>
@@ -87,10 +89,12 @@ flutter build web --release \
   --pwa-strategy=none \
   --dart-define=SCAN_PROXY_FUNCTION_KEY="${SCAN_PROXY_FUNCTION_KEY:-}"
 
-echo "▶ 3/6 「キルスイッチ」Service Workerを組み込みます(既存の古いService Worker対策)..."
-# 【重要】絶対に削除しないこと。既に古いService Workerが有効化された
-# ままのユーザー端末を自動的に正常化するための唯一の手段。
-# 詳細は scripts/kill_switch_service_worker.js のコメントを参照。
+echo "▶ 3/6 Service Workerを無害な空ファイルに置き換えます(古いSW対策)..."
+# 【重要】scripts/kill_switch_service_worker.js は現在「何もしない、
+# 完全に無害な空のService Worker」。過去に「自動で強制的に古いSWを
+# 一掃する」実装を試みたが無限リロードループの障害を起こしたため撤回
+# した(詳細は本ファイル冒頭のコメント、および
+# scripts/kill_switch_service_worker.js 内のコメントを参照)。
 cp scripts/kill_switch_service_worker.js build/web/flutter_service_worker.js
 
 echo "▶ 4/6 Web版をFirebase Hostingへデプロイします..."

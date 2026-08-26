@@ -1,59 +1,39 @@
 // ============================================================
-// 「キルスイッチ」Service Worker
+// 完全に無害な「空の」Service Worker
 // ============================================================
-// 【背景・2026-08-26】Flutter Webは過去バージョンでService Worker
-// (オフラインキャッシュ)を自動登録していた。--pwa-strategy=none に
-// 切り替えても、それは「これから新しくアクセスする人」にしか効かず、
-// 既にService Workerが登録済みの端末には一切効果がない。
+// 【緊急事態を受けての方針転換・2026-08-26】
+// 当初、この場所には「古いService Workerを検出したら即座に強制的に
+// 有効化・登録解除して正常化する『キルスイッチ』」を配置していたが、
+// これが実際の障害(高速リトライ・無限読み込み・ログイン不可)を
+// 引き起こした。
 //
-// さらに、ブラウザの仕様上、新しいService Worker(空ファイル等)を
-// 検出しても、標準では「既存の全タブが閉じられるまで」待機状態の
-// ままになり、タブを閉じずに再読み込みするだけの一般的な使い方では
-// 何日経っても切り替わらない、という致命的な穴があった。
+// 【判明した真の原因】
+// 古いバージョンのFlutter Web(ユーザーのブラウザに既にキャッシュ済みの
+// 古いJS)は、「Service Workerの管理者(controller)が切り替わったら
+// 自動的にページを再読み込みする」という仕組みを内部的に持っている。
+// キルスイッチが activate 時に自分自身を unregister() すると、これが
+// 「管理者の切り替わり」(controllerchange イベント)を発生させ、
+// 古いJSの自動リロード処理を誤発火させる。リロード後も古いJSが
+// register() を再度呼び、再びキルスイッチが動き、また unregister され、
+// また controllerchange が発火し、また リロード……という
+// 「終わらない無限ループ」になってしまうことを再現実験で確認した。
 //
-// この「キルスイッチ」は、install時に self.skipWaiting() を呼んで
-// 即座に有効化を強制し、activate時に自分自身を含む全キャッシュを
-// 削除・登録解除し、開いている全タブを強制リロードする。
-// これにより、ユーザーが何もしなくても(タブを閉じる必要すらなく)
-// 次回のブラウザの自動更新チェック(通常24時間以内)で確実に
-// 古いキャッシュ問題から復帰できる。
-//
-// 【注意】このファイルは build/web/flutter_service_worker.js を
-// 上書きする形でデプロイされる(scripts/deploy_web_and_apk.sh 参照)。
-// 恒久的に残しておいても、Service Worker自体が最終的に自分を
-// 登録解除するため副作用はない。
+// 【方針】
+// 「今すぐ全ユーザーを自動的に直す」という目標よりも、
+// 「絶対に新しい障害を作らない」ことを最優先する。
+// このファイルは install/activate/fetch のいずれでも何もしない、
+// 完全に無害な空のService Workerである。
+//   - skipWaiting() を呼ばない → 通常のブラウザの待機ルールに従う
+//     (既存のタブが全て閉じられるまで有効化されない=安全だが低速)
+//   - unregister() を呼ばない → controllerchange を誘発しない
+//     =古いJSの自動リロード処理を誤発火させない
+//   - clients.claim() を呼ばない → 今開いているタブの管理者を
+//     奪わない=そのタブには一切影響を与えない
+// これにより、既存の開いているタブには何の影響も与えず、
+// ユーザーが自分の意思でタブを全て閉じて再度開いた時にだけ、
+// ゆっくりと安全に新しい状態へ切り替わる。
 // ============================================================
 
-self.addEventListener('install', () => {
-  self.skipWaiting();
+self.addEventListener('fetch', () => {
+  // 何もインターセプトしない。すべて通常のネットワーク取得に任せる。
 });
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      // 1) このオリジンの全キャッシュ(Cache Storage)を削除
-      const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
-
-      // 2) 開いている全タブを即座に自分の管理下に置く
-      await self.clients.claim();
-
-      // 3) 自分自身(キルスイッチ)を登録解除する
-      await self.registration.unregister();
-
-      // 4) 開いている全タブへ強制リロードを指示する
-      const clientList = await self.clients.matchAll({ type: 'window' });
-      clientList.forEach((client) => {
-        if (typeof client.navigate === 'function') {
-          client.navigate(client.url);
-        } else {
-          client.postMessage({ type: 'FLUTTER_APP_FORCE_RELOAD' });
-        }
-      });
-    })()
-  );
-});
-
-// 何もキャッシュ・インターセプトせず、すべてのリクエストを
-// そのまま通常のネットワーク取得に任せる。
-self.addEventListener('fetch', () => {});
