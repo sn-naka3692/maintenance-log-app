@@ -349,6 +349,15 @@ class PageScanResult {
   /// (ProWanDocTypeの場合のみ意味を持つ)
   String get proWanRefNumber => values['ProWanRefNumber'] ?? '';
 
+  /// 【2026-08-28追加・月末チェックの同一伝票No複数案件対応】
+  /// プロワン報告書の「作業開始日」(ProWanDocTypeの場合のみ意味を持つ)。
+  /// 同じ伝票No(案件管理番号)で複数の日程(=複数ページ、複数WorkReport)
+  /// が存在するケースがあり、伝票Noだけでは日報を一意に特定できない。
+  /// この値を日報側のvisitDateと突合することで、どの日程のページかを
+  /// 区別する補助キーとして使う。SE用紙にはこの項目はないため、
+  /// SEDocTypeの場合は常に空文字。
+  String get workStartDate => values['WorkStartDate'] ?? '';
+
   /// このページ種別に応じた突合キーを返す(未判定の場合は空文字)。
   String get matchingKey {
     if (isProWanDocument) return proWanRefNumber;

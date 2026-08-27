@@ -13,6 +13,7 @@ import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../services/photo_upload_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/scan_date_parser.dart';
 import '../widgets/document_scan_flow.dart';
 import '../widgets/store_picker_field.dart';
 
@@ -695,34 +696,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
   /// "2025/8/15" のようなAI抽出テキストをDateTimeへ変換する(失敗時はnull)。
   ///
-  /// 【対応拡張・2026-08-28】プロワン用Azureカスタムモデル
-  /// (prowan-report-v1)がWorkStartDateとして実際に返す値は、報告書上の
-  /// 印字表記そのままの"2026 08/26"(年と月の間は半角スペース、月日間は
-  /// スラッシュ)という形式である(旧CSV照合方式で使っていた
-  /// _parseFlexibleDateと同じ理由。CSV照合廃止に伴い当該ファイルは
-  /// 削除済みだが、日付表記の性質自体は変わらないため同じ拡張を適用)。
-  /// 年と月の間の区切りは空白・スラッシュ・ハイフンいずれも許容するように
-  /// 拡張した。
-  DateTime? _tryParseDate(String text) {
-    final cleaned = text
-        .trim()
-        .replaceAll('年', '/')
-        .replaceAll('月', '/')
-        .replaceAll('日', '');
-    final match = RegExp(
-      r'(\d{4})[\s/\-]+(\d{1,2})[/\-](\d{1,2})',
-    ).firstMatch(cleaned);
-    if (match == null) return null;
-    try {
-      return DateTime(
-        int.parse(match.group(1)!),
-        int.parse(match.group(2)!),
-        int.parse(match.group(3)!),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
+  /// 【共通化・2026-08-28】実装本体は utils/scan_date_parser.dart の
+  /// tryParseScanDate() に切り出した(月末チェック機能
+  /// submission_check_screen.dart でも同じロジックが必要になったため)。
+  /// このメソッドは既存呼び出し箇所を変更せずに済ませるための薄いラッパー。
+  DateTime? _tryParseDate(String text) => tryParseScanDate(text);
 
   /// "16:00" や "~17:00" のようなAI抽出テキストをTimeOfDayへ変換する(失敗時はnull)。
   TimeOfDay? _tryParseTime(String text) {

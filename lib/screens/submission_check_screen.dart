@@ -12,6 +12,7 @@ import '../providers/app_state.dart';
 import '../services/document_scan_service.dart';
 import '../services/submission_check_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/scan_date_parser.dart';
 import '../utils/web_pdf_picker.dart';
 
 /// 【月末チェック(日報記入率)機能】
@@ -35,6 +36,22 @@ import '../utils/web_pdf_picker.dart';
 /// - Azure Functions側の実行時間上限対策として、1回のリクエストで
 ///   最大 DocumentScanService.maxPagesPerRequest ページまでしか
 ///   処理できないため、進捗バーを見せながら分割リクエストする。
+///
+/// 【重要・同一伝票No/受付Noに複数日程がある場合の対応・2026-08-28】
+/// プロワン案件は1つの伝票No(案件管理番号)に対して複数の作業日程
+/// (=複数ページの紙報告書、複数のWorkReport)が存在することがある。
+/// 伝票Noだけで突合すると、2ページとも同じ1件のWorkReportにマッチして
+/// しまい、実際には2日目分の日報が未入力(記入漏れ)であっても
+/// 検出できないという不具合があった。これを避けるため:
+///   1. 一度マッチしたWorkReportは「消費済み」として記録し、以後の
+///      ページから再度マッチさせない(1ページ=1WorkReportの1対1対応)。
+///   2. 同じ伝票Noの未消費候補が複数残っている場合は、OCRの
+///      WorkStartDateと日報のvisitDateが一致するものを優先して選ぶ
+///      (WorkStartDateのAI信頼度はまだ低いため、あくまで優先度判定の
+///      補助情報として使い、一致しない場合も未消費の候補があれば
+///      それを消費してmatchedとする)。
+///   3. 同じ伝票Noの候補をすべて消費し尽くした状態でさらに同じ伝票No
+///      のページが来た場合は unmatched(=記入漏れの可能性)として扱う。
 class SubmissionCheckScreen extends StatefulWidget {
   const SubmissionCheckScreen({super.key});
 
@@ -203,6 +220,13 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
     final appState = context.read<AppState>();
     final allReports = appState.reports;
 
+    // 【同一伝票No複数日程対応】このPDF一括処理の実行中、既にどの
+    // WorkReport.idがマッチ済み(消費済み)かを追跡する。ページごとに
+    // 都度リセットせず、同一PDF内の全ページを通して共有することで、
+    // 同じ伝票Noの2ページ目以降が1ページ目と同じ日報に重複マッチする
+    // ことを防ぐ。
+    final consumedReportIds = <String>{};
+
     setState(() {
       _processing = true;
       _processedPages = 0;
@@ -235,7 +259,14 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
         }
 
         for (final pageResult in batch.pageResults) {
-          final matched = _matchAgainstReports(pageResult, allReports);
+          final matched = _matchAgainstReports(
+            pageResult,
+            allReports,
+            consumedReportIds,
+          );
+          if (matched.matchedReport != null) {
+            consumedReportIds.add(matched.matchedReport!.id);
+          }
           if (mounted) {
             setState(() {
               _results.add(matched);
@@ -334,9 +365,16 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
   }
 
   /// docType(SE/プロワン)に応じた主キーで、アプリ側の日報データと突合する。
+  ///
+  /// [consumedReportIds] には、このPDF一括処理内で既にマッチ済みの
+  /// WorkReport.idを渡す。マッチが決まった場合、呼び出し元で
+  /// このSetに追加してもらうことで、同じ伝票No(案件管理番号)を持つ
+  /// 複数ページが同じ1件の日報に重複マッチすることを防ぐ
+  /// (1ページ=1WorkReportの1対1対応を保証する)。
   _PageCheckResult _matchAgainstReports(
     PageScanResult scan,
     List<WorkReport> reports,
+    Set<String> consumedReportIds,
   ) {
     if (scan.isError) {
       return _PageCheckResult(scan: scan, matchStatus: _MatchStatus.error);
@@ -356,23 +394,48 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
       return _PageCheckResult(scan: scan, matchStatus: _MatchStatus.unmatched);
     }
 
-    WorkReport? found;
+    // 伝票No/受付Noが一致する「未消費」の候補を全て集める
+    // (同一キーで複数日程の案件がある場合、複数件になり得る)。
+    final candidates = <WorkReport>[];
     if (scan.isProWanDocument) {
       for (final r in reports) {
+        if (consumedReportIds.contains(r.id)) continue;
         if (r.proWanRefNumber.trim() == matchingKey) {
-          found = r;
-          break;
+          candidates.add(r);
         }
       }
     } else {
       // isSeDocument、または将来docType未設定の古いレスポンスへの
       // 後方互換フォールバックとしてもSE側キーで突合を試みる。
       for (final r in reports) {
+        if (consumedReportIds.contains(r.id)) continue;
         if (r.storeSystemReportCopy.receiptNumber.trim() == matchingKey) {
-          found = r;
-          break;
+          candidates.add(r);
         }
       }
+    }
+
+    WorkReport? found;
+    if (candidates.length <= 1) {
+      found = candidates.isEmpty ? null : candidates.first;
+    } else {
+      // 【同一伝票Noに複数日程がある場合】OCRのWorkStartDateと
+      // 日報のvisitDateが同じ日(年月日)である候補を優先する。
+      // WorkStartDateのAI信頼度はまだ低いため、あくまで優先度判定の
+      // 補助情報として使う(一致しなくても未消費の候補があれば
+      // 先頭の1件を採用してmatchedとする。全く突合できないより、
+      // 「候補は複数あるが日付未確定」の状態で1件を仮に消費する方が、
+      // 残り件数を正しく減らせて記入漏れ検出の精度が上がるため)。
+      final scanDate = tryParseScanDate(scan.workStartDate);
+      if (scanDate != null) {
+        for (final c in candidates) {
+          if (isSameCalendarDay(c.visitDate, scanDate)) {
+            found = c;
+            break;
+          }
+        }
+      }
+      found ??= candidates.first;
     }
 
     if (found != null) {
