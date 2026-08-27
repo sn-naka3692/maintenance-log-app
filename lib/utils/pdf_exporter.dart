@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+import '../models/prowan_report_detail.dart';
 import '../models/store_system_report.dart';
 import '../models/work_report.dart';
 
@@ -96,6 +97,26 @@ class PdfExporter {
       MapEntry('部品4', ssr.part4),
       MapEntry('部品5', ssr.part5),
       MapEntry('備考', ssr.remarks),
+    ].where((e) => e.value.trim().isNotEmpty).toList();
+  }
+
+  /// プロワン管轄案件詳細(ProWanReportDetail)の項目一覧を
+  /// 日報詳細画面(report_detail_screen.dart)と同じ項目・並び順で返す
+  /// (値が空の項目は呼び出し側でフィルタする)。
+  static List<MapEntry<String, String>> _pwRows(ProWanReportDetail pwDetail) {
+    return [
+      MapEntry('店舗住所', pwDetail.storeAddress),
+      MapEntry('部門', pwDetail.department),
+      MapEntry('系統番号・名', pwDetail.systemNumber),
+      MapEntry('修理機器・場所', pwDetail.equipmentLocation),
+      MapEntry('障害内容', pwDetail.troubleContent),
+      MapEntry('障害機器', pwDetail.troubleEquipment),
+      MapEntry('原因', pwDetail.cause),
+      MapEntry('ご依頼内容', pwDetail.requestContent),
+      MapEntry('訪問結果', pwDetail.visitResult),
+      MapEntry('今後の予定', pwDetail.futurePlan),
+      MapEntry('技術者氏名', pwDetail.technicianName),
+      MapEntry('訪問日', pwDetail.visitDate),
     ].where((e) => e.value.trim().isNotEmpty).toList();
   }
 
@@ -273,6 +294,29 @@ class PdfExporter {
               ),
               pw.SizedBox(height: 4),
               for (final e in _ssrRows(r.storeSystemReportCopy))
+                infoRow(e.key, e.value),
+            ],
+            // 【追加】プロワン管轄案件(SE店舗以外)の案件詳細
+            // (ProWanReportDetail)。日報詳細画面と同じ項目・並び順で出力する。
+            if (!r.proWanReportDetail.isEmpty) ...[
+              pw.SizedBox(height: 6),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 3,
+                ),
+                decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                child: pw.Text(
+                  'プロワン案件詳細',
+                  style: pw.TextStyle(
+                    font: _boldFont,
+                    fontSize: 9,
+                    color: PdfColors.grey800,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              for (final e in _pwRows(r.proWanReportDetail))
                 infoRow(e.key, e.value),
             ],
           ],
