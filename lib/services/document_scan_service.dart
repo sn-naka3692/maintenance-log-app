@@ -467,15 +467,21 @@ const List<ScanFieldDef> kScanFieldDefinitions = [
 
 /// プロワン作業報告書用の抽出フィールド定義。
 /// generate_training_labels.py の FIELD_DEFINITIONS(プロワン用モデル
-/// prowan-report-v1)と対応。プロワン用モデルは意図的に最小限の2項目
-/// (案件管理番号=伝票No、店名〔誤マッチ防止の補助確認用〕)のみを
-/// 抽出する設計になっている。
+/// prowan-report-v1)と対応。プロワン用モデルは意図的に最小限の項目
+/// (案件管理番号=伝票No、店名〔誤マッチ防止の補助確認用〕、
+/// 作業開始日〔「関連案件」複数日程の照合キー〕)のみを抽出する設計に
+/// なっている。
 /// 【重要】伝票No自体は「_matchProwanCache()」でCSVキャッシュと照合し、
 /// 顧客名・作業内容・機器型番・冷媒情報を自動入力するための起点として
 /// 使われる。ここで細かいSE用の23項目を抽出する必要はない。
+/// 【2026-08-27追加】WorkStartDate: 1つの伝票Noが複数の作業日程(関連案件)
+/// をカバーするケースで、スキャンした作業開始日を使ってキャッシュ内の
+/// 該当スケジュールを特定するために利用する(report_edit_screen.dartの
+/// _matchProwanCache()参照)。
 const List<ScanFieldDef> kProWanScanFieldDefinitions = [
   ScanFieldDef('ProWanRefNumber', '案件管理番号(伝票No)'),
   ScanFieldDef('StoreName', '店名'),
+  ScanFieldDef('WorkStartDate', '作業開始日'),
 ];
 
 /// スキャン結果のdocTypeに応じて、確認画面に表示すべきフィールド定義
