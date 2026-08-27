@@ -284,12 +284,20 @@ class ProwanJobCache {
 
   /// OCR読み取り値("2026/08/18"や"2026年08月18日"等、表記揺れがありうる)
   /// を柔軟にDateTimeへ変換する。解析不能な場合はnullを返す。
+  ///
+  /// 【重要】Azureカスタムモデル(prowan-report-v1)がWorkStartDateとして
+  /// 実際に返す値は、プロワン報告書上の印字表記そのままの
+  /// "2026 08/26"(年と月の間は半角スペース、月日間はスラッシュ)という
+  /// 形式である(学習ラベルのgenerate_training_labels.pyのto_ocr_date_key()
+  /// 参照)。年月日すべてを"/"または"-"区切りで要求する実装では
+  /// この実際の表記に一致せず常にnullを返してしまうため、年と月の間の
+  /// 区切りは空白・スラッシュ・ハイフンいずれも許容するようにしている。
   static DateTime? _parseFlexibleDate(String value) {
     final s = value.trim();
     if (s.isEmpty) return null;
-    // "2026/08/18" "2026/08/18 13:00" 等
+    // "2026/08/18" "2026-08-18" "2026 08/18"(Azureモデルの実際の出力形式)等
     final slashMatch = RegExp(
-      r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})',
+      r'(\d{4})[\s/\-]+(\d{1,2})[/\-](\d{1,2})',
     ).firstMatch(s);
     if (slashMatch != null) {
       try {
