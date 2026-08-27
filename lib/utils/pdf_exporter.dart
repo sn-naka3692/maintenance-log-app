@@ -106,17 +106,17 @@ class PdfExporter {
   static List<MapEntry<String, String>> _pwRows(ProWanReportDetail pwDetail) {
     return [
       MapEntry('店舗住所', pwDetail.storeAddress),
+      MapEntry('得意先名', pwDetail.clientName),
+      MapEntry('受付日', pwDetail.receiptDate),
       MapEntry('部門', pwDetail.department),
       MapEntry('系統番号・名', pwDetail.systemNumber),
+      MapEntry('ケースNo', pwDetail.caseNo),
       MapEntry('修理機器・場所', pwDetail.equipmentLocation),
-      MapEntry('障害内容', pwDetail.troubleContent),
-      MapEntry('障害機器', pwDetail.troubleEquipment),
-      MapEntry('原因', pwDetail.cause),
       MapEntry('ご依頼内容', pwDetail.requestContent),
+      MapEntry('原因', pwDetail.cause),
       MapEntry('訪問結果', pwDetail.visitResult),
       MapEntry('今後の予定', pwDetail.futurePlan),
       MapEntry('技術者氏名', pwDetail.technicianName),
-      MapEntry('訪問日', pwDetail.visitDate),
     ].where((e) => e.value.trim().isNotEmpty).toList();
   }
 

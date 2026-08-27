@@ -79,17 +79,17 @@ void main() {
   test('excel/pdf export includes ProWanReportDetail (PW) data', () async {
     final pwDetail = ProWanReportDetail(
       storeAddress: '東京都新宿区西新宿1-1-1',
+      clientName: '株式会社テスト商事',
+      receiptDate: '2026/08/20',
       department: '空調部門',
       systemNumber: '系統A-1',
+      caseNo: 'C-01',
       equipmentLocation: '屋上室外機',
-      troubleContent: '冷房が効かない',
-      troubleEquipment: '室外機コンプレッサー',
       cause: '冷媒漏れ',
       requestContent: '冷房不良の点検・修理依頼',
       visitResult: '冷媒補充・漏れ箇所修理完了',
       futurePlan: '1ヶ月後に再点検予定',
       technicianName: '佐藤次郎',
-      visitDate: '2026/08/27',
     );
 
     final reportWithPw = WorkReport(

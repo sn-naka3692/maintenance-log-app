@@ -703,17 +703,17 @@ class _ProWanReportDetailView extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <MapEntry<String, String>>[
       MapEntry('店舗住所', data.storeAddress),
+      MapEntry('得意先名', data.clientName),
+      MapEntry('受付日', data.receiptDate),
       MapEntry('部門', data.department),
       MapEntry('系統番号・名', data.systemNumber),
+      MapEntry('ケースNo', data.caseNo),
       MapEntry('修理機器・場所', data.equipmentLocation),
-      MapEntry('障害内容', data.troubleContent),
-      MapEntry('障害機器', data.troubleEquipment),
-      MapEntry('原因', data.cause),
       MapEntry('ご依頼内容', data.requestContent),
+      MapEntry('原因', data.cause),
       MapEntry('訪問結果', data.visitResult),
       MapEntry('今後の予定', data.futurePlan),
       MapEntry('技術者氏名', data.technicianName),
-      MapEntry('訪問日', data.visitDate),
     ].where((e) => e.value.isNotEmpty).toList();
 
     if (rows.isEmpty) {

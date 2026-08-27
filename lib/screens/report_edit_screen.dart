@@ -12,7 +12,6 @@ import '../models/user.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../services/photo_upload_service.dart';
-import '../services/prowan_job_cache_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/document_scan_flow.dart';
 import '../widgets/store_picker_field.dart';
@@ -20,16 +19,6 @@ import '../widgets/store_picker_field.dart';
 /// 作業内容の記入サポート(チレアカップ)モード
 /// 店舗区分(SE/プロワン)と対応区分によって、重複を避けるべく内容を切り替える。
 enum _WorkSupportMode { seRepair, seOther, nonSE }
-
-/// 【不具合修正・2026-08-27】プロワンCSVキャッシュ照合の結果種別。
-/// 一過性のSnackBarメッセージだけでは見逃されやすいため、
-/// 常時表示のカードUIでも状態を明示するために使う。
-enum _ProwanMatchStatus {
-  exact, // 完全一致で自動反映できた
-  fuzzyAccepted, // 曖昧一致だがユーザーが確認の上で採用した
-  fuzzyRejectedOrNotFound, // 曖昧一致候補をユーザーが拒否した、または候補なし
-  notFound, // 完全一致・曖昧一致とも見つからなかった(未取込の可能性)
-}
 
 class ReportEditScreen extends StatefulWidget {
   final WorkReport? existing;
@@ -87,36 +76,24 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   TextEditingController? _activeListenController;
 
   // ------------------------------------------------------------
-  // プロワンCSVキャッシュ照合(重複入力削減機能)関連の状態
+  // プロワン管轄案件の入力状態管理
   // ------------------------------------------------------------
   // フィールド名 -> "auto"|"manual"。編集開始時に既存レコードから引き継ぐ
   // (新規作成時は空、つまり全て「手入力」扱いから始まる)。
+  // 【設計転換・2026-08-28】従来はCSVキャッシュ照合の自動反映/手入力の
+  // 区別に使っていたが、CSV照合ロジック廃止後は「スキャン(OCR)による
+  // 自動入力」か「手入力」かの区別として引き続き使う。
   Map<String, String> _fieldSources = {};
-  // 曖昧一致でキャッシュ照合が確定していない場合 true(要確認)。
+  // 【設計転換・2026-08-28で意味変更】従来は「CSVキャッシュとの曖昧一致
+  // が未確定」を示すフラグだったが、CSV照合ロジック廃止後はこの画面からは
+  // 新規にtrueへ設定することはない(既存レコードの値をそのまま保持・
+  // 保存するのみの後方互換フィールド)。
   bool _manualReviewNeeded = false;
-  // スキャン/照合時にマッチしたキャッシュ側の伝票No(参照用)。
+  // 【設計転換・2026-08-28で意味変更】従来は照合で一致したキャッシュ側の
+  // 伝票Noを保持していたが、CSV照合ロジック廃止後はこの画面からは
+  // 新規に設定することはない(既存レコードの値をそのまま保持・保存する
+  // のみの後方互換フィールド)。
   String _matchedCacheJobNumber = '';
-  // プロワン管理番号照合中のローディング表示用フラグ。
-  bool _isMatchingCache = false;
-  // スキャン時にAI-OCRが読み取った店名(あれば)。曖昧一致時、無関係な
-  // 別案件を誤って提案しないための店名照合フィルタに使う(照合ボタンを
-  // 手動で押し直した場合はスキャン由来の店名情報がないため使わない)。
-  String? _scannedStoreNameHint;
-  // 【2026-08-27追加: 関連案件対応】スキャン時にAI-OCRが読み取った
-  // 「作業開始日」(あれば)。1つの伝票Noに複数の作業日程(関連案件)が
-  // 存在する場合、この値を使ってCSVキャッシュの[schedules]から該当する
-  // 1日程を選び出す(ProwanJobCacheService.findByScannedJobNumberへ渡す)。
-  String? _scannedWorkStartDateHint;
-  // 【不具合修正・2026-08-27】照合結果(自動反映できたか・要確認か・
-  // 見つからなかったか)を、消えてしまうSnackBarだけに頼らず、
-  // 常時表示の目立つカードでも示すための状態。
-  // null = まだ照合を実行していない(スキャン未実施 or 未照合)。
-  _ProwanMatchStatus? _lastMatchStatus;
-  // 【2026-08-27追加: 関連案件対応】直近の照合結果が「複数日程あり」
-  // だったかどうか、また作業開始日から日程を1件に絞れたかどうかを
-  // カードUIで補足表示するための状態。
-  bool _lastMatchHasMultipleSchedules = false;
-  bool _lastMatchScheduleAmbiguous = false;
 
   bool get isEditing => widget.existing != null;
 
@@ -155,17 +132,17 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     final pw = e?.proWanReportDetail ?? ProWanReportDetail();
     _pwCtrls = {
       'storeAddress': TextEditingController(text: pw.storeAddress),
+      'clientName': TextEditingController(text: pw.clientName),
+      'receiptDate': TextEditingController(text: pw.receiptDate),
       'department': TextEditingController(text: pw.department),
       'systemNumber': TextEditingController(text: pw.systemNumber),
+      'caseNo': TextEditingController(text: pw.caseNo),
       'equipmentLocation': TextEditingController(text: pw.equipmentLocation),
-      'troubleContent': TextEditingController(text: pw.troubleContent),
-      'troubleEquipment': TextEditingController(text: pw.troubleEquipment),
-      'cause': TextEditingController(text: pw.cause),
       'requestContent': TextEditingController(text: pw.requestContent),
+      'cause': TextEditingController(text: pw.cause),
       'visitResult': TextEditingController(text: pw.visitResult),
       'futurePlan': TextEditingController(text: pw.futurePlan),
       'technicianName': TextEditingController(text: pw.technicianName),
-      'visitDate': TextEditingController(text: pw.visitDate),
     };
     final ss = e?.storeSystemReportCopy ?? StoreSystemReport();
     _ssCtrls = {
@@ -265,20 +242,20 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   }
 
   /// _pwCtrlsのキー(camelCase) -> ProWanReportDetail.toMap()のキー(snake_case)
-  /// の対応表。_matchProwanCache()での自動反映・manual判定の両方で使う。
+  /// の対応表。_applyProWanScanResult()での自動反映・manual判定の両方で使う。
   static const Map<String, String> _pwFieldKeyMap = {
     'storeAddress': 'store_address',
+    'clientName': 'client_name',
+    'receiptDate': 'receipt_date',
     'department': 'department',
     'systemNumber': 'system_number',
+    'caseNo': 'case_no',
     'equipmentLocation': 'equipment_location',
-    'troubleContent': 'trouble_content',
-    'troubleEquipment': 'trouble_equipment',
-    'cause': 'cause',
     'requestContent': 'request_content',
+    'cause': 'cause',
     'visitResult': 'visit_result',
     'futurePlan': 'future_plan',
     'technicianName': 'technician_name',
-    'visitDate': 'visit_date',
   };
 
   /// 指定フィールドを「手入力確定(manual)」としてマークする。
@@ -286,338 +263,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   void _markFieldEditedManually(String fieldKey) {
     if (_fieldSources[fieldKey] == 'manual') return;
     setState(() => _fieldSources[fieldKey] = 'manual');
-  }
-
-  /// プロワン管理番号(伝票No)でCSVキャッシュを照合し、
-  /// 顧客名・作業内容・機器型番・冷媒情報を自動入力する。
-  ///
-  /// 【二段階マッチング方式・①スキャン時の照合ロジック】
-  /// 完全一致 -> 曖昧一致(OCR誤読1〜2文字を許容) -> 見つからなければ
-  /// 手入力フォールバック(何もせずユーザーに案内)。
-  ///
-  /// 【不具合修正・2026-08-27】
-  /// 曖昧一致候補が本当は無関係な別案件だった実例(伝票No「R2026080980」
-  /// (ラッキー栗山店)に対し「R2026080982」(ラッキー星置駅前)を誤って
-  /// 提案していた)が本番で発覚したため、スキャン時に読み取った店名
-  /// (_scannedStoreNameHint)も照合条件に加えるようにした。
-  /// また、結果が一過性のSnackBarだけでは見逃されやすかったため、
-  /// 常時表示のカードUI(_lastMatchStatus)でも状態を明示する。
-  Future<void> _matchProwanCache() async {
-    final scannedNumber = _proWanCtrl.text.trim();
-    if (scannedNumber.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('プロワン管理番号(伝票No)を入力してから照合してください')),
-      );
-      return;
-    }
-
-    setState(() => _isMatchingCache = true);
-    ProwanJobCacheMatchResult? result;
-    try {
-      result = await ProwanJobCacheService.instance.findByScannedJobNumber(
-        scannedNumber,
-        scannedStoreName: _scannedStoreNameHint,
-        scannedWorkStartDate: _scannedWorkStartDateHint,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('照合中にエラーが発生しました: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isMatchingCache = false);
-    }
-
-    if (!mounted) return;
-
-    if (result == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            '該当する案件が見つかりませんでした。伝票Noを確認するか、手入力を続けてください。',
-          ),
-        ),
-      );
-      // 見つからなかった場合も、後で日次CSV再照合が試行できるよう
-      // 「要確認」フラグを立てておく(取込タイミングのズレを吸収するため)。
-      setState(() {
-        _manualReviewNeeded = true;
-        _lastMatchStatus = _ProwanMatchStatus.notFound;
-        _lastMatchHasMultipleSchedules = false;
-        _lastMatchScheduleAmbiguous = false;
-      });
-      return;
-    }
-
-    // 曖昧一致の場合はユーザーに確認を求める(AI一発登録は行わない方針)。
-    if (!result.isExactMatch) {
-      final accepted = await _confirmFuzzyMatch(result);
-      if (!mounted) return;
-      if (!accepted) {
-        // ユーザーが拒否 -> 何も反映しないが、状態は必ず可視化する。
-        setState(() {
-          _manualReviewNeeded = true;
-          _lastMatchStatus = _ProwanMatchStatus.fuzzyRejectedOrNotFound;
-          _lastMatchHasMultipleSchedules = false;
-          _lastMatchScheduleAmbiguous = false;
-        });
-        return;
-      }
-    }
-
-    // 【2026-08-27追加: 関連案件対応】伝票No一致後、CSVキャッシュの
-    // トップレベル値(店舗住所・部門・系統番号・機器型番・伝票No等、
-    // 日程によらず不変の項目)をベースに、作業開始日から絞り込めた
-    // 日程がある場合は、その日程固有の値(作業内容・障害内容・原因等)で
-    // 上書きする。これにより、1つの伝票Noに複数の作業日程がある場合でも、
-    // スキャンした報告書の日付に対応する内容だけが反映される。
-    final values = <String, String>{
-      ...result.cache.toWorkReportFieldValues(),
-      if (result.matchedSchedule != null)
-        ...result.matchedSchedule!.toWorkReportFieldValues(),
-    };
-    setState(() {
-      // すでに人間が手入力確定(manual)しているフィールドは上書きしない。
-      if (_fieldSources['client_name'] != 'manual' &&
-          (values['client_name'] ?? '').isNotEmpty) {
-        // 店舗マスタ選択中の場合はclientNameが自動生成されるため、
-        // 自由入力欄側に反映する。
-        if (_selectedStoreId == null) {
-          _storeFreeTextCtrl.text = values['client_name']!;
-        }
-        _fieldSources['client_name'] = 'auto';
-      }
-      if (_fieldSources['work_content'] != 'manual' &&
-          (values['work_content'] ?? '').isNotEmpty) {
-        _workContentCtrl.text = values['work_content']!;
-        _fieldSources['work_content'] = 'auto';
-      }
-      if (_fieldSources['equipment_model'] != 'manual' &&
-          (values['equipment_model'] ?? '').isNotEmpty) {
-        _equipmentModelCtrl.text = values['equipment_model']!;
-        _fieldSources['equipment_model'] = 'auto';
-      }
-      if (_fieldSources['non_se_refrigerant_type'] != 'manual' &&
-          (values['non_se_refrigerant_type'] ?? '').isNotEmpty) {
-        _nonSeRefrigerantTypeCtrl.text = values['non_se_refrigerant_type']!;
-        _fieldSources['non_se_refrigerant_type'] = 'auto';
-      }
-      if (_fieldSources['non_se_refrigerant_amount_kg'] != 'manual' &&
-          (values['non_se_refrigerant_amount_kg'] ?? '').isNotEmpty) {
-        _nonSeRefrigerantAmountCtrl.text =
-            values['non_se_refrigerant_amount_kg']!;
-        _fieldSources['non_se_refrigerant_amount_kg'] = 'auto';
-      }
-      // 【不具合修正・2026-08】プロワンCSVキャッシュの残り12項目
-      // (店舗住所・部門・系統番号・障害内容・障害機器・原因・依頼内容・
-      // 訪問結果・今後の予定・技術者氏名・訪問日)も、これまで反映先が
-      // なく捨てられていたため、ProWanReportDetail用コントローラへ反映する。
-      for (final entry in _pwFieldKeyMap.entries) {
-        final camelKey = entry.key;
-        final snakeKey = entry.value;
-        final valueKey = 'pro_wan_report_detail.$snakeKey';
-        if (_fieldSources[valueKey] != 'manual' &&
-            (values[valueKey] ?? '').isNotEmpty) {
-          _pwCtrls[camelKey]!.text = values[valueKey]!;
-          _fieldSources[valueKey] = 'auto';
-        }
-      }
-      // 伝票No自体は照合で確定した正しい値に揃えておく(完全一致時のみ)。
-      if (result!.isExactMatch) {
-        _proWanCtrl.text = result.matchedJobNumber;
-      }
-      _matchedCacheJobNumber = result.matchedJobNumber;
-      _manualReviewNeeded = !result.isExactMatch;
-      _lastMatchStatus = result.isExactMatch
-          ? _ProwanMatchStatus.exact
-          : _ProwanMatchStatus.fuzzyAccepted;
-      // 【2026-08-27追加: 関連案件対応】複数日程の有無・絞り込み結果を
-      // カードUIで補足表示するために保持する。
-      _lastMatchHasMultipleSchedules = result.hasMultipleSchedules;
-      _lastMatchScheduleAmbiguous = result.scheduleAmbiguous;
-    });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.isExactMatch
-                ? '案件情報を自動入力しました(完全一致)。内容を確認してください。'
-                : '案件情報を自動入力しました(曖昧一致・要確認)。内容を必ず確認してください。',
-          ),
-        ),
-      );
-    }
-  }
-
-  /// 曖昧一致(OCR誤読の可能性がある)結果をユーザーに提示し、採用するか確認する。
-  /// 「AI一発登録は行わない」社内方針に基づき、曖昧一致の場合は必ず
-  /// ユーザーの明示的な承認を経てから値を反映する。
-  Future<bool> _confirmFuzzyMatch(ProwanJobCacheMatchResult result) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('伝票Noの完全一致が見つかりません'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('入力値: ${_proWanCtrl.text.trim()}'),
-            const SizedBox(height: 4),
-            Text(
-              '近い案件が見つかりました: ${result.matchedJobNumber}'
-              '(${result.cache.storeName.isNotEmpty ? result.cache.storeName : result.cache.clientName})',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            if (result.alternativeCandidates.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                '他の候補: ${result.alternativeCandidates.join(", ")}',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ],
-            const SizedBox(height: 10),
-            const Text(
-              'この案件情報を自動入力しますか?(後で「要確認」として一覧に表示されます)',
-              style: TextStyle(fontSize: 13),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('手入力する'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('この案件で反映する'),
-          ),
-        ],
-      ),
-    );
-    return confirmed ?? false;
-  }
-
-  /// 【不具合修正・2026-08-27】
-  /// プロワンCSVキャッシュ照合の結果を、消えてしまう一過性のSnackBarだけ
-  /// でなく、常時表示のカードとしても明示する。
-  /// スキャン後「エラーは出ないが何も反映されていない(ように見える)」
-  /// という問い合わせの多くは、実際には「曖昧一致候補をダイアログで
-  /// 拒否した」または「該当案件がキャッシュに存在しなかった(直近取込前)」
-  /// という結果自体がこのSnackBar以外に表示されず見逃されていたことが
-  /// 原因だったため、このカードで状態を分かりやすく可視化する。
-  Widget _buildProwanMatchStatusCard() {
-    final status = _lastMatchStatus;
-    if (status == null) return const SizedBox.shrink();
-
-    late final Color bg;
-    late final Color fg;
-    late final IconData icon;
-    late final String title;
-    late final String detail;
-
-    switch (status) {
-      case _ProwanMatchStatus.exact:
-        bg = Colors.green.shade50;
-        fg = Colors.green.shade800;
-        icon = Icons.check_circle;
-        title = '案件情報を自動入力しました(完全一致)';
-        detail = '顧客名・作業内容などの項目を確認してください。';
-        break;
-      case _ProwanMatchStatus.fuzzyAccepted:
-        bg = Colors.orange.shade50;
-        fg = Colors.orange.shade800;
-        icon = Icons.warning_amber;
-        title = '案件情報を自動入力しました(曖昧一致・要確認)';
-        detail =
-            '伝票No「$_matchedCacheJobNumber」の案件として反映しました。'
-            '内容を必ず確認してください。';
-        break;
-      case _ProwanMatchStatus.fuzzyRejectedOrNotFound:
-        bg = Colors.red.shade50;
-        fg = Colors.red.shade800;
-        icon = Icons.error_outline;
-        title = '案件情報は反映されていません';
-        detail = '候補案件を「手入力する」で見送りました。各項目を手入力してください。';
-        break;
-      case _ProwanMatchStatus.notFound:
-        bg = Colors.red.shade50;
-        fg = Colors.red.shade800;
-        icon = Icons.error_outline;
-        title = '案件情報は反映されていません(該当案件なし)';
-        detail =
-            'キャッシュにまだ取り込まれていない可能性があります'
-            '(直近のCSV取込より後に完了した新しい案件など)。各項目を手入力するか、'
-            'しばらくしてから「照合」をもう一度お試しください。';
-        break;
-    }
-
-    final scheduleNote = _scheduleStatusNote();
-
-    return Container(
-      margin: const EdgeInsets.only(top: 8, bottom: 4),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: fg.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: fg),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: fg,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  detail,
-                  style: TextStyle(fontSize: 11.5, color: fg, height: 1.4),
-                ),
-                if (scheduleNote != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    scheduleNote,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: fg,
-                      height: 1.4,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 【2026-08-27追加: 関連案件対応】この伝票Noに複数の作業日程
-  /// (関連案件)が存在する場合、その旨と、作業開始日から日程を
-  /// 1件に絞り込めたかどうかをカードUIの補足として返す。
-  /// 該当ケースがない場合はnullを返す(補足行を表示しない)。
-  String? _scheduleStatusNote() {
-    if (!_lastMatchHasMultipleSchedules) return null;
-    if (_lastMatchScheduleAmbiguous) {
-      return '※この伝票Noには複数の作業日程(関連案件)があります。'
-          '作業開始日を読み取れなかったため、直近の日程の内容を反映しています。'
-          '作業内容・障害内容等は必ず報告書の日付と照らして確認してください。';
-    }
-    return '※この伝票Noには複数の作業日程(関連案件)がありますが、'
-        '作業開始日から該当する日程を特定し、その内容を反映しました。';
   }
 
   @override
@@ -804,9 +449,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   /// 【docType対応】サーバー側(nakano-scan-proxy)がSE用・プロワン用の
   /// 2モデルを並行解析し、confidence比較で書式を自動判定する。
   /// - SEDocType: 従来通り23項目をコンビニ側システム入力控えへ反映
-  /// - ProWanDocType: 案件管理番号(伝票No)・店名の2項目のみを抽出し、
-  ///   伝票Noをプロワン管理番号欄へ反映した上で、CSVキャッシュ照合
-  ///   (_matchProwanCache)を自動的に続けて実行する
+  /// - ProWanDocType: 【設計転換・2026-08-28】案件管理番号(伝票No)を
+  ///   含む18項目(kProWanScanFieldDefinitions参照)を、CSV照合を介さず
+  ///   _applyProWanScanResult()で各フォーム欄へ直接反映する
   Future<void> _scanReport() async {
     final confirmed = await DocumentScanFlow.run(context);
     if (confirmed == null || !mounted) return;
@@ -903,69 +548,139 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
   /// プロワン文書と判定されたスキャン結果を反映する。
   ///
-  /// SE用の23項目とは異なり、プロワン用モデルは「案件管理番号(伝票No)」と
-  /// 「店名」の2項目のみを抽出する設計(generate_training_labels.py参照)。
-  /// 伝票Noをプロワン管理番号欄へ反映したら、そのまま続けてCSVキャッシュ照合
-  /// (_matchProwanCache)を自動実行し、顧客名・作業内容・機器型番・冷媒情報
-  /// を自動入力する。店名はキャッシュ照合結果との一致確認用の補助情報として
-  /// スナックバーに表示するのみで、フォームへの直接反映は行わない
-  /// (誤った店舗情報での上書きを避けるため)。
+  /// 【設計転換・2026-08-28】従来はスキャンで読み取った伝票NoをキーにCSV
+  /// キャッシュ(prowan_job_cache)と照合し、顧客名・作業内容等を反映していた。
+  /// しかし、現場の日報入力(スキャン)は事務所側のCSVエクスポートより
+  /// 時系列的に先行するため、リアルタイムのCSV照合は原理的に成立しない
+  /// ことが判明した。作業報告書PDF自体に必要な項目(18項目、
+  /// kProWanScanFieldDefinitions参照)が全て印字されているため、CSV照合を
+  /// 廃止し、AI-OCRが読み取った18項目を直接各フォーム欄へマッピングする
+  /// 方式に変更した。
+  ///
+  /// 【マッピング先】
+  /// - ProWanRefNumber -> _proWanCtrl(伝票No)
+  /// - StoreName -> _storeFreeTextCtrl(店舗選択が未確定の場合のみ。
+  ///   店舗マスタから選択済みの場合は自由入力欄へは反映しない)
+  /// - ClientName/ReceiptDate/Department/SystemNumber/CaseNo/
+  ///   EquipmentLocation/RequestContent/Cause/VisitResult/FuturePlan/
+  ///   TechnicianName -> _pwCtrls(ProWanReportDetailの12項目)
+  /// - ModelSerial -> _equipmentModelCtrl(機器型番、WorkReport本体と共通)
+  /// - WorkContent -> _workContentCtrl(作業内容、WorkReport本体と共通)
+  /// - RefrigerantType/RefrigerantAmount -> _nonSeRefrigerantTypeCtrl/
+  ///   _nonSeRefrigerantAmountCtrl(WorkReport本体と共通、重複を避けて
+  ///   ProWanReportDetail側には持たない)
+  /// - WorkStartDate -> _visitDate(訪問日。パース可能な場合のみ反映)
+  ///
+  /// いずれも、すでに人間が手入力確定(manual)済みのフィールドは
+  /// 上書きしない(前セッションで確定した設計方針を維持)。
   Future<void> _applyProWanScanResult(Map<String, String> confirmed) async {
     final refNumber = (confirmed['ProWanRefNumber'] ?? '').trim();
-    final storeName = (confirmed['StoreName'] ?? '').trim();
-    // 【2026-08-27追加: 関連案件対応】プロワン用OCRモデルに
-    // 「作業開始日」(WorkStartDate)フィールドが追加された場合に対応。
-    // 未対応モデルの場合はconfirmedにこのキーが存在しないため空文字となり、
-    // 従来通り(複数日程がある場合は最新日程の内容を反映)の動作に落ち着く。
-    final workStartDate = (confirmed['WorkStartDate'] ?? '').trim();
-
     if (refNumber.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('案件管理番号(伝票No)を読み取れませんでした。手入力してから照合してください。'),
-          ),
+          const SnackBar(content: Text('案件管理番号(伝票No)を読み取れませんでした。他の項目は反映済みです。')),
         );
       }
-      return;
+    }
+
+    int filledCount = 0;
+
+    void applyIfNotManual(String fieldKey, TextEditingController ctrl,
+        String? value) {
+      final v = (value ?? '').trim();
+      if (v.isEmpty) return;
+      if (_fieldSources[fieldKey] == 'manual') return;
+      ctrl.text = v;
+      _fieldSources[fieldKey] = 'auto';
+      filledCount++;
     }
 
     setState(() {
-      _proWanCtrl.text = refNumber;
-      // スキャンによる自動入力のため、まだ人間による確定(manual)扱いには
-      // しない(既にmanual確定済みの場合はそのまま維持する)。
-      if (_fieldSources['pro_wan_ref_number'] != 'manual') {
-        _fieldSources['pro_wan_ref_number'] = 'auto';
+      applyIfNotManual('pro_wan_ref_number', _proWanCtrl, refNumber);
+
+      // 店舗名: 店舗マスタから選択済みの場合は自由入力欄を上書きしない
+      // (誤った店舗情報での上書きを避けるため)。
+      final storeName = (confirmed['StoreName'] ?? '').trim();
+      if (_selectedStoreId == null) {
+        applyIfNotManual('client_name', _storeFreeTextCtrl, storeName);
       }
-      // 【不具合修正・2026-08-27】曖昧一致時に無関係な別案件を誤って
-      // 提案しないよう、スキャンで読み取った店名を照合フィルタ用に保持する。
-      _scannedStoreNameHint = storeName.isNotEmpty ? storeName : null;
-      // 【2026-08-27追加: 関連案件対応】読み取れた作業開始日を、
-      // CSVキャッシュの複数日程(schedules)から該当する1件を選ぶための
-      // ヒントとして保持する。
-      _scannedWorkStartDateHint = workStartDate.isNotEmpty
-          ? workStartDate
-          : null;
+
+      // WorkReport本体と共通のフィールド(重複統合)
+      applyIfNotManual(
+        'equipment_model',
+        _equipmentModelCtrl,
+        confirmed['ModelSerial'],
+      );
+      applyIfNotManual('work_content', _workContentCtrl, confirmed['WorkContent']);
+      applyIfNotManual(
+        'non_se_refrigerant_type',
+        _nonSeRefrigerantTypeCtrl,
+        confirmed['RefrigerantType'],
+      );
+      applyIfNotManual(
+        'non_se_refrigerant_amount_kg',
+        _nonSeRefrigerantAmountCtrl,
+        confirmed['RefrigerantAmount'],
+      );
+
+      // ProWanReportDetail(12項目)へのマッピング
+      const ocrKeyToPwCtrlKey = {
+        'ClientName': 'clientName',
+        'ReceiptDate': 'receiptDate',
+        'Department': 'department',
+        'SystemNumber': 'systemNumber',
+        'CaseNo': 'caseNo',
+        'EquipmentLocation': 'equipmentLocation',
+        'RequestContent': 'requestContent',
+        'Cause': 'cause',
+        'VisitResult': 'visitResult',
+        'FuturePlan': 'futurePlan',
+        'TechnicianName': 'technicianName',
+      };
+      for (final ocrEntry in ocrKeyToPwCtrlKey.entries) {
+        final pwCtrlKey = ocrEntry.value;
+        final snakeKey = _pwFieldKeyMap[pwCtrlKey]!;
+        applyIfNotManual(
+          'pro_wan_report_detail.$snakeKey',
+          _pwCtrls[pwCtrlKey]!,
+          confirmed[ocrEntry.key],
+        );
+      }
+
+      // 作業開始日 -> 訪問日(パース可能な場合のみ)
+      final workStartDate = (confirmed['WorkStartDate'] ?? '').trim();
+      if (workStartDate.isNotEmpty) {
+        final parsed = _tryParseDate(workStartDate);
+        if (parsed != null) {
+          _visitDate = parsed;
+          filledCount++;
+        }
+      }
     });
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            storeName.isNotEmpty
-                ? '伝票No「$refNumber」($storeName)を読み取りました。案件情報を照合します…'
-                : '伝票No「$refNumber」を読み取りました。案件情報を照合します…',
+            filledCount > 0
+                ? '作業報告書から$filledCount件の項目を自動入力しました。内容を確認してください。'
+                : '読み取れた項目がありませんでした。各項目を手入力してください。',
           ),
         ),
       );
     }
-
-    // 【二段階マッチング方式・①スキャン時の照合ロジック】に直結させる。
-    // 読み取った伝票NoでそのままCSVキャッシュ照合を自動実行する。
-    await _matchProwanCache();
   }
 
   /// "2025/8/15" のようなAI抽出テキストをDateTimeへ変換する(失敗時はnull)。
+  ///
+  /// 【対応拡張・2026-08-28】プロワン用Azureカスタムモデル
+  /// (prowan-report-v1)がWorkStartDateとして実際に返す値は、報告書上の
+  /// 印字表記そのままの"2026 08/26"(年と月の間は半角スペース、月日間は
+  /// スラッシュ)という形式である(旧CSV照合方式で使っていた
+  /// _parseFlexibleDateと同じ理由。CSV照合廃止に伴い当該ファイルは
+  /// 削除済みだが、日付表記の性質自体は変わらないため同じ拡張を適用)。
+  /// 年と月の間の区切りは空白・スラッシュ・ハイフンいずれも許容するように
+  /// 拡張した。
   DateTime? _tryParseDate(String text) {
     final cleaned = text
         .trim()
@@ -973,7 +688,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         .replaceAll('月', '/')
         .replaceAll('日', '');
     final match = RegExp(
-      r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})',
+      r'(\d{4})[\s/\-]+(\d{1,2})[/\-](\d{1,2})',
     ).firstMatch(cleaned);
     if (match == null) return null;
     try {
@@ -1083,22 +798,22 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       return;
     }
 
-    // 【不具合修正・2026-08】プロワン管轄案件専用の案件詳細
-    // (店舗住所・部門・系統番号・障害内容・障害機器・原因・依頼内容・
-    // 訪問結果・今後の予定・技術者氏名・訪問日)を_pwCtrlsから構築する。
+    // 【設計転換・2026-08-28】プロワン管轄案件専用の案件詳細
+    // (店舗住所・得意先名・受付日・部門・系統番号・ケースNo・修理機器・場所・
+    // ご依頼内容・原因・訪問結果・今後の予定・技術者氏名)を_pwCtrlsから構築する。
     final pwDetail = ProWanReportDetail(
       storeAddress: _pwCtrls['storeAddress']!.text.trim(),
+      clientName: _pwCtrls['clientName']!.text.trim(),
+      receiptDate: _pwCtrls['receiptDate']!.text.trim(),
       department: _pwCtrls['department']!.text.trim(),
       systemNumber: _pwCtrls['systemNumber']!.text.trim(),
+      caseNo: _pwCtrls['caseNo']!.text.trim(),
       equipmentLocation: _pwCtrls['equipmentLocation']!.text.trim(),
-      troubleContent: _pwCtrls['troubleContent']!.text.trim(),
-      troubleEquipment: _pwCtrls['troubleEquipment']!.text.trim(),
-      cause: _pwCtrls['cause']!.text.trim(),
       requestContent: _pwCtrls['requestContent']!.text.trim(),
+      cause: _pwCtrls['cause']!.text.trim(),
       visitResult: _pwCtrls['visitResult']!.text.trim(),
       futurePlan: _pwCtrls['futurePlan']!.text.trim(),
       technicianName: _pwCtrls['technicianName']!.text.trim(),
-      visitDate: _pwCtrls['visitDate']!.text.trim(),
     );
 
     if (isEditing) {
@@ -1527,22 +1242,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               fieldKey: 'pro_wan_ref_number',
             ),
             _buildCaseGroupingHint(_proWanCtrl),
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _isMatchingCache ? null : _matchProwanCache,
-                icon: _isMatchingCache
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.sync, size: 16),
-                label: Text(_isMatchingCache ? '照合中...' : '案件情報を照合して自動入力'),
-              ),
-            ),
-            _buildProwanMatchStatusCard(),
             const SizedBox(height: 12),
 
             if (showNonSeRefrigerantSection) _buildNonSeRefrigerantSection(),
@@ -2339,6 +2038,36 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             fieldKey: 'pro_wan_report_detail.store_address',
           ),
           const SizedBox(height: 10),
+          _buildField(
+            controller: _pwCtrls['clientName']!,
+            label: '得意先名',
+            icon: Icons.apartment,
+            fieldKey: 'pro_wan_report_detail.client_name',
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildField(
+                  controller: _pwCtrls['receiptDate']!,
+                  label: '受付日',
+                  icon: Icons.event,
+                  fieldKey: 'pro_wan_report_detail.receipt_date',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildField(
+                  controller: _pwCtrls['caseNo']!,
+                  label: 'ケースNo',
+                  icon: Icons.confirmation_number,
+                  fieldKey: 'pro_wan_report_detail.case_no',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2370,18 +2099,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           ),
           const SizedBox(height: 10),
           _buildField(
-            controller: _pwCtrls['troubleContent']!,
-            label: '障害内容',
-            icon: Icons.report_problem,
+            controller: _pwCtrls['requestContent']!,
+            label: 'ご依頼内容',
+            icon: Icons.mail_outline,
             maxLines: 2,
-            fieldKey: 'pro_wan_report_detail.trouble_content',
-          ),
-          const SizedBox(height: 10),
-          _buildField(
-            controller: _pwCtrls['troubleEquipment']!,
-            label: '障害機器',
-            icon: Icons.devices_other,
-            fieldKey: 'pro_wan_report_detail.trouble_equipment',
+            fieldKey: 'pro_wan_report_detail.request_content',
           ),
           const SizedBox(height: 10),
           _buildField(
@@ -2390,14 +2112,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             icon: Icons.search,
             maxLines: 2,
             fieldKey: 'pro_wan_report_detail.cause',
-          ),
-          const SizedBox(height: 10),
-          _buildField(
-            controller: _pwCtrls['requestContent']!,
-            label: 'ご依頼内容',
-            icon: Icons.mail_outline,
-            maxLines: 2,
-            fieldKey: 'pro_wan_report_detail.request_content',
           ),
           const SizedBox(height: 10),
           _buildField(
@@ -2416,27 +2130,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             fieldKey: 'pro_wan_report_detail.future_plan',
           ),
           const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _buildField(
-                  controller: _pwCtrls['technicianName']!,
-                  label: '技術者氏名(プロワン側記録)',
-                  icon: Icons.badge,
-                  fieldKey: 'pro_wan_report_detail.technician_name',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildField(
-                  controller: _pwCtrls['visitDate']!,
-                  label: '訪問日(プロワン側記録)',
-                  icon: Icons.event,
-                  fieldKey: 'pro_wan_report_detail.visit_date',
-                ),
-              ),
-            ],
+          _buildField(
+            controller: _pwCtrls['technicianName']!,
+            label: '技術者氏名(プロワン側記録)',
+            icon: Icons.badge,
+            fieldKey: 'pro_wan_report_detail.technician_name',
           ),
         ],
       ),
@@ -2645,11 +2343,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       '自動入力された項目には緑色の'
                       '「スキャンで自動反映済み」マークが付くので、'
                       'それ以外の項目だけ追加で入力すればOKです。'
-                : '先にスキャンすると、伝票No(案件管理番号)をAIが読み取り、'
-                      'プロワンの案件情報と自動照合して顧客名・作業内容・機器型番・冷媒情報'
-                      'を自動入力します。プロワン側で入力済みの内容と重複する項目は'
-                      'これで済むので、緑色の「スキャンで自動反映済み」マークが付いた'
-                      '項目以外(内容の確認・下のナレッジ共有など)だけ追加でご記入ください。',
+                : '先にスキャンすると、作業報告書に印字されている伝票No・得意先名・'
+                      '受付日・部門・系統番号・ケースNo・修理機器・場所・ご依頼内容・原因・'
+                      '訪問結果・今後の予定・技術者氏名・機器型番・作業内容・冷媒情報などを'
+                      'AIが直接読み取って自動入力します。緑色の'
+                      '「スキャンで自動反映済み」マークが付いた項目以外'
+                      '(内容の確認・下のナレッジ共有など)だけ追加でご記入ください。',
             style: TextStyle(
               fontSize: 12,
               color: Colors.blue.shade900,

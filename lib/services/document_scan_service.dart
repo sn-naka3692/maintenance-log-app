@@ -467,21 +467,40 @@ const List<ScanFieldDef> kScanFieldDefinitions = [
 
 /// プロワン作業報告書用の抽出フィールド定義。
 /// generate_training_labels.py の FIELD_DEFINITIONS(プロワン用モデル
-/// prowan-report-v1)と対応。プロワン用モデルは意図的に最小限の項目
-/// (案件管理番号=伝票No、店名〔誤マッチ防止の補助確認用〕、
-/// 作業開始日〔「関連案件」複数日程の照合キー〕)のみを抽出する設計に
-/// なっている。
-/// 【重要】伝票No自体は「_matchProwanCache()」でCSVキャッシュと照合し、
-/// 顧客名・作業内容・機器型番・冷媒情報を自動入力するための起点として
-/// 使われる。ここで細かいSE用の23項目を抽出する必要はない。
-/// 【2026-08-27追加】WorkStartDate: 1つの伝票Noが複数の作業日程(関連案件)
-/// をカバーするケースで、スキャンした作業開始日を使ってキャッシュ内の
-/// 該当スケジュールを特定するために利用する(report_edit_screen.dartの
-/// _matchProwanCache()参照)。
+/// prowan-report-v1)と対応。
+///
+/// 【設計方針・2026-08-28改訂】
+/// 従来はCSVキャッシュ(プロワンから毎日書き出されるエクスポート)との
+/// 照合キーとなる3項目(伝票No・店名・作業開始日)のみを抽出し、実際の
+/// 顧客名・作業内容等はCSV側の値を転記する設計だった。
+/// しかし、現場の日報入力(このスキャン)は事務所側のCSVエクスポートより
+/// 時系列的に先行するため、リアルタイムのスキャン時点ではCSVに該当データが
+/// まだ存在しない(またはエクスポート対象外になっている)ケースが本番で
+/// 発生し、「該当する案件が見つかりません」という不具合の温床になっていた。
+/// 作業報告書PDF自体に顧客名・部門・系統番号・型式・依頼内容・原因・
+/// 作業内容・訪問結果・冷媒情報等が全て印字されているため、これらを
+/// 直接OCRで読み取ることで、CSV照合を介さずに完結させる設計に変更した。
+/// (CSV照合ロジック自体は、月次の日報入力漏れチェック機能
+/// (submission_checks)専用として別途維持する。)
 const List<ScanFieldDef> kProWanScanFieldDefinitions = [
   ScanFieldDef('ProWanRefNumber', '案件管理番号(伝票No)'),
   ScanFieldDef('StoreName', '店名'),
+  ScanFieldDef('ClientName', '得意先名'),
+  ScanFieldDef('ReceiptDate', '受付日'),
   ScanFieldDef('WorkStartDate', '作業開始日'),
+  ScanFieldDef('Department', '部門'),
+  ScanFieldDef('SystemNumber', '系統番号・名'),
+  ScanFieldDef('CaseNo', 'ケースNo'),
+  ScanFieldDef('EquipmentLocation', '修理機器・場所'),
+  ScanFieldDef('ModelSerial', '製造番号・型式'),
+  ScanFieldDef('RequestContent', 'ご依頼内容'),
+  ScanFieldDef('Cause', '原因(故障個所)'),
+  ScanFieldDef('VisitResult', '訪問結果'),
+  ScanFieldDef('WorkContent', '作業内容(処置)'),
+  ScanFieldDef('FuturePlan', '今後の予定(未完了時)'),
+  ScanFieldDef('RefrigerantType', '冷媒の種類'),
+  ScanFieldDef('RefrigerantAmount', '冷媒量(kg)'),
+  ScanFieldDef('TechnicianName', '技術者氏名'),
 ];
 
 /// スキャン結果のdocTypeに応じて、確認画面に表示すべきフィールド定義

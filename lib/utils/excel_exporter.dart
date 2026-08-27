@@ -70,17 +70,17 @@ class ExcelExporter {
     // 日報詳細画面(report_detail_screen.dart)の「プロワン案件詳細」
     // セクションと同じ項目・並び順で出力する。
     'PW:店舗住所',
+    'PW:得意先名',
+    'PW:受付日',
     'PW:部門',
     'PW:系統番号・名',
+    'PW:ケースNo',
     'PW:修理機器・場所',
-    'PW:障害内容',
-    'PW:障害機器',
-    'PW:原因',
     'PW:ご依頼内容',
+    'PW:原因',
     'PW:訪問結果',
     'PW:今後の予定',
     'PW:技術者氏名',
-    'PW:訪問日',
     '作成日時',
     '更新日時',
   ];
@@ -202,17 +202,17 @@ class ExcelExporter {
         ssr.part5,
         ssr.remarks,
         pw.storeAddress,
+        pw.clientName,
+        pw.receiptDate,
         pw.department,
         pw.systemNumber,
+        pw.caseNo,
         pw.equipmentLocation,
-        pw.troubleContent,
-        pw.troubleEquipment,
-        pw.cause,
         pw.requestContent,
+        pw.cause,
         pw.visitResult,
         pw.futurePlan,
         pw.technicianName,
-        pw.visitDate,
         _dateTimeFmt.format(r.createdAt),
         _dateTimeFmt.format(r.updatedAt),
       ];
@@ -282,17 +282,17 @@ class ExcelExporter {
       12, // SE:部品5
       18, // SE:備考
       20, // PW:店舗住所
+      16, // PW:得意先名
+      12, // PW:受付日
       12, // PW:部門
       16, // PW:系統番号・名
+      12, // PW:ケースNo
       16, // PW:修理機器・場所
-      20, // PW:障害内容
-      16, // PW:障害機器
-      16, // PW:原因
       24, // PW:ご依頼内容
+      16, // PW:原因
       20, // PW:訪問結果
       20, // PW:今後の予定
       12, // PW:技術者氏名
-      12, // PW:訪問日
       16, // 作成日時
       16, // 更新日時
     ];

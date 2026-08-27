@@ -225,6 +225,43 @@ const List<ExternalService> externalServices = [
 /// 過去に検討したが不要と判断した、または導入を見送ったサービス
 const List<ExternalService> consideredButNotAdopted = [
   ExternalService(
+    name: 'プロワン本体とのリアルタイムAPI連携',
+    category: 'バックエンドAPI(検討のみ・不採用)',
+    status: ServiceStatus.removed,
+    provider: '－(プロワン側システムの提供元)',
+    purpose:
+        'プロワン管轄案件(SE店舗以外)のスキャン時に、プロワン本体の'
+        'データベースへ直接アクセスして案件情報(顧客名・作業内容等)を'
+        'リアルタイムに取得することを将来構想として検討していた',
+    accountOwner: '－(採用見送りのため契約・アカウント自体が存在しない)',
+    costNote: '－',
+    credentialLocation: '－(構築していないため認証情報自体が存在しない)',
+    notes: [
+      '2026-08-28: 「プロワンとのAPI連携は考えにくい」との判断により、'
+          '将来構想として不採用に確定。プロワン側にAPI提供の仕組みが'
+          'あるかどうか自体が不明であり、仮に実現できたとしても先方システム'
+          'への外部連携許可・仕様公開が必要になるなど実現可能性が低いため',
+      '【代替として採用していた方式(こちらも廃止)】プロワン側が日次で'
+          'エクスポートするCSVをFirestore上のキャッシュ'
+          '(prowan_job_cache コレクション)に取り込み、現場スキャン時に'
+          '伝票No(案件管理番号)で照合する「CSV照合方式」を2026-08中旬に'
+          '一時導入していたが、現場でのスキャン入力がCSV取込より'
+          '時系列的に先行するため直近案件が「該当なし」になりやすいという'
+          '根本的な限界があり、2026-08-28に廃止(詳細は更新履歴v1.2.30参照)',
+      '【最終的な採用方式】CSV照合・API連携のどちらにも依存せず、作業'
+          '報告書PDF自体をAI-OCR(Azure AI Document Intelligence)で直接'
+          '読み取り、18項目全てを各入力欄へそのまま反映する方式に変更。'
+          '外部システムとの連携を一切必要としないため、プロワン側の'
+          '都合に左右されない安定した仕組みになっている',
+      '【削除したコード】旧CSV照合方式のために作成していた'
+          'csv_cache_backend/配下のPythonスクリプト一式(CSV取込・曖昧'
+          '一致・日次再照合)、Flutter側の関連ファイル(prowan_job_cache.dart'
+          'モデル、prowan_job_cache_service.dart)、Firestoreセキュリティ'
+          'ルールの prowan_job_cache コレクション定義を、2026-08-28に'
+          '全て削除済み',
+    ],
+  ),
+  ExternalService(
     name: 'Firebase Cloud Functions',
     category: 'バックエンドAPI(検討のみ)',
     status: ServiceStatus.removed,
