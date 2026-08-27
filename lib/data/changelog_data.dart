@@ -20,6 +20,19 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.23',
+    date: '2026-08-27',
+    title: 'WEB版でも「新しいバージョンがあります」通知が出るように修正',
+    details: [
+      '【不具合修正】WEB版で、新しいバージョンが公開されてもホーム画面に'
+          '通知バナーが表示されない不具合を修正しました。'
+          '今後はWEB版・APK版どちらでもお知らせが表示されます。',
+      '【不具合修正】前回(v1.2.22)配布していたAPKファイルのサイズが'
+          '本来より大きくなっていた不具合を修正しました'
+          '(約72MB→約30MBに正常化)。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.22',
     date: '2026-08-27',
     title: '「日報・ナレッジ」タブにExcel・PDF出力機能を追加',

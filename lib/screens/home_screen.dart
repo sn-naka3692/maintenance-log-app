@@ -7,6 +7,8 @@ import '../providers/app_state.dart';
 import '../services/app_config_service.dart';
 import '../services/update_notice_service.dart';
 import '../utils/apk_update_flow.dart';
+import '../utils/web_reload_stub.dart'
+    if (dart.library.js_interop) '../utils/web_reload_web.dart';
 import '../widgets/report_card.dart';
 import 'changelog_screen.dart';
 import 'report_detail_screen.dart';
@@ -51,7 +53,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkServerUpdate() async {
-    if (kIsWeb) return; // Web版は常に最新がサーブされるため対象外
+    // 【v1.2.23で修正】以前はWeb版を対象外にしていたが、Firebase Hosting
+    // へのデプロイ漏れやブラウザキャッシュにより、Web版でも古いビルドが
+    // 表示され続けるケースがあるため、Web版でもチェックを行う。
     final result = await AppConfigService.instance.checkUpdateAvailability();
     if (mounted) {
       setState(() {
@@ -120,7 +124,9 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverToBoxAdapter(
                 child: _NewVersionBanner(
                   latestVersion: _serverLatestVersion,
-                  onTap: () => downloadAndInstallLatestApkWithDialog(context),
+                  onTap: () => kIsWeb
+                      ? reloadWebPage()
+                      : downloadAndInstallLatestApkWithDialog(context),
                 ),
               )
             else if (_hasUnseenUpdate)
@@ -347,7 +353,7 @@ class _NewVersionBanner extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'タップして最新版をダウンロード',
+                    kIsWeb ? 'タップしてページを再読み込み' : 'タップして最新版をダウンロード',
                     style: TextStyle(
                       fontSize: 11,
                       color: Colors.orange.shade700,

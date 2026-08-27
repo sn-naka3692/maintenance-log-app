@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:package_info_plus/package_info_plus.dart';
 
 /// アプリ全体の「最低利用可能バージョン(ビルド番号)」および
@@ -62,9 +61,22 @@ class AppConfigService {
 
   /// Firestoreから最新の設定値を取得する。
   /// ドキュメントが存在しない/読み込みに失敗した場合はnullを返す(fail-open)。
+  ///
+  /// 【v1.2.23で修正】Firestoreのデフォルト挙動では、オフラインキャッシュ
+  /// (前回取得時の古い値)が先に返ってしまう場合がある。バージョン比較の
+  /// 性質上、必ずサーバーの最新値を見る必要があるため、
+  /// `GetOptions(source: Source.server)` を明示し、キャッシュ経由の
+  /// 古い値で誤判定しないようにする。サーバーに到達できない場合は
+  /// キャッシュへフォールバックする(完全な通信断でも極力fail-openを保つ)。
   Future<AppMinVersionConfig?> fetchConfig() async {
     try {
-      final snap = await _doc.get();
+      DocumentSnapshot<Map<String, dynamic>> snap;
+      try {
+        snap = await _doc.get(const GetOptions(source: Source.server));
+      } catch (_) {
+        // サーバー到達不可時のみキャッシュにフォールバック。
+        snap = await _doc.get(const GetOptions(source: Source.cache));
+      }
       if (!snap.exists) return null;
       final data = snap.data();
       if (data == null) return null;
@@ -80,18 +92,21 @@ class AppConfigService {
     await _doc.set(config.toMap(), SetOptions(merge: true));
   }
 
-  /// 【更新お知らせ・v1.2.13で追加】実機のビルド番号とFirestore側の
-  /// `latest_build_number` を比較し、「新しいバージョンが配布されている」
-  /// かどうかを判定する。
+  /// 【更新お知らせ・v1.2.13で追加、v1.2.23でWeb版対応】実機(または
+  /// ブラウザ)のビルド番号とFirestore側の `latest_build_number` を比較し、
+  /// 「新しいバージョンが配布されている」かどうかを判定する。
   ///
-  /// - Web版は常に最新が配信されるため、常に「通知しない」を返す。
+  /// 【v1.2.23で修正】当初「Web版は常に最新のビルドが自動配信される」と
+  /// いう前提でWeb版をチェック対象外にしていたが、これは誤りだった。
+  /// Firebase Hostingへのデプロイ漏れや、ブラウザ側のキャッシュ/
+  /// Service Workerにより、Web版でも実際には古いビルドが表示され続ける
+  /// ケースがあることが判明した(2026-08 実際に発生)。
+  /// そのため、Web版も同様にバージョン比較を行い、古い場合は
+  /// バナー表示(Web版はページ再読み込みを促す)を行う。
+  ///
   /// - `latest_build_number` が未設定(0)の場合や、通信・権限エラーが
   ///   発生した場合は「通知しない」(fail-open)。
   Future<UpdateAvailability> checkUpdateAvailability() async {
-    if (kIsWeb) {
-      // Web版は常に最新のビルドがサーブされるため対象外。
-      return UpdateAvailability.none;
-    }
     try {
       final config = await fetchConfig();
       if (config == null || config.latestBuildNumber <= 0) {
