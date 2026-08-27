@@ -102,11 +102,21 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   // 別案件を誤って提案しないための店名照合フィルタに使う(照合ボタンを
   // 手動で押し直した場合はスキャン由来の店名情報がないため使わない)。
   String? _scannedStoreNameHint;
+  // 【2026-08-27追加: 関連案件対応】スキャン時にAI-OCRが読み取った
+  // 「作業開始日」(あれば)。1つの伝票Noに複数の作業日程(関連案件)が
+  // 存在する場合、この値を使ってCSVキャッシュの[schedules]から該当する
+  // 1日程を選び出す(ProwanJobCacheService.findByScannedJobNumberへ渡す)。
+  String? _scannedWorkStartDateHint;
   // 【不具合修正・2026-08-27】照合結果(自動反映できたか・要確認か・
   // 見つからなかったか)を、消えてしまうSnackBarだけに頼らず、
   // 常時表示の目立つカードでも示すための状態。
   // null = まだ照合を実行していない(スキャン未実施 or 未照合)。
   _ProwanMatchStatus? _lastMatchStatus;
+  // 【2026-08-27追加: 関連案件対応】直近の照合結果が「複数日程あり」
+  // だったかどうか、また作業開始日から日程を1件に絞れたかどうかを
+  // カードUIで補足表示するための状態。
+  bool _lastMatchHasMultipleSchedules = false;
+  bool _lastMatchScheduleAmbiguous = false;
 
   bool get isEditing => widget.existing != null;
 
@@ -307,6 +317,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       result = await ProwanJobCacheService.instance.findByScannedJobNumber(
         scannedNumber,
         scannedStoreName: _scannedStoreNameHint,
+        scannedWorkStartDate: _scannedWorkStartDateHint,
       );
     } catch (e) {
       if (mounted) {
@@ -333,6 +344,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       setState(() {
         _manualReviewNeeded = true;
         _lastMatchStatus = _ProwanMatchStatus.notFound;
+        _lastMatchHasMultipleSchedules = false;
+        _lastMatchScheduleAmbiguous = false;
       });
       return;
     }
@@ -346,12 +359,24 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         setState(() {
           _manualReviewNeeded = true;
           _lastMatchStatus = _ProwanMatchStatus.fuzzyRejectedOrNotFound;
+          _lastMatchHasMultipleSchedules = false;
+          _lastMatchScheduleAmbiguous = false;
         });
         return;
       }
     }
 
-    final values = result.cache.toWorkReportFieldValues();
+    // 【2026-08-27追加: 関連案件対応】伝票No一致後、CSVキャッシュの
+    // トップレベル値(店舗住所・部門・系統番号・機器型番・伝票No等、
+    // 日程によらず不変の項目)をベースに、作業開始日から絞り込めた
+    // 日程がある場合は、その日程固有の値(作業内容・障害内容・原因等)で
+    // 上書きする。これにより、1つの伝票Noに複数の作業日程がある場合でも、
+    // スキャンした報告書の日付に対応する内容だけが反映される。
+    final values = <String, String>{
+      ...result.cache.toWorkReportFieldValues(),
+      if (result.matchedSchedule != null)
+        ...result.matchedSchedule!.toWorkReportFieldValues(),
+    };
     setState(() {
       // すでに人間が手入力確定(manual)しているフィールドは上書きしない。
       if (_fieldSources['client_name'] != 'manual' &&
@@ -407,6 +432,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       _lastMatchStatus = result.isExactMatch
           ? _ProwanMatchStatus.exact
           : _ProwanMatchStatus.fuzzyAccepted;
+      // 【2026-08-27追加: 関連案件対応】複数日程の有無・絞り込み結果を
+      // カードUIで補足表示するために保持する。
+      _lastMatchHasMultipleSchedules = result.hasMultipleSchedules;
+      _lastMatchScheduleAmbiguous = result.scheduleAmbiguous;
     });
 
     if (mounted) {
@@ -524,6 +553,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         break;
     }
 
+    final scheduleNote = _scheduleStatusNote();
+
     return Container(
       margin: const EdgeInsets.only(top: 8, bottom: 4),
       padding: const EdgeInsets.all(10),
@@ -554,12 +585,39 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   detail,
                   style: TextStyle(fontSize: 11.5, color: fg, height: 1.4),
                 ),
+                if (scheduleNote != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    scheduleNote,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: fg,
+                      height: 1.4,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// 【2026-08-27追加: 関連案件対応】この伝票Noに複数の作業日程
+  /// (関連案件)が存在する場合、その旨と、作業開始日から日程を
+  /// 1件に絞り込めたかどうかをカードUIの補足として返す。
+  /// 該当ケースがない場合はnullを返す(補足行を表示しない)。
+  String? _scheduleStatusNote() {
+    if (!_lastMatchHasMultipleSchedules) return null;
+    if (_lastMatchScheduleAmbiguous) {
+      return '※この伝票Noには複数の作業日程(関連案件)があります。'
+          '作業開始日を読み取れなかったため、直近の日程の内容を反映しています。'
+          '作業内容・障害内容等は必ず報告書の日付と照らして確認してください。';
+    }
+    return '※この伝票Noには複数の作業日程(関連案件)がありますが、'
+        '作業開始日から該当する日程を特定し、その内容を反映しました。';
   }
 
   @override
@@ -855,6 +913,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   Future<void> _applyProWanScanResult(Map<String, String> confirmed) async {
     final refNumber = (confirmed['ProWanRefNumber'] ?? '').trim();
     final storeName = (confirmed['StoreName'] ?? '').trim();
+    // 【2026-08-27追加: 関連案件対応】プロワン用OCRモデルに
+    // 「作業開始日」(WorkStartDate)フィールドが追加された場合に対応。
+    // 未対応モデルの場合はconfirmedにこのキーが存在しないため空文字となり、
+    // 従来通り(複数日程がある場合は最新日程の内容を反映)の動作に落ち着く。
+    final workStartDate = (confirmed['WorkStartDate'] ?? '').trim();
 
     if (refNumber.isEmpty) {
       if (mounted) {
@@ -877,6 +940,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       // 【不具合修正・2026-08-27】曖昧一致時に無関係な別案件を誤って
       // 提案しないよう、スキャンで読み取った店名を照合フィルタ用に保持する。
       _scannedStoreNameHint = storeName.isNotEmpty ? storeName : null;
+      // 【2026-08-27追加: 関連案件対応】読み取れた作業開始日を、
+      // CSVキャッシュの複数日程(schedules)から該当する1件を選ぶための
+      // ヒントとして保持する。
+      _scannedWorkStartDateHint = workStartDate.isNotEmpty
+          ? workStartDate
+          : null;
     });
 
     if (mounted) {

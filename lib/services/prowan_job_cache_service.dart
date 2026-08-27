@@ -74,12 +74,20 @@ class ProwanJobCacheService {
   /// 店名が読み取れている場合は候補の店名との類似度もあわせてチェックし、
   /// 明らかに違う店舗の案件は候補から除外する。
   ///
-  /// 戻り値: 見つかった場合は [ProwanJobCacheMatch](一致した伝票No・距離・
-  /// キャッシュ内容を含む)、見つからなければnull(呼び出し元は手入力へ
+  /// [scannedWorkStartDate] はAI-OCRが同時に読み取った「作業開始日」
+  /// (あれば)。【2026-08-27追加: 関連案件対応】1つの伝票Noに複数の
+  /// 作業日程が存在する場合、この値を使って [ProwanJobCache.schedules]
+  /// から該当する日程を選び出し、結果の [ProwanJobCacheMatchResult.matchedSchedule]
+  /// に設定する。日程が1件のみ、またはこの値が空欄・解析不能な場合は
+  /// nullのままとなる(呼び出し元はトップレベルの値をそのまま使えばよい)。
+  ///
+  /// 戻り値: 見つかった場合は [ProwanJobCacheMatchResult](一致した伝票No・距離・
+  /// キャッシュ内容・該当日程を含む)、見つからなければnull(呼び出し元は手入力へ
   /// フォールバックすること)。
   Future<ProwanJobCacheMatchResult?> findByScannedJobNumber(
     String scannedNumber, {
     String? scannedStoreName,
+    String? scannedWorkStartDate,
   }) async {
     final trimmed = scannedNumber.trim();
     if (trimmed.isEmpty) return null;
@@ -92,6 +100,9 @@ class ProwanJobCacheService {
         matchedJobNumber: exact.jobManagementNumber,
         distance: 0,
         isExactMatch: true,
+        matchedSchedule: exact.findScheduleByScannedWorkStartDate(
+          scannedWorkStartDate ?? '',
+        ),
       );
     }
 
@@ -133,6 +144,9 @@ class ProwanJobCacheService {
                 .map((c) => c.cache.jobManagementNumber)
                 .toList()
           : [],
+      matchedSchedule: best.cache.findScheduleByScannedWorkStartDate(
+        scannedWorkStartDate ?? '',
+      ),
     );
   }
 
@@ -171,16 +185,34 @@ class ProwanJobCacheMatchResult {
   final bool isExactMatch;
   final List<String> alternativeCandidates; // 曖昧一致時、他にも候補があれば
 
+  /// 【2026-08-27追加: 関連案件対応】伝票No一致後、OCRで読み取った
+  /// 「作業開始日」を使って [cache.schedules] から選び出された日程。
+  /// - [cache.schedules] が0/1件、または作業開始日が読み取れなかった/
+  ///   解析できなかった場合は null(呼び出し元はトップレベルの値をそのまま使う)。
+  /// - nullでない場合、呼び出し元はこの日程の
+  ///   [ProwanScheduleEntry.toWorkReportFieldValues()] を優先的に使うことで、
+  ///   関連案件の中から該当する1日程分の内容だけを反映できる。
+  final ProwanScheduleEntry? matchedSchedule;
+
   const ProwanJobCacheMatchResult({
     required this.cache,
     required this.matchedJobNumber,
     required this.distance,
     required this.isExactMatch,
     this.alternativeCandidates = const [],
+    this.matchedSchedule,
   });
 
   /// UI表示用: 「曖昧一致のため確認が必要」かどうか
   bool get needsConfirmation => !isExactMatch;
+
+  /// UI表示用: 伝票No内に複数日程(関連案件)が存在するかどうか。
+  bool get hasMultipleSchedules => cache.schedules.length > 1;
+
+  /// UI表示用: 複数日程が存在するが、作業開始日から日程を1件に
+  /// 絞り込めなかった(=OCRが作業開始日を読み取れなかった、または
+  /// 表記が解析できなかった)状態かどうか。
+  bool get scheduleAmbiguous => hasMultipleSchedules && matchedSchedule == null;
 }
 
 /// findByScannedJobNumber()内部でのみ使う、店名フィルタ通過後の
