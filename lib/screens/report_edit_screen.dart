@@ -223,7 +223,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     // ユーザーが手動で編集したことを検知したら「manual(手入力確定)」として
     // マークする(前セッションで確定した設計方針: 手入力修正は常時可能・
     // 自動入力/手入力を区別してフラグ管理)。
-    // 「auto」のまま保存された場合は、月次CSV再照合バッチが引き続き
+    // 「auto」のまま保存された場合は、日次CSV再照合バッチが引き続き
     // 自動補完の対象として扱うことができる。
     _clientNameCtrl.addListener(() => _markFieldEditedManually('client_name'));
     _storeFreeTextCtrl.addListener(
@@ -245,7 +245,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       () => _markFieldEditedManually('non_se_refrigerant_amount_kg'),
     );
     // プロワン案件詳細(ProWanReportDetail)の各項目も同様に、ユーザーが
-    // 手入力で編集したらmanual確定としてマークし、月次CSV再照合の
+    // 手入力で編集したらmanual確定としてマークし、日次CSV再照合の
     // 自動上書き対象から外す。
     for (final entry in _pwFieldKeyMap.entries) {
       _pwCtrls[entry.key]!.addListener(
@@ -328,7 +328,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           ),
         ),
       );
-      // 見つからなかった場合も、後で月次CSV再照合が試行できるよう
+      // 見つからなかった場合も、後で日次CSV再照合が試行できるよう
       // 「要確認」フラグを立てておく(取込タイミングのズレを吸収するため)。
       setState(() {
         _manualReviewNeeded = true;
@@ -475,7 +475,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   /// でなく、常時表示のカードとしても明示する。
   /// スキャン後「エラーは出ないが何も反映されていない(ように見える)」
   /// という問い合わせの多くは、実際には「曖昧一致候補をダイアログで
-  /// 拒否した」または「該当案件がキャッシュに存在しなかった(月次取込前)」
+  /// 拒否した」または「該当案件がキャッシュに存在しなかった(直近取込前)」
   /// という結果自体がこのSnackBar以外に表示されず見逃されていたことが
   /// 原因だったため、このカードで状態を分かりやすく可視化する。
   Widget _buildProwanMatchStatusCard() {
@@ -519,7 +519,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         title = '案件情報は反映されていません(該当案件なし)';
         detail =
             'キャッシュにまだ取り込まれていない可能性があります'
-            '(月次CSV取込前の新しい案件など)。各項目を手入力するか、'
+            '(直近のCSV取込より後に完了した新しい案件など)。各項目を手入力するか、'
             'しばらくしてから「照合」をもう一度お試しください。';
         break;
     }

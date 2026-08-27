@@ -18,7 +18,7 @@ import '../utils/fuzzy_match.dart';
 ///      呼び出し元(UI)が手入力を促す
 ///
 /// 【キャッシュ更新について】
-/// このコレクション自体の更新(月次CSV取込)は事務所側で
+/// このコレクション自体の更新(日次CSV取込)は事務所側で
 /// csv_cache_backend/import_prowan_csv.py (Firebase Admin SDK) が担当する。
 /// Flutterアプリからは書き込みを行わない(読み取り専用)。
 class ProwanJobCacheService {
