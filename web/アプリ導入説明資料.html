@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>業務日報アプリ 導入のご説明</title>
+<style>
+  :root {
+    --primary: #1565ef;
+    --primary-dark: #0d47c7;
+    --accent: #f59e0b;
+    --danger: #e0403f;
+    --success: #16a34a;
+    --bg: #f4f7fb;
+    --text: #1a1a1a;
+    --muted: #667085;
+    --border: #e3e8ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    line-height: 1.8;
+    font-size: 14px;
+  }
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 30px 34px;
+  }
+  .page + .page { page-break-before: always; }
+
+  /* 表紙 */
+  .cover {
+    background: linear-gradient(135deg, var(--primary), #3b82f6 60%, #60a5fa);
+    color: #fff;
+    border-radius: 20px;
+    padding: 60px 40px;
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .cover .kicker {
+    display: inline-block;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 999px;
+    padding: 6px 20px;
+    font-size: 13px;
+    margin-bottom: 22px;
+    letter-spacing: 1px;
+  }
+  .cover h1 {
+    font-size: 30px;
+    margin: 0 0 14px;
+    line-height: 1.5;
+  }
+  .cover p.sub {
+    font-size: 14px;
+    opacity: 0.92;
+    margin: 0;
+  }
+  .cover .meta {
+    margin-top: 40px;
+    font-size: 12px;
+    opacity: 0.85;
+  }
+
+  h2.section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 19px;
+    color: var(--primary-dark);
+    border-bottom: 3px solid var(--primary);
+    padding-bottom: 10px;
+    margin: 0 0 20px;
+  }
+  h2.section-title .num {
+    background: var(--primary);
+    color: #fff;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 15px; margin: 22px 0 10px; color: #222; }
+  p { margin: 6px 0; }
+
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-bottom: 18px;
+  }
+
+  /* Before/After 比較 */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 14px;
+    align-items: stretch;
+    margin: 18px 0;
+  }
+  .compare .box {
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .compare .before {
+    background: #fdf2f2;
+    border: 1.5px solid #f3c6c6;
+  }
+  .compare .after {
+    background: #eefdf4;
+    border: 1.5px solid #bbeed0;
+  }
+  .compare .label {
+    font-weight: 800;
+    font-size: 13px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .compare .before .label { color: var(--danger); }
+  .compare .after .label { color: var(--success); }
+  .compare ul { margin: 0; padding-left: 20px; font-size: 12.5px; }
+  .compare li { margin-bottom: 6px; }
+  .compare .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    color: var(--primary);
+    font-weight: 900;
+  }
+
+  /* フロー図 */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 20px 0;
+  }
+  .flow .step {
+    background: #eef3fc;
+    border: 1.5px solid #c7d9f7;
+    border-radius: 12px;
+    padding: 14px 16px;
+    text-align: center;
+    min-width: 110px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--primary-dark);
+  }
+  .flow .step .icon { font-size: 22px; display: block; margin-bottom: 6px; }
+  .flow .arrow-h { font-size: 20px; color: var(--muted); }
+
+  /* 数字ハイライト */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 18px 0;
+  }
+  .stat-box {
+    background: linear-gradient(135deg, #eef3fc, #ffffff);
+    border: 1.5px solid #c7d9f7;
+    border-radius: 14px;
+    padding: 18px 14px;
+    text-align: center;
+  }
+  .stat-box .num {
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--primary);
+    line-height: 1.2;
+  }
+  .stat-box .desc {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 10px 0; }
+  th, td { border: 1px solid var(--border); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: #eef3fc; color: var(--primary-dark); font-weight: 700; }
+  tr:nth-child(even) td { background: #fafbfd; }
+
+  .icon-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .icon-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .icon-item .emoji { font-size: 24px; flex-shrink: 0; }
+  .icon-item .title { font-weight: 700; font-size: 13px; margin-bottom: 3px; }
+  .icon-item .text { font-size: 12px; color: var(--muted); }
+
+  .note {
+    background: #fff8e6;
+    border: 1px solid #f5d78e;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 12.5px;
+    margin: 14px 0;
+  }
+  .note.blue {
+    background: #eef3fc;
+    border-color: #c7d9f7;
+  }
+  .note.green {
+    background: #eefdf4;
+    border-color: #bbeed0;
+  }
+
+  .timeline {
+    position: relative;
+    margin: 24px 0 10px 20px;
+    padding-left: 28px;
+    border-left: 3px solid #c7d9f7;
+  }
+  .timeline .t-item {
+    position: relative;
+    margin-bottom: 22px;
+  }
+  .timeline .t-item::before {
+    content: '';
+    position: absolute;
+    left: -35px;
+    top: 3px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--primary);
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 2px var(--primary);
+  }
+  .timeline .t-phase {
+    font-size: 12px;
+    color: var(--primary-dark);
+    font-weight: 800;
+    margin-bottom: 3px;
+  }
+  .timeline .t-title { font-size: 13.5px; font-weight: 700; }
+  .timeline .t-desc { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+  footer.page-footer {
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 30px;
+  }
+
+  @media print {
+    body { background: #fff; }
+    .page { padding: 14px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ 表紙 ============ -->
+<div class="page">
+  <div class="cover">
+    <div class="kicker">社内向け説明資料</div>
+    <h1>業務日報アプリ 導入のご案内<br>〜 目的と期待される効果 〜</h1>
+    <p class="sub">現場のノウハウを「個人の記憶」から「会社の資産」へ</p>
+    <div class="meta">札幌中野冷機株式会社　2026年8月　試験運用版</div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">📌 この資料でお伝えしたいこと</h3>
+    <table>
+      <tr><td style="width:32px; text-align:center; font-size:18px;">1</td><td>なぜ今、日報アプリを導入するのか(背景・課題)</td></tr>
+      <tr><td style="text-align:center; font-size:18px;">2</td><td>導入によって何が変わるのか(Before/After)</td></tr>
+      <tr><td style="text-align:center; font-size:18px;">3</td><td>具体的にどんな機能があるのか</td></tr>
+      <tr><td style="text-align:center; font-size:18px;">4</td><td>会社・従業員それぞれにとってのメリット</td></tr>
+      <tr><td style="text-align:center; font-size:18px;">5</td><td>今後の展開スケジュール</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============ 1. 背景・課題 ============ -->
+<div class="page">
+  <h2 class="section-title"><span class="num">1</span>なぜ今、日報アプリを導入するのか</h2>
+
+  <p>これまで現場の対応内容は、紙の報告書やメール、口頭での引き継ぎが中心でした。この方法には、次のような構造的な課題がありました。</p>
+
+  <div class="icon-list">
+    <div class="icon-item">
+      <div class="emoji">📄</div>
+      <div>
+        <div class="title">紙・メールは検索できない</div>
+        <div class="text">「あの店舗、去年似たトラブルがあったはず」と思っても、探すのに時間がかかる、あるいは見つからない。</div>
+      </div>
+    </div>
+    <div class="icon-item">
+      <div class="emoji">🧠</div>
+      <div>
+        <div class="title">ノウハウが個人に閉じている</div>
+        <div class="text">ベテランの「勘所」「工夫」が、その人が異動・退職すると失われてしまうリスク。</div>
+      </div>
+    </div>
+    <div class="icon-item">
+      <div class="emoji">🔁</div>
+      <div>
+        <div class="title">同じ入力を何度もしている</div>
+        <div class="text">コンビニ側システムへの入力と、社内保管用の記録を、内容が同じなのに別々に手作業で行っている。</div>
+      </div>
+    </div>
+    <div class="icon-item">
+      <div class="emoji">📊</div>
+      <div>
+        <div class="title">全社の実態が見えにくい</div>
+        <div class="text">誰が・どの現場で・どんな対応をしているか、会社として把握する仕組みがなかった。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    💡 <strong>つまり課題は「情報が記録されていない」ことではなく、「記録されていても活用できていない」こと</strong>にあります。日報アプリは、この“埋もれた情報”を全社で使える形に変える取り組みです。
+  </div>
+</div>
+
+<!-- ============ 2. Before/After ============ -->
+<div class="page">
+  <h2 class="section-title"><span class="num">2</span>導入によって何が変わるのか</h2>
+
+  <div class="compare">
+    <div class="box before">
+      <div class="label">🔴 導入前(紙・メール中心)</div>
+      <ul>
+        <li>報告書は個人のメモ・紙・メールに散在</li>
+        <li>過去事例を探すのに人に聞くしかない</li>
+        <li>コンビニ側入力控えを二重で手入力</li>
+        <li>誰が何件対応したか、集計に手間がかかる</li>
+        <li>ノウハウが定年・異動で失われる</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box after">
+      <div class="label">🟢 導入後(日報アプリ)</div>
+      <ul>
+        <li>すべての日報がスマホ・PCから一元検索可能</li>
+        <li>キーワード・店舗名で過去事例を即座に検索</li>
+        <li>AI-OCRで作業報告書から自動入力、二重入力を削減</li>
+        <li>案件・対応区分ごとに自動で集計・グルーピング</li>
+        <li>「うまくいった工夫」「失敗の教訓」を会社の資産として蓄積</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>入力から活用までの流れ</h3>
+  <div class="flow">
+    <div class="step"><span class="icon">📷</span>作業報告書を撮影 / PDF取込</div>
+    <div class="arrow-h">→</div>
+    <div class="step"><span class="icon">🤖</span>AIが自動で項目を読取</div>
+    <div class="arrow-h">→</div>
+    <div class="step"><span class="icon">✅</span>内容を確認して保存</div>
+    <div class="arrow-h">→</div>
+    <div class="step"><span class="icon">🗂️</span>案件ごとに自動整理</div>
+    <div class="arrow-h">→</div>
+    <div class="step"><span class="icon">🔎</span>全社でいつでも検索・活用</div>
+  </div>
+  <div class="note blue">
+    ⚙️ AIはあくまで「入力の下書き」を作るだけで、最終確認は必ず人の目で行う設計です。誤読による誤登録は起きない仕組みになっています。
+  </div>
+</div>
+
+<!-- ============ 3. 主な機能 ============ -->
+<div class="page">
+  <h2 class="section-title"><span class="num">3</span>具体的にどんな機能があるのか</h2>
+
+  <div class="icon-list">
+    <div class="icon-item">
+      <div class="emoji">📝</div>
+      <div>
+        <div class="title">日報の作成・共有</div>
+        <div class="text">訪問先・作業内容・使用部品・写真をその場で記録。対応区分に応じて入力項目が自動で切り替わる。</div>
+      </div>
+    </div>
+    <div class="icon-item">
+      <div class="emoji">🤖</div>
+      <div>
+        <div class="title">AI-OCRによる自動入力</div>
+        <div class="text">紙の作業報告書を撮影、またはプロワン・店舗カルテのPDFを取り込むだけでAIが項目を自動読取。</div>
+      </div>
+    </div>
+    <div class="icon-item">
+      <div class="emoji">🗂️</div>
+      <div>
+        <div class="title">案件の自動グルーピング</div>
+        <div class="text">受付No・伝票Noが一致する日報を自動でひとつの案件にまとめ、複数人対応の全体像を可視化。</div>
+      </div>
+    </div>
+    <div class="icon-item">
+      <div class="emoji">🔍</div>
+      <div>
+        <div class="title">日報・ナレッジ検索</div>
+        <div class="text">「うまくいった事例」「失敗・課題事例」を絞り込み検索。過去の似た案件をすぐに調べられる。</div>
+      </div>
+    </div>
+    <div class="icon-item">
+      <div class="emoji">📊</div>
+      <div>
+        <div class="title">CSV / Excel / PDF出力</div>
+        <div class="text">蓄積したデータを月次で自動集計し、社内保管・提出資料としてすぐ出力できる。</div>
+      </div>
+    </div>
+    <div class="icon-item">
+      <div class="emoji">🔐</div>
+      <div>
+        <div class="title">権限管理</div>
+        <div class="text">一般ユーザー・一般管理者・最高管理者の3階層。役割に応じた適切なアクセス制御。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 4. メリット ============ -->
+<div class="page">
+  <h2 class="section-title"><span class="num">4</span>会社・従業員それぞれにとってのメリット</h2>
+
+  <h3>🏢 会社にとってのメリット</h3>
+  <table>
+    <tr><th style="width:26%;">観点</th><th>効果</th></tr>
+    <tr><td>ナレッジの資産化</td><td>個人の経験・工夫が会社全体の共有財産になり、新人教育や引き継ぎの質が向上する</td></tr>
+    <tr><td>業務品質の均質化</td><td>入力ルールが統一されるため、誰が担当しても記録の抜け漏れが起きにくい</td></tr>
+    <tr><td>データに基づく経営判断</td><td>案件数・対応区分・冷媒充填状況などが可視化され、実態把握と意思決定が早くなる</td></tr>
+    <tr><td>二重入力の削減</td><td>コンビニ側システムとの重複入力を、AI-OCRの自動反映で削減し、事務工数を圧縮</td></tr>
+  </table>
+
+  <h3>👷 従業員にとってのメリット</h3>
+  <table>
+    <tr><th style="width:26%;">観点</th><th>効果</th></tr>
+    <tr><td>入力の手間削減</td><td>音声入力・AI自動読取・自動判定で、紙に手書きするより短時間で記録が終わる</td></tr>
+    <tr><td>困ったときの武器</td><td>似たトラブルの過去事例をその場で検索でき、対応の質・スピードが上がる</td></tr>
+    <tr><td>自分の実績の可視化</td><td>担当した案件・役割(主担当/OJT等)が記録され、正当な評価につながりやすくなる</td></tr>
+    <tr><td>いつでもどこでも使える</td><td>スマホ・PCどちらからも同じ内容にアクセスでき、現場でも事務所でも困らない</td></tr>
+  </table>
+
+  <div class="stats-grid">
+    <div class="stat-box">
+      <div class="num">3階層</div>
+      <div class="desc">権限管理で情報漏えい・誤操作リスクを抑制</div>
+    </div>
+    <div class="stat-box">
+      <div class="num">自動</div>
+      <div class="desc">案件グルーピング・月次集計を自動化</div>
+    </div>
+    <div class="stat-box">
+      <div class="num">AI</div>
+      <div class="desc">OCR活用で二重入力の手間を削減</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 5. 今後のスケジュール ============ -->
+<div class="page">
+  <h2 class="section-title"><span class="num">5</span>今後の展開スケジュール(予定)</h2>
+
+  <div class="timeline">
+    <div class="t-item">
+      <div class="t-phase">STEP 1・試験運用中</div>
+      <div class="t-title">3名体制での先行トライアル</div>
+      <div class="t-desc">実際の現場業務で使いながら、使いやすさ・改善点を洗い出す段階。フィードバックを都度反映。</div>
+    </div>
+    <div class="t-item">
+      <div class="t-phase">STEP 2・機能拡充</div>
+      <div class="t-title">現場要望への迅速な対応</div>
+      <div class="t-desc">AI-OCRのPDF取込対応、Excel/PDF帳票出力など、現場の声を受けて随時アップデート中。</div>
+    </div>
+    <div class="t-item">
+      <div class="t-phase">STEP 3・全社展開(予定)</div>
+      <div class="t-title">全従業員への展開</div>
+      <div class="t-desc">試験運用の結果を踏まえ、操作研修・マニュアル整備を行ったうえで全社員への展開を予定。</div>
+    </div>
+    <div class="t-item">
+      <div class="t-phase">STEP 4・活用高度化(将来)</div>
+      <div class="t-title">人事評価・経営データとの連携</div>
+      <div class="t-desc">蓄積したデータを人事評価制度や経営の意思決定にも活用できるよう、段階的に発展させていく。</div>
+    </div>
+  </div>
+
+  <div class="note green" style="margin-top:26px;">
+    ✅ 本アプリは「監視・管理を強めるための道具」ではなく、<strong>「現場の頑張りとノウハウを正しく会社の力に変えるための道具」</strong>として導入しています。使いながら気づいた点は、ぜひ遠慮なくお寄せください。
+  </div>
+
+  <footer class="page-footer">
+    札幌中野冷機株式会社　業務日報アプリ 導入説明資料
+  </footer>
+</div>
+
+</body>
+</html>

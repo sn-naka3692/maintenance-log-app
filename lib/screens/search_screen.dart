@@ -4,8 +4,16 @@ import 'package:provider/provider.dart';
 import '../models/store.dart';
 import '../models/work_report.dart';
 import '../providers/app_state.dart';
+import '../utils/excel_exporter.dart';
+import '../utils/pdf_exporter.dart';
 import '../widgets/report_card.dart';
 import 'report_detail_screen.dart';
+
+/// 出力形式(Excel/PDF)の選択肢
+enum _ExportFormat { excel, pdf }
+
+/// 出力方法(共有/端末保存)の選択肢
+enum _ExportMethod { share, save }
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -26,6 +34,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   List<WorkReport> _results = [];
   bool _refreshing = false;
+  bool _exporting = false;
 
   // 【検索結果のフォルダー化・2026-08追加】案件一覧と同様の方靈で、
   // 検索結果(日報)も訪問日の年→月のフォルダー(ExpansionTile)に
@@ -112,6 +121,118 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     }
     return map;
+  }
+
+  /// 【日報・ナレッジ出力機能・2026-08追加】
+  /// 現在の検索結果(_results)をExcel(.xlsx)またはPDFとして出力する。
+  /// 出力形式(Excel/PDF)と出力方法(共有/端末保存)を選択させ、
+  /// [ExcelExporter]/[PdfExporter]を呼び出す。
+  Future<void> _exportResults() async {
+    if (_results.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('出力対象の日報がありません')));
+      return;
+    }
+
+    final format = await showModalBottomSheet<_ExportFormat>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  '出力形式を選択',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.grid_on, color: Colors.green),
+                title: const Text('Excel(.xlsx)で出力'),
+                subtitle: Text('A4横向き表形式・${_results.length}件'),
+                onTap: () => Navigator.pop(context, _ExportFormat.excel),
+              ),
+              ListTile(
+                leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                title: const Text('PDFで出力'),
+                subtitle: Text('A4帳票形式・${_results.length}件'),
+                onTap: () => Navigator.pop(context, _ExportFormat.pdf),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (format == null || !mounted) return;
+
+    final method = await showModalBottomSheet<_ExportMethod>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  '出力方法を選択',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.ios_share),
+                title: const Text('共有で出力'),
+                subtitle: const Text('メール添付・LINE送信など'),
+                onTap: () => Navigator.pop(context, _ExportMethod.share),
+              ),
+              ListTile(
+                leading: const Icon(Icons.save_alt),
+                title: const Text('端末に保存'),
+                subtitle: const Text('ダウンロードフォルダへ直接保存'),
+                onTap: () => Navigator.pop(context, _ExportMethod.save),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (method == null || !mounted) return;
+
+    setState(() => _exporting = true);
+    try {
+      String? savedFileName;
+      if (format == _ExportFormat.excel) {
+        if (method == _ExportMethod.share) {
+          await ExcelExporter.exportAndShare(_results);
+        } else {
+          savedFileName = await ExcelExporter.exportAndSaveToDevice(_results);
+        }
+      } else {
+        if (method == _ExportMethod.share) {
+          await PdfExporter.exportAndShare(_results);
+        } else {
+          savedFileName = await PdfExporter.exportAndSaveToDevice(_results);
+        }
+      }
+      if (mounted && savedFileName != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('保存しました: $savedFileName')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('出力に失敗しました: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   Future<void> _pickRange() async {
@@ -289,6 +410,20 @@ class _SearchScreenState extends State<SearchScreen> {
                   '${_results.length}件の結果',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                 ),
+                const Spacer(),
+                if (_results.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: _exporting ? null : _exportResults,
+                    icon: const Icon(Icons.file_download_outlined, size: 16),
+                    label: const Text(
+                      'Excel/PDF出力',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                    ),
+                  ),
               ],
             ),
           ),
