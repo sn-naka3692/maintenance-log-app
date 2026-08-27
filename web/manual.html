@@ -257,6 +257,84 @@
     line-height: 1;
     margin: 2px 0;
   }
+  .kbd {
+    display: inline-block;
+    background: #2d2d2d;
+    color: #fff;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0 2px;
+    box-shadow: 0 2px 0 #111;
+  }
+  .kbd-row {
+    text-align: center;
+    padding: 12px 0;
+    background: #f7f9fc;
+    border-radius: 10px;
+    margin: 10px 0;
+  }
+  .kbd-row .os-label {
+    display: block;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .browser-block {
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .browser-block.chrome { border-color: #4285F4; background: #f5f9ff; }
+  .browser-block.edge { border-color: #0078D7; background: #f2f8fd; }
+  .browser-block h4 {
+    margin: 0 0 8px;
+    font-size: 13.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .browser-icon {
+    width: 20px; height: 20px;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .browser-icon.chrome { background: #4285F4; }
+  .browser-icon.edge { background: #0078D7; }
+  .steps li .sub {
+    display: block;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  code.url {
+    display: inline-block;
+    background: #eef3fc;
+    color: var(--primary);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-family: "Courier New", monospace;
+    word-break: break-all;
+  }
+  .tip {
+    background: #eafaf0;
+    border: 1px solid #a7e3c1;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12.5px;
+    color: #135c33;
+    margin-top: 10px;
+  }
   .flow-branch {
     display: flex;
     justify-content: center;
@@ -688,7 +766,54 @@
     </div>
     <div class="qa">
       <div class="q">Q. Web版がいつまでも古いバージョンのまま変わらない</div>
-      <div class="a">A. パソコンのブラウザに古い画面が保存されたままになっている可能性があります。<a href="cache_clear_guide.html" target="_blank" style="color:var(--primary); font-weight:700;">「Web版が更新されないときの対処方法」</a>の手順に沿って、保存されたデータを消してから開き直してみてください(1〜2分程度で完了します)。</div>
+      <div class="a">A. パソコンのブラウザに古い画面(キャッシュ)が保存されたままになっている可能性があります。下記「キャッシュの消し方」の手順に沿って、保存されたデータを消してから開き直してみてください(1〜2分程度で完了します)。詳しい手順は別紙<a href="cache_clear_guide.html" target="_blank" style="color:var(--primary); font-weight:700;">「Web版が更新されないときの対処方法」</a>もあわせてご参照ください。</div>
+    </div>
+
+    <h3 style="color:var(--primary); margin-top:20px;">🧹 キャッシュの消し方(Web版が更新されないとき)</h3>
+
+    <p><strong>まずはこちらをお試しください(最も簡単な方法)</strong></p>
+    <p>アプリのWeb版のページ(<code class="url">https://sn-report.web.app/</code>)を開いた状態で、キーボードのボタンを同時押ししてください。</p>
+
+    <div class="kbd-row">
+      <span class="os-label">Windowsパソコンの場合</span>
+      <span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">R</span>
+    </div>
+    <div class="kbd-row">
+      <span class="os-label">Macパソコンの場合</span>
+      <span class="kbd">command ⌘</span> + <span class="kbd">shift ⇧</span> + <span class="kbd">R</span>
+    </div>
+    <p style="font-size:12.5px; color:#666;">画面が一瞬白くなり、読み込みが始まれば成功です。これで直らない場合のみ、以下のブラウザごとの手順をお試しください。</p>
+
+    <div class="browser-block chrome">
+      <h4><span class="browser-icon chrome">C</span>Google Chrome での消し方</h4>
+      <ol class="steps">
+        <li>右上の「点が3つ縦に並んだマーク(⋮)」→「履歴」→「閲覧履歴を消去...」を開く</li>
+        <li>「期間」を<strong>「全期間」</strong>に変更する</li>
+        <li><strong>「キャッシュされた画像とファイル」</strong>にチェックが入っていることを確認する<span class="sub">「閲覧履歴」「Cookie」は外したままでOK(ログイン情報が消えるのを防ぐため)</span></li>
+        <li>「データを削除」ボタンをクリックする</li>
+        <li>もう一度アプリのページを開き直す</li>
+      </ol>
+      <p style="font-size:11.5px; color:#666; margin:4px 0 0;">※ アドレスバーに <code class="url">chrome://settings/clearBrowserData</code> と直接入力してもショートカットできます。</p>
+    </div>
+
+    <div class="browser-block edge">
+      <h4><span class="browser-icon edge">E</span>Microsoft Edge での消し方</h4>
+      <ol class="steps">
+        <li>右上の「点が3つ横に並んだマーク(...)」→「設定」→「プライバシー、検索、サービス」を開く</li>
+        <li>「閲覧データをクリア」の「クリアするデータの選択」ボタンをクリックする</li>
+        <li>「時間の範囲」を<strong>「すべての期間」</strong>に変更する</li>
+        <li><strong>「キャッシュされた画像とファイル」</strong>にチェックが入っていることを確認する<span class="sub">「閲覧の履歴」「Cookieおよびその他のサイトデータ」は外したままでOK</span></li>
+        <li>「今すぐクリア」ボタンをクリックする</li>
+        <li>もう一度アプリのページを開き直す</li>
+      </ol>
+      <p style="font-size:11.5px; color:#666; margin:4px 0 0;">※ アドレスバーに <code class="url">edge://settings/clearBrowserData</code> と直接入力してもショートカットできます。</p>
+    </div>
+
+    <div class="tip">
+      💡 上記の手順どおり「キャッシュされた画像とファイル」だけにチェックを入れた場合、ログイン情報(Cookie)は消えないため、基本的にはそのまま使い続けられます。もし万が一ログイン画面が表示された場合は、いつも通りのメールアドレスとパスワードでログインし直してください。
+    </div>
+    <div class="tip">
+      💡 スマートフォンのブラウザ(Chrome/Edgeアプリ)で同じ症状が出た場合は、Web版よりも<strong>APK版(アプリ本体)のご利用</strong>をおすすめします。APK版はこのような表示不具合が起きない仕組みになっています。
     </div>
   </section>
 

@@ -38,6 +38,8 @@ IconData _iconFor(String key) {
       return Icons.folder_shared;
     case 'search':
       return Icons.search;
+    case 'cleaning_services':
+      return Icons.cleaning_services;
     default:
       return Icons.info_outline;
   }
