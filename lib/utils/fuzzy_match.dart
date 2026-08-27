@@ -84,3 +84,40 @@ List<FuzzyMatchCandidate> findFuzzyJobNumberMatches(
   }
   return scored;
 }
+
+/// 【不具合修正・2026-08-27】
+/// 伝票No同士の距離だけで曖昧一致を判定すると、番号が近いだけの
+/// 「全く無関係な別案件」(例: 同時期に連番で採番された別店舗の案件)を
+/// 誤って候補提示してしまう不具合が本番で発見された。
+/// (実例: スキャン「R2026080980」(ラッキー栗山店)に対し、
+///  「R2026080982」(ラッキー星置駅前)を提案してしまっていた)
+///
+/// AI-OCRはスキャン時に伝票Noと同時に店名も読み取っているため、
+/// 店名の一致度も加味することで、無関係な案件を除外する。
+/// 店名情報がどちらか一方でも空の場合は、判定材料がないため
+/// 従来通り番号の距離のみで判定する(除外しない)。
+///
+/// 【類似度比率ではなく距離ベースを採用した理由】
+/// チェーン店名(例:「ラッキー」「東光ストア」)が共通する別店舗同士は、
+/// 類似度比率(0〜1)で見ると共通接頭辞の影響で意外と高い値
+/// (例:「ラッキー栗山店」vs「ラッキー星置駅前」で0.50)になってしまい、
+/// 閾値調整が難しい。一方、生のレーベンシュタイン距離で見ると、
+/// 同一店舗(表記ゆれのみ)は距離0〜1に収まるのに対し、別店舗は
+/// 実データ上ほぼ確実に距離2以上になるため、閾値を明確に設定できる。
+bool isStoreNameCompatible({
+  required String scannedStoreName,
+  required String candidateStoreName,
+}) {
+  final a = _normalizeStoreName(scannedStoreName);
+  final b = _normalizeStoreName(candidateStoreName);
+  if (a.isEmpty || b.isEmpty) return true; // 判定材料なし→除外しない
+  if (a == b) return true;
+  // 表記ゆれ(全角半角スペース・OCR誤読1文字程度)は許容するが、
+  // それを超える違いは別店舗とみなして除外する。
+  return levenshteinDistance(a, b) <= 1;
+}
+
+/// 店名比較用の正規化(前後・内部の全角/半角スペース除去)。
+String _normalizeStoreName(String s) {
+  return s.trim().replaceAll(RegExp(r'[\s\u3000]'), '');
+}

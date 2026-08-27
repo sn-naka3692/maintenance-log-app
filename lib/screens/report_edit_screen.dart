@@ -21,6 +21,16 @@ import '../widgets/store_picker_field.dart';
 /// 店舗区分(SE/プロワン)と対応区分によって、重複を避けるべく内容を切り替える。
 enum _WorkSupportMode { seRepair, seOther, nonSE }
 
+/// 【不具合修正・2026-08-27】プロワンCSVキャッシュ照合の結果種別。
+/// 一過性のSnackBarメッセージだけでは見逃されやすいため、
+/// 常時表示のカードUIでも状態を明示するために使う。
+enum _ProwanMatchStatus {
+  exact, // 完全一致で自動反映できた
+  fuzzyAccepted, // 曖昧一致だがユーザーが確認の上で採用した
+  fuzzyRejectedOrNotFound, // 曖昧一致候補をユーザーが拒否した、または候補なし
+  notFound, // 完全一致・曖昧一致とも見つからなかった(未取込の可能性)
+}
+
 class ReportEditScreen extends StatefulWidget {
   final WorkReport? existing;
 
@@ -88,6 +98,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   String _matchedCacheJobNumber = '';
   // プロワン管理番号照合中のローディング表示用フラグ。
   bool _isMatchingCache = false;
+  // スキャン時にAI-OCRが読み取った店名(あれば)。曖昧一致時、無関係な
+  // 別案件を誤って提案しないための店名照合フィルタに使う(照合ボタンを
+  // 手動で押し直した場合はスキャン由来の店名情報がないため使わない)。
+  String? _scannedStoreNameHint;
+  // 【不具合修正・2026-08-27】照合結果(自動反映できたか・要確認か・
+  // 見つからなかったか)を、消えてしまうSnackBarだけに頼らず、
+  // 常時表示の目立つカードでも示すための状態。
+  // null = まだ照合を実行していない(スキャン未実施 or 未照合)。
+  _ProwanMatchStatus? _lastMatchStatus;
 
   bool get isEditing => widget.existing != null;
 
@@ -265,6 +284,14 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   /// 【二段階マッチング方式・①スキャン時の照合ロジック】
   /// 完全一致 -> 曖昧一致(OCR誤読1〜2文字を許容) -> 見つからなければ
   /// 手入力フォールバック(何もせずユーザーに案内)。
+  ///
+  /// 【不具合修正・2026-08-27】
+  /// 曖昧一致候補が本当は無関係な別案件だった実例(伝票No「R2026080980」
+  /// (ラッキー栗山店)に対し「R2026080982」(ラッキー星置駅前)を誤って
+  /// 提案していた)が本番で発覚したため、スキャン時に読み取った店名
+  /// (_scannedStoreNameHint)も照合条件に加えるようにした。
+  /// また、結果が一過性のSnackBarだけでは見逃されやすかったため、
+  /// 常時表示のカードUI(_lastMatchStatus)でも状態を明示する。
   Future<void> _matchProwanCache() async {
     final scannedNumber = _proWanCtrl.text.trim();
     if (scannedNumber.isEmpty) {
@@ -279,6 +306,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     try {
       result = await ProwanJobCacheService.instance.findByScannedJobNumber(
         scannedNumber,
+        scannedStoreName: _scannedStoreNameHint,
       );
     } catch (e) {
       if (mounted) {
@@ -302,7 +330,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       );
       // 見つからなかった場合も、後で月次CSV再照合が試行できるよう
       // 「要確認」フラグを立てておく(取込タイミングのズレを吸収するため)。
-      setState(() => _manualReviewNeeded = true);
+      setState(() {
+        _manualReviewNeeded = true;
+        _lastMatchStatus = _ProwanMatchStatus.notFound;
+      });
       return;
     }
 
@@ -310,7 +341,14 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     if (!result.isExactMatch) {
       final accepted = await _confirmFuzzyMatch(result);
       if (!mounted) return;
-      if (!accepted) return; // ユーザーが拒否 -> 何も反映しない
+      if (!accepted) {
+        // ユーザーが拒否 -> 何も反映しないが、状態は必ず可視化する。
+        setState(() {
+          _manualReviewNeeded = true;
+          _lastMatchStatus = _ProwanMatchStatus.fuzzyRejectedOrNotFound;
+        });
+        return;
+      }
     }
 
     final values = result.cache.toWorkReportFieldValues();
@@ -366,6 +404,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       }
       _matchedCacheJobNumber = result.matchedJobNumber;
       _manualReviewNeeded = !result.isExactMatch;
+      _lastMatchStatus = result.isExactMatch
+          ? _ProwanMatchStatus.exact
+          : _ProwanMatchStatus.fuzzyAccepted;
     });
 
     if (mounted) {
@@ -427,6 +468,98 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       ),
     );
     return confirmed ?? false;
+  }
+
+  /// 【不具合修正・2026-08-27】
+  /// プロワンCSVキャッシュ照合の結果を、消えてしまう一過性のSnackBarだけ
+  /// でなく、常時表示のカードとしても明示する。
+  /// スキャン後「エラーは出ないが何も反映されていない(ように見える)」
+  /// という問い合わせの多くは、実際には「曖昧一致候補をダイアログで
+  /// 拒否した」または「該当案件がキャッシュに存在しなかった(月次取込前)」
+  /// という結果自体がこのSnackBar以外に表示されず見逃されていたことが
+  /// 原因だったため、このカードで状態を分かりやすく可視化する。
+  Widget _buildProwanMatchStatusCard() {
+    final status = _lastMatchStatus;
+    if (status == null) return const SizedBox.shrink();
+
+    late final Color bg;
+    late final Color fg;
+    late final IconData icon;
+    late final String title;
+    late final String detail;
+
+    switch (status) {
+      case _ProwanMatchStatus.exact:
+        bg = Colors.green.shade50;
+        fg = Colors.green.shade800;
+        icon = Icons.check_circle;
+        title = '案件情報を自動入力しました(完全一致)';
+        detail = '顧客名・作業内容などの項目を確認してください。';
+        break;
+      case _ProwanMatchStatus.fuzzyAccepted:
+        bg = Colors.orange.shade50;
+        fg = Colors.orange.shade800;
+        icon = Icons.warning_amber;
+        title = '案件情報を自動入力しました(曖昧一致・要確認)';
+        detail =
+            '伝票No「$_matchedCacheJobNumber」の案件として反映しました。'
+            '内容を必ず確認してください。';
+        break;
+      case _ProwanMatchStatus.fuzzyRejectedOrNotFound:
+        bg = Colors.red.shade50;
+        fg = Colors.red.shade800;
+        icon = Icons.error_outline;
+        title = '案件情報は反映されていません';
+        detail = '候補案件を「手入力する」で見送りました。各項目を手入力してください。';
+        break;
+      case _ProwanMatchStatus.notFound:
+        bg = Colors.red.shade50;
+        fg = Colors.red.shade800;
+        icon = Icons.error_outline;
+        title = '案件情報は反映されていません(該当案件なし)';
+        detail =
+            'キャッシュにまだ取り込まれていない可能性があります'
+            '(月次CSV取込前の新しい案件など)。各項目を手入力するか、'
+            'しばらくしてから「照合」をもう一度お試しください。';
+        break;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 4),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: fg.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: fg),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: fg,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: TextStyle(fontSize: 11.5, color: fg, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -741,6 +874,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       if (_fieldSources['pro_wan_ref_number'] != 'manual') {
         _fieldSources['pro_wan_ref_number'] = 'auto';
       }
+      // 【不具合修正・2026-08-27】曖昧一致時に無関係な別案件を誤って
+      // 提案しないよう、スキャンで読み取った店名を照合フィルタ用に保持する。
+      _scannedStoreNameHint = storeName.isNotEmpty ? storeName : null;
     });
 
     if (mounted) {
@@ -1337,27 +1473,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 label: Text(_isMatchingCache ? '照合中...' : '案件情報を照合して自動入力'),
               ),
             ),
-            if (_manualReviewNeeded)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.warning_amber,
-                      size: 14,
-                      color: Colors.deepOrange.shade600,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '要確認: 案件の照合が未確定です(曖昧一致または未検出)',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: Colors.deepOrange.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            _buildProwanMatchStatusCard(),
             const SizedBox(height: 12),
 
             if (showNonSeRefrigerantSection) _buildNonSeRefrigerantSection(),
