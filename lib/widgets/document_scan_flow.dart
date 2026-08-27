@@ -37,6 +37,13 @@ class DocumentScanFlow {
           type: FileType.custom,
           allowedExtensions: ['pdf'],
           withData: true,
+          // 【不具合修正・2026-08】Web版のfile_pickerはデフォルトで
+          // cancelUploadOnWindowBlur=trueのため、ファイル選択ダイアログを
+          // 開いてブラウザウィンドウが一時的にフォーカスを失った直後、
+          // 実際にはファイルを選択していても competing race condition で
+          // キャンセル扱いになり「ファイルの選択に失敗しました」となる
+          // 不具合があった。falseにして誤キャンセルを防止する。
+          cancelUploadOnWindowBlur: false,
         );
         if (picked == null || picked.files.isEmpty) return null; // キャンセル
         pdfBytes = picked.files.single.bytes;

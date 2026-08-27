@@ -156,6 +156,11 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
         type: FileType.custom,
         allowedExtensions: ['pdf'],
         withData: true,
+        // 【不具合修正・2026-08】document_scan_flow.dartと同様、Web版の
+        // file_pickerはデフォルトでcancelUploadOnWindowBlur=trueのため、
+        // ファイル選択ダイアログでウィンドウが一時的にフォーカスを失うと
+        // 誤ってキャンセル扱いになる不具合があった。falseにして防止する。
+        cancelUploadOnWindowBlur: false,
       );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
