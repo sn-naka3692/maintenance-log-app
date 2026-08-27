@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,7 @@ import '../providers/app_state.dart';
 import '../services/document_scan_service.dart';
 import '../services/submission_check_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/web_pdf_picker.dart';
 
 /// 【月末チェック(日報記入率)機能】
 ///
@@ -152,19 +154,29 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
       _errorMessage = null;
     });
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-        withData: true,
-        // 【不具合修正・2026-08】document_scan_flow.dartと同様、Web版の
-        // file_pickerはデフォルトでcancelUploadOnWindowBlur=trueのため、
-        // ファイル選択ダイアログでウィンドウが一時的にフォーカスを失うと
-        // 誤ってキャンセル扱いになる不具合があった。falseにして防止する。
-        cancelUploadOnWindowBlur: false,
-      );
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.single;
-      final bytes = file.bytes;
+      Uint8List? bytes;
+      String? fileName;
+      if (kIsWeb) {
+        // 【不具合修正・2026-08-27】document_scan_flow.dartと同様、
+        // file_pickerパッケージ経由だとビルド環境のキャッシュ状態次第で
+        // Web実装が正しく登録されず「MissingPluginException」が発生する
+        // 不具合が本番で発生した。package:web直接操作の自前実装に
+        // 切り替えて根本回避する。
+        final webPicked = await pickPdfFileWeb();
+        if (webPicked == null) return; // キャンセル
+        bytes = webPicked.bytes;
+        fileName = webPicked.name;
+      } else {
+        final result = await FilePicker.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['pdf'],
+          withData: true,
+        );
+        if (result == null || result.files.isEmpty) return;
+        final file = result.files.single;
+        bytes = file.bytes;
+        fileName = file.name;
+      }
       if (bytes == null) {
         setState(() {
           _errorMessage = 'ファイルの読み込みに失敗しました';
@@ -173,7 +185,7 @@ class _SubmissionCheckScreenState extends State<SubmissionCheckScreen> {
       }
       setState(() {
         _pdfBytes = bytes;
-        _pdfFileName = file.name;
+        _pdfFileName = fileName;
         _totalPages = 0;
         _results.clear();
       });

@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../screens/scan_confirm_screen.dart';
 import '../services/document_scan_service.dart';
+import '../utils/web_pdf_picker.dart';
 
 /// 「作業報告書をAIで読み取る」機能の一連の流れをまとめたヘルパー。
 ///
@@ -33,20 +35,29 @@ class DocumentScanFlow {
       // PDFファイル選択(解析中ダイアログを出す前に選択させる)
       Uint8List? pdfBytes;
       try {
-        final picked = await FilePicker.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['pdf'],
-          withData: true,
-          // 【不具合修正・2026-08】Web版のfile_pickerはデフォルトで
-          // cancelUploadOnWindowBlur=trueのため、ファイル選択ダイアログを
-          // 開いてブラウザウィンドウが一時的にフォーカスを失った直後、
-          // 実際にはファイルを選択していても competing race condition で
-          // キャンセル扱いになり「ファイルの選択に失敗しました」となる
-          // 不具合があった。falseにして誤キャンセルを防止する。
-          cancelUploadOnWindowBlur: false,
-        );
-        if (picked == null || picked.files.isEmpty) return null; // キャンセル
-        pdfBytes = picked.files.single.bytes;
+        if (kIsWeb) {
+          // 【不具合修正・2026-08-27】Web版はfile_pickerパッケージ経由
+          // だと、ビルド環境のキャッシュ状態次第でWeb実装が正しく
+          // 登録されず「MissingPluginException」が発生する不具合が
+          // 本番で発生した。file_pickerのプラグイン登録の仕組みを
+          // 一切経由しない、package:web直接操作の自前実装
+          // (web_pdf_picker.dart)に切り替えることで根本回避する。
+          // 端末のダウンロードフォルダを含め、ブラウザのファイル選択
+          // ダイアログでアクセスできる場所ならどこからでも選択可能。
+          final webPicked = await pickPdfFileWeb();
+          if (webPicked == null) return null; // キャンセル
+          pdfBytes = webPicked.bytes;
+        } else {
+          // APK版(Android)は従来通りfile_pickerのネイティブ実装
+          // (Storage Access Framework経由)を使う。
+          final picked = await FilePicker.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: ['pdf'],
+            withData: true,
+          );
+          if (picked == null || picked.files.isEmpty) return null; // キャンセル
+          pdfBytes = picked.files.single.bytes;
+        }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(
