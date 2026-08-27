@@ -370,7 +370,14 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       lastDate: DateTime(2100),
       locale: const Locale('ja', 'JP'),
     );
-    if (picked != null) setState(() => _visitDate = picked);
+    if (picked != null) {
+      setState(() {
+        _visitDate = picked;
+        // スキャン自動反映(auto)された訪問日を人間が明示的に変更したら、
+        // 以後のスキャン取り込みで無条件に上書きされないよう manual 確定する。
+        _fieldSources['visit_date'] = 'manual';
+      });
+    }
   }
 
   Future<void> _pickTime(bool isStart) async {
@@ -450,8 +457,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   /// 2モデルを並行解析し、confidence比較で書式を自動判定する。
   /// - SEDocType: 従来通り23項目をコンビニ側システム入力控えへ反映
   /// - ProWanDocType: 【設計転換・2026-08-28】案件管理番号(伝票No)を
-  ///   含む18項目(kProWanScanFieldDefinitions参照)を、CSV照合を介さず
-  ///   _applyProWanScanResult()で各フォーム欄へ直接反映する
+  ///   含む17項目(kProWanScanFieldDefinitions参照。技術者氏名は
+  ///   日報作成者と重複するため2026-08-28にOCR対象から除外)を、
+  ///   CSV照合を介さず_applyProWanScanResult()で各フォーム欄へ直接反映する
   Future<void> _scanReport() async {
     final confirmed = await DocumentScanFlow.run(context);
     if (confirmed == null || !mounted) return;
@@ -552,9 +560,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   /// キャッシュ(prowan_job_cache)と照合し、顧客名・作業内容等を反映していた。
   /// しかし、現場の日報入力(スキャン)は事務所側のCSVエクスポートより
   /// 時系列的に先行するため、リアルタイムのCSV照合は原理的に成立しない
-  /// ことが判明した。作業報告書PDF自体に必要な項目(18項目、
+  /// ことが判明した。作業報告書PDF自体に必要な項目(17項目、
   /// kProWanScanFieldDefinitions参照)が全て印字されているため、CSV照合を
-  /// 廃止し、AI-OCRが読み取った18項目を直接各フォーム欄へマッピングする
+  /// 廃止し、AI-OCRが読み取った17項目を直接各フォーム欄へマッピングする
   /// 方式に変更した。
   ///
   /// 【マッピング先】
@@ -562,8 +570,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   /// - StoreName -> _storeFreeTextCtrl(店舗選択が未確定の場合のみ。
   ///   店舗マスタから選択済みの場合は自由入力欄へは反映しない)
   /// - ClientName/ReceiptDate/Department/SystemNumber/CaseNo/
-  ///   EquipmentLocation/RequestContent/Cause/VisitResult/FuturePlan/
-  ///   TechnicianName -> _pwCtrls(ProWanReportDetailの12項目)
+  ///   EquipmentLocation/RequestContent/Cause/VisitResult/FuturePlan
+  ///   -> _pwCtrls(ProWanReportDetailの11項目)。技術者氏名(technicianName)
+  ///   は日報作成者(authorName)と重複するためOCR自動反映の対象外とし、
+  ///   手入力専用欄として残す。
   /// - ModelSerial -> _equipmentModelCtrl(機器型番、WorkReport本体と共通)
   /// - WorkContent -> _workContentCtrl(作業内容、WorkReport本体と共通)
   /// - RefrigerantType/RefrigerantAmount -> _nonSeRefrigerantTypeCtrl/
@@ -623,7 +633,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         confirmed['RefrigerantAmount'],
       );
 
-      // ProWanReportDetail(12項目)へのマッピング
+      // ProWanReportDetail(11項目)へのマッピング。
+      // 【2026-08-28】technicianName(技術者氏名)はOCR対象から除外したため
+      // ここから除いた。日報作成者(authorName)と重複するため、この欄は
+      // 手入力(OCR以外の経路でのみ入力される)専用フィールドとして残す。
       const ocrKeyToPwCtrlKey = {
         'ClientName': 'clientName',
         'ReceiptDate': 'receiptDate',
@@ -635,7 +648,6 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         'Cause': 'cause',
         'VisitResult': 'visitResult',
         'FuturePlan': 'futurePlan',
-        'TechnicianName': 'technicianName',
       };
       for (final ocrEntry in ocrKeyToPwCtrlKey.entries) {
         final pwCtrlKey = ocrEntry.value;
@@ -647,13 +659,23 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         );
       }
 
-      // 作業開始日 -> 訪問日(パース可能な場合のみ)
-      final workStartDate = (confirmed['WorkStartDate'] ?? '').trim();
-      if (workStartDate.isNotEmpty) {
-        final parsed = _tryParseDate(workStartDate);
-        if (parsed != null) {
-          _visitDate = parsed;
-          filledCount++;
+      // 作業開始日 -> 訪問日(パース可能な場合のみ)。
+      // 【2026-08-28】ScanConfirmScreen側で必須確認チェックボックスに
+      // チェックが入るまでこの値はそもそも呼び出し元へ返らない
+      // (_hasUnconfirmedRequiredFieldでボタン自体が無効化される)ため、
+      // ここに来る値は既にユーザーが目視確認済みのもの。ただし訪問日欄を
+      // 既に手入力で確定(manual)済みの場合は、他の自動入力フィールドと
+      // 同様に上書きしない(_markFieldEditedManuallyで手動修正を検知したら
+      // 'manual'になる。日付ピッカーの変更検知は_pickDate側で行う)。
+      if (_fieldSources['visit_date'] != 'manual') {
+        final workStartDate = (confirmed['WorkStartDate'] ?? '').trim();
+        if (workStartDate.isNotEmpty) {
+          final parsed = _tryParseDate(workStartDate);
+          if (parsed != null) {
+            _visitDate = parsed;
+            _fieldSources['visit_date'] = 'auto';
+            filledCount++;
+          }
         }
       }
     });
@@ -1060,9 +1082,28 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               onTap: _pickDate,
               borderRadius: BorderRadius.circular(12),
               child: InputDecorator(
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: '訪問日',
-                  prefixIcon: Icon(Icons.calendar_today),
+                  prefixIcon: const Icon(Icons.calendar_today),
+                  // 【2026-08-28】作業開始日(WorkStartDate)からのスキャン
+                  // 自動反映は、確認画面で必ず目視確認チェックを経てから
+                  // ここに来る値だが、AI抽出自体の精度はまだ低い
+                  // (再学習直後confidence=0.346)。反映済みであることが
+                  // 一目でわかるよう、他のスキャン自動入力欄と同じ緑バッジを
+                  // 表示し、必ずタップして日付を再確認する意識付けをする。
+                  helperText: _fieldSources['visit_date'] == 'auto'
+                      ? 'スキャンで自動反映済み(必ず実物と照合してください)'
+                      : null,
+                  helperStyle: _fieldSources['visit_date'] == 'auto'
+                      ? TextStyle(color: Colors.green.shade700, fontSize: 11)
+                      : null,
+                  suffixIcon: _fieldSources['visit_date'] == 'auto'
+                      ? Icon(
+                          Icons.auto_awesome,
+                          size: 18,
+                          color: Colors.green.shade600,
+                        )
+                      : null,
                 ),
                 child: Text(dateFmt.format(_visitDate)),
               ),
@@ -2132,7 +2173,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           const SizedBox(height: 10),
           _buildField(
             controller: _pwCtrls['technicianName']!,
-            label: '技術者氏名(プロワン側記録)',
+            label: '技術者氏名(プロワン側記録・任意/日報作成者と異なる場合のみ入力)',
             icon: Icons.badge,
             fieldKey: 'pro_wan_report_detail.technician_name',
           ),

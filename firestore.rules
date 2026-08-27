@@ -130,6 +130,24 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ------------------------------------------------------------
+    // scan_corrections: AI-OCR(Azure Document Intelligence)の抽出値と
+    // ユーザーがScanConfirmScreenで最終確定した値との差分ログ(2026-08-28導入)。
+    // Azure側には本番解析結果からの自動継続学習機能がないため、次回の
+    // 手動モデル再学習でどのフィールドを優先的に改善すべきかを判断する
+    // ための収集用データ。個人が特定できる元PDF/画像は含まず、
+    // フィールド単位のテキスト差分のみを保持する。
+    // - 読み取り: 管理者(一般/最高)のみ(現場ユーザーには不要な情報のため)
+    // - 作成: ログイン済みなら誰でも可(スキャン機能を使う全ユーザーが
+    //   自分の手直し内容を記録できる必要があるため)
+    // - 更新/削除: 行わない運用(蓄積ログのため、事故防止のため不可)
+    // ------------------------------------------------------------
+    match /scan_corrections/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
     // その他の未定義コレクションはデフォルトで拒否
     match /{document=**} {
       allow read, write: if false;

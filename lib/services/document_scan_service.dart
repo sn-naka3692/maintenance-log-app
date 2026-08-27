@@ -482,6 +482,15 @@ const List<ScanFieldDef> kScanFieldDefinitions = [
 /// 直接OCRで読み取ることで、CSV照合を介さずに完結させる設計に変更した。
 /// (CSV照合ロジック自体は、月次の日報入力漏れチェック機能
 /// (submission_checks)専用として別途維持する。)
+/// 【方針・2026-08-28追記】技術者氏名(TechnicianName)はOCR対象外とする。
+/// 「冷媒充填・回収証明書欄」の手書き署名を読み取る項目だったが、実際には
+/// 日報作成者(ログインユーザー=WorkReport.authorName)と一致するケースが
+/// 大半であり、二重管理・二重入力の温床になっていた。また手書き署名の
+/// 認識精度はOCRとして本質的に不安定(学習後confidence 0.231)で、追加学習
+/// による改善が見込みにくいフィールドだったため、抽出対象から除外した。
+/// Azureモデル自体はTechnicianNameフィールドを抽出しなくなった
+/// (generate_training_labels.py / fields.json も17項目に更新済み)。
+/// 表示・PDF/Excel出力側は日報作成者(authorName)を使う。
 const List<ScanFieldDef> kProWanScanFieldDefinitions = [
   ScanFieldDef('ProWanRefNumber', '案件管理番号(伝票No)'),
   ScanFieldDef('StoreName', '店名'),
@@ -500,7 +509,6 @@ const List<ScanFieldDef> kProWanScanFieldDefinitions = [
   ScanFieldDef('FuturePlan', '今後の予定(未完了時)'),
   ScanFieldDef('RefrigerantType', '冷媒の種類'),
   ScanFieldDef('RefrigerantAmount', '冷媒量(kg)'),
-  ScanFieldDef('TechnicianName', '技術者氏名'),
 ];
 
 /// スキャン結果のdocTypeに応じて、確認画面に表示すべきフィールド定義
