@@ -40,6 +40,8 @@ IconData _iconFor(String key) {
       return Icons.search;
     case 'cleaning_services':
       return Icons.cleaning_services;
+    case 'document_scanner':
+      return Icons.document_scanner;
     default:
       return Icons.info_outline;
   }
