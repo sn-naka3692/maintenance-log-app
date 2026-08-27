@@ -3,6 +3,7 @@ import 'package:excel/excel.dart' as xls;
 import 'package:file_saver/file_saver.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import '../models/store_system_report.dart';
 import '../models/work_report.dart';
 
 /// 日報・ナレッジ検索結果をA4サイズのExcelファイル(.xlsx)に変換し、
@@ -33,6 +34,38 @@ class ExcelExporter {
     '課題・失敗・改善点',
     'タグ',
     '備考',
+    // 【追加】コンビニ側システム入力控え(StoreSystemReport)。
+    // 日報詳細画面(report_detail_screen.dart)の「コンビニ側システム
+    // 入力控え」セクションと同じ項目・並び順・表記ルールで出力する。
+    'SE:弊社受付No.',
+    'SE:店番',
+    'SE:住所(報告書記載)',
+    'SE:TEL(報告書記載)',
+    'SE:冷媒種類',
+    'SE:充填量',
+    'SE:冷媒回収量',
+    'SE:依頼内容',
+    'SE:設備名称',
+    'SE:メーカー',
+    'SE:型式',
+    'SE:機番',
+    'SE:資産管理No',
+    'SE:バーコード',
+    'SE:納品日',
+    'SE:作業者氏名',
+    'SE:部位',
+    'SE:詳細部位',
+    'SE:事象',
+    'SE:事象補足',
+    'SE:原因',
+    'SE:処置内容',
+    'SE:処置内容2',
+    'SE:部品1',
+    'SE:部品2',
+    'SE:部品3',
+    'SE:部品4',
+    'SE:部品5',
+    'SE:備考',
     '作成日時',
     '更新日時',
   ];
@@ -45,6 +78,26 @@ class ExcelExporter {
               : '${p.name}×${p.quantity}',
         )
         .join(' / ');
+  }
+
+  /// コンビニ側システム入力控えの「冷媒種類」表示テキスト。
+  /// 日報詳細画面と同じく、SE店舗の未充填統一表記(NONE等)は
+  /// 「未充填」とわかりやすく変換する。
+  static String _ssrRefrigerantType(StoreSystemReport ssr) {
+    if (ssr.refrigerantType.isNotEmpty &&
+        WorkReport.isNotFilledType(ssr.refrigerantType)) {
+      return '未充填';
+    }
+    return ssr.refrigerantType;
+  }
+
+  /// コンビニ側システム入力控えの「充填量」表示テキスト。
+  static String _ssrRefrigerantAmount(StoreSystemReport ssr) {
+    if (ssr.refrigerantAmount.isNotEmpty &&
+        WorkReport.isNotFilledAmount(ssr.refrigerantAmount)) {
+      return '未充填(0kg)';
+    }
+    return ssr.refrigerantAmount;
   }
 
   /// 日報一覧からExcelワークブック(xlsx)のバイト列を生成する。
@@ -84,6 +137,7 @@ class ExcelExporter {
     for (var i = 0; i < reports.length; i++) {
       final r = reports[i];
       final rowIndex = i + 1;
+      final ssr = r.storeSystemReportCopy;
       final values = <Object?>[
         r.id,
         r.authorName,
@@ -102,6 +156,35 @@ class ExcelExporter {
         r.issuesPoints,
         r.tags.join(' / '),
         r.notes,
+        ssr.receiptNumber,
+        ssr.storeNumber,
+        ssr.scannedAddress,
+        ssr.scannedTel,
+        _ssrRefrigerantType(ssr),
+        _ssrRefrigerantAmount(ssr),
+        ssr.recoveryAmount,
+        ssr.requestContent,
+        ssr.equipmentName,
+        ssr.maker,
+        ssr.modelNumber,
+        ssr.machineNo,
+        ssr.assetNo,
+        ssr.barcode,
+        ssr.deliveryDate,
+        ssr.workerName,
+        ssr.part,
+        ssr.detailPart,
+        ssr.phenomenon,
+        ssr.phenomenonNote,
+        ssr.cause,
+        ssr.treatmentContent,
+        ssr.treatmentContent2,
+        ssr.part1,
+        ssr.part2,
+        ssr.part3,
+        ssr.part4,
+        ssr.part5,
+        ssr.remarks,
         _dateTimeFmt.format(r.createdAt),
         _dateTimeFmt.format(r.updatedAt),
       ];
@@ -141,6 +224,35 @@ class ExcelExporter {
       24, // 課題・失敗・改善点
       16, // タグ
       20, // 備考
+      16, // SE:弊社受付No.
+      10, // SE:店番
+      22, // SE:住所(報告書記載)
+      14, // SE:TEL(報告書記載)
+      12, // SE:冷媒種類
+      12, // SE:充填量
+      12, // SE:冷媒回収量
+      24, // SE:依頼内容
+      16, // SE:設備名称
+      12, // SE:メーカー
+      14, // SE:型式
+      12, // SE:機番
+      14, // SE:資産管理No
+      14, // SE:バーコード
+      12, // SE:納品日
+      12, // SE:作業者氏名
+      10, // SE:部位
+      12, // SE:詳細部位
+      16, // SE:事象
+      16, // SE:事象補足
+      16, // SE:原因
+      18, // SE:処置内容
+      18, // SE:処置内容2
+      12, // SE:部品1
+      12, // SE:部品2
+      12, // SE:部品3
+      12, // SE:部品4
+      12, // SE:部品5
+      18, // SE:備考
       16, // 作成日時
       16, // 更新日時
     ];

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+import '../models/store_system_report.dart';
 import '../models/work_report.dart';
 
 /// 日報・ナレッジ検索結果をA4サイズのPDF帳票に変換し、共有(ダウンロード/
@@ -39,6 +40,63 @@ class PdfExporter {
               : '${p.name}×${p.quantity}',
         )
         .join(' / ');
+  }
+
+  /// コンビニ側システム入力控えの「冷媒種類」表示テキスト。
+  /// 日報詳細画面と同じく、SE店舗の未充填統一表記(NONE等)は
+  /// 「未充填」とわかりやすく変換する。
+  static String _ssrRefrigerantType(StoreSystemReport ssr) {
+    if (ssr.refrigerantType.isNotEmpty &&
+        WorkReport.isNotFilledType(ssr.refrigerantType)) {
+      return '未充填';
+    }
+    return ssr.refrigerantType;
+  }
+
+  /// コンビニ側システム入力控えの「充填量」表示テキスト。
+  static String _ssrRefrigerantAmount(StoreSystemReport ssr) {
+    if (ssr.refrigerantAmount.isNotEmpty &&
+        WorkReport.isNotFilledAmount(ssr.refrigerantAmount)) {
+      return '未充填(0kg)';
+    }
+    return ssr.refrigerantAmount;
+  }
+
+  /// コンビニ側システム入力控え(StoreSystemReport)の項目一覧を
+  /// 日報詳細画面(report_detail_screen.dart)と同じ項目・並び順で返す
+  /// (値が空の項目は呼び出し側でフィルタする)。
+  static List<MapEntry<String, String>> _ssrRows(StoreSystemReport ssr) {
+    return [
+      MapEntry('弊社受付No.', ssr.receiptNumber),
+      MapEntry('店番', ssr.storeNumber),
+      MapEntry('住所(報告書記載)', ssr.scannedAddress),
+      MapEntry('TEL(報告書記載)', ssr.scannedTel),
+      MapEntry('冷媒種類', _ssrRefrigerantType(ssr)),
+      MapEntry('充填量', _ssrRefrigerantAmount(ssr)),
+      MapEntry('冷媒回収量', ssr.recoveryAmount),
+      MapEntry('依頼内容', ssr.requestContent),
+      MapEntry('設備名称', ssr.equipmentName),
+      MapEntry('メーカー', ssr.maker),
+      MapEntry('型式', ssr.modelNumber),
+      MapEntry('機番', ssr.machineNo),
+      MapEntry('資産管理No', ssr.assetNo),
+      MapEntry('バーコード', ssr.barcode),
+      MapEntry('納品日', ssr.deliveryDate),
+      MapEntry('作業者氏名', ssr.workerName),
+      MapEntry('部位', ssr.part),
+      MapEntry('詳細部位', ssr.detailPart),
+      MapEntry('事象', ssr.phenomenon),
+      MapEntry('事象補足', ssr.phenomenonNote),
+      MapEntry('原因', ssr.cause),
+      MapEntry('処置内容', ssr.treatmentContent),
+      MapEntry('処置内容2', ssr.treatmentContent2),
+      MapEntry('部品1', ssr.part1),
+      MapEntry('部品2', ssr.part2),
+      MapEntry('部品3', ssr.part3),
+      MapEntry('部品4', ssr.part4),
+      MapEntry('部品5', ssr.part5),
+      MapEntry('備考', ssr.remarks),
+    ].where((e) => e.value.trim().isNotEmpty).toList();
   }
 
   /// 日報一覧からA4帳票形式のPDFバイト列を生成する。
@@ -194,6 +252,29 @@ class PdfExporter {
               infoRow('課題・失敗・改善点', r.issuesPoints),
             if (r.tags.isNotEmpty) infoRow('タグ', r.tags.join(' / ')),
             if (r.notes.trim().isNotEmpty) infoRow('備考', r.notes),
+            // 【追加】コンビニ側システム入力控え(StoreSystemReport)。
+            // 日報詳細画面と同じ項目・並び順・未充填表記ルールで出力する。
+            if (!r.storeSystemReportCopy.isEmpty) ...[
+              pw.SizedBox(height: 6),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 3,
+                ),
+                decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                child: pw.Text(
+                  'コンビニ側システム入力控え',
+                  style: pw.TextStyle(
+                    font: _boldFont,
+                    fontSize: 9,
+                    color: PdfColors.grey800,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              for (final e in _ssrRows(r.storeSystemReportCopy))
+                infoRow(e.key, e.value),
+            ],
           ],
         ),
       );
