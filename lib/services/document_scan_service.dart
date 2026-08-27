@@ -257,6 +257,49 @@ class DocumentScanService {
 
     return BatchScanResult(totalPages: totalPages, pageResults: pageResults);
   }
+
+  // ------------------------------------------------------------
+  // 【現場からのPDFアップロード対応・2026-08追加】
+  // ------------------------------------------------------------
+  //
+  // 現場サイド(プロワン・店舗カルテ等の業務システム)から、作業報告書を
+  // 直接PDFとして出力できる環境があるという要望を受け、カメラ撮影に加えて
+  // 「PDFファイルをアップロードして読み取る」ルートを追加する。
+  //
+  // 【実装方針】サーバー側(nakano-scan-proxy)には新しいエンドポイントを
+  // 追加せず、既存の /scanBatch(月末チェック機能で使用中の複数ページ対応
+  // エンドポイント)を「1ページのみ処理する」形で呼び出すことで実現する。
+  // これにより、月末チェック機能と全く同じOCRロジック(SE用/プロワン用
+  // 両モデル並行解析・docType自動判定)がそのまま使え、サーバー側の
+  // 二重実装を避けられる。
+  //
+  // PDFが複数ページの場合は「1ページ目のみ」を解析対象とする
+  // (作業報告書アプリの出力は通常1案件=1ページのため)。
+  static Future<ScanResult> analyzePdf(Uint8List pdfBytes) async {
+    final batch = await analyzeBatch(pdfBytes, startPage: 1, endPage: 1);
+    if (batch.pageResults.isEmpty) {
+      throw DocumentScanException('PDFの解析結果を取得できませんでした');
+    }
+    final page = batch.pageResults.first;
+    if (page.isError) {
+      throw DocumentScanException(page.error ?? 'PDFの解析に失敗しました');
+    }
+    if (page.isLowConfidence) {
+      // 単発画像スキャン(/scan)と挙動を揃え、全体信頼度が閾値未満の場合は
+      // 確認画面へは進ませず、撮り直し(選び直し)を促す。
+      throw DocumentScanException(
+        '作業報告書のフォーマットを認識できませんでした。'
+        '別のPDFを選ぶか、カメラで撮影してお試しください'
+        '(信頼度: ${(page.documentConfidence * 100).toStringAsFixed(0)}%)',
+      );
+    }
+    return ScanResult(
+      values: page.values,
+      confidences: page.confidences,
+      documentConfidence: page.documentConfidence,
+      docType: page.docType,
+    );
+  }
 }
 
 /// PDF一括解析の結果(全体)

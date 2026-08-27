@@ -25,6 +25,7 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _filterStoreId;
 
   List<WorkReport> _results = [];
+  bool _refreshing = false;
 
   // 【検索結果のフォルダー化・2026-08追加】案件一覧と同様の方靈で、
   // 検索結果(日報)も訪問日の年→月のフォルダー(ExpansionTile)に
@@ -36,6 +37,30 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _runSearch());
+  }
+
+  /// 「更新」操作(手動リフレッシュ)。
+  ///
+  /// 【背景・2026-08追加】他の従業員が新しく投稿した日報がすぐに一覧へ
+  /// 反映されない(アプリを開いたタイミングのキャッシュのまま)という声を
+  /// 踏まえ、「案件」タブと同様に、この画面にも手動更新ボタンを設ける。
+  /// Firestoreから最新の日報一覧を取得し直してから、現在の検索条件で
+  /// 再検索する。
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await context.read<AppState>().refreshReports();
+      if (mounted) _runSearch();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('更新に失敗しました: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   void _runSearch() {
@@ -112,7 +137,22 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('M/d');
     return Scaffold(
-      appBar: AppBar(title: const Text('日報・ナレッジ')),
+      appBar: AppBar(
+        title: const Text('日報・ナレッジ'),
+        actions: [
+          IconButton(
+            icon: _refreshing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            tooltip: '最新の日報に更新',
+            onPressed: _refreshing ? null : _refresh,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -253,25 +293,38 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
           Expanded(
-            child: _results.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: _results.isEmpty
+                  ? ListView(
                       children: [
-                        Icon(
-                          Icons.search_off,
-                          size: 48,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '該当する日報が見つかりません',
-                          style: TextStyle(color: Colors.grey.shade600),
+                        SizedBox(
+                          height:
+                              MediaQuery.of(context).size.height * 0.5,
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.search_off,
+                                  size: 48,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '該当する日報が見つかりません',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
-                    ),
-                  )
-                : _buildGroupedResults(),
+                    )
+                  : _buildGroupedResults(),
+            ),
           ),
         ],
       ),
