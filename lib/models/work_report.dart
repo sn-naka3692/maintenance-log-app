@@ -186,6 +186,19 @@ class WorkReport {
   // 従業員がこのフィールドを直接編集することはない。
   String caseId; // 紐づく WorkCase のドキュメントID(未グルーピングなら空)
 
+  // ------------------------------------------------------------
+  // 管理者による代筆編集の記録(監査証跡・2026-08導入)
+  // ------------------------------------------------------------
+  //
+  // 【目的】現場での入力もれ・訂正対応のため、一般管理者以上(admin/superAdmin)
+  // には本人以外の日報も編集できる権限を付与する。ただし無制限な代筆を
+  // 事故なく運用するため、「誰が・いつ代筆編集したか」を必ず記録し、
+  // 日報詳細画面に明示する(本人・他の閲覧者が後から気づける状態にする)。
+  // 本人が自分の日報を編集した場合はこれらのフィールドは更新しない。
+  String? lastEditedByAdminId; // 代筆編集した管理者のユーザーID
+  String? lastEditedByAdminName; // 代筆編集した管理者の氏名(表示用)
+  DateTime? lastEditedByAdminAt; // 代筆編集した日時
+
   DateTime createdAt;
   DateTime updatedAt;
 
@@ -219,6 +232,9 @@ class WorkReport {
     this.manualReviewNeeded = false,
     this.matchedCacheJobNumber = '',
     this.caseId = '',
+    this.lastEditedByAdminId,
+    this.lastEditedByAdminName,
+    this.lastEditedByAdminAt,
     required this.createdAt,
     required this.updatedAt,
   }) : partsUsed = partsUsed ?? [],
@@ -351,6 +367,9 @@ class WorkReport {
       'manual_review_needed': manualReviewNeeded,
       'matched_cache_job_number': matchedCacheJobNumber,
       'case_id': caseId,
+      'last_edited_by_admin_id': lastEditedByAdminId,
+      'last_edited_by_admin_name': lastEditedByAdminName,
+      'last_edited_by_admin_at': lastEditedByAdminAt,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
@@ -405,6 +424,11 @@ class WorkReport {
       matchedCacheJobNumber:
           map['matched_cache_job_number'] as String? ?? '',
       caseId: map['case_id'] as String? ?? '',
+      lastEditedByAdminId: map['last_edited_by_admin_id'] as String?,
+      lastEditedByAdminName: map['last_edited_by_admin_name'] as String?,
+      lastEditedByAdminAt: _parseNullableDate(
+        map['last_edited_by_admin_at'],
+      ),
       createdAt: _parseDate(map['created_at']),
       updatedAt: _parseDate(map['updated_at']),
     );
@@ -417,6 +441,19 @@ class WorkReport {
       return (value as dynamic).toDate() as DateTime;
     } catch (_) {
       return DateTime.now();
+    }
+  }
+
+  /// 未入力(null)を許容する版の日付パーサー。
+  /// 代筆編集記録(lastEditedByAdminAt)など、「一度も発生していない」
+  /// ことを null で表現したいフィールド用。
+  static DateTime? _parseNullableDate(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return (value as dynamic).toDate() as DateTime;
+    } catch (_) {
+      return null;
     }
   }
 }

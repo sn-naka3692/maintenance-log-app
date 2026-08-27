@@ -32,8 +32,12 @@ class ReportDetailScreen extends StatelessWidget {
 
     final dateFmt = DateFormat('yyyy年M月d日 (E)', 'ja_JP');
     final timeFmt = DateFormat('HH:mm');
-    final canEdit = report.authorId == appState.currentUser?.id;
-    final canDelete = canEdit || appState.isAdmin;
+    final isOwnReport = report.authorId == appState.currentUser?.id;
+    // 【権限追加・2026-08】現場での入力もれ・訂正対応のため、一般管理者以上
+    // (admin/superAdmin)には本人以外の日報も編集できる権限を付与する
+    // (誰が代筆したかは保存時に自動記録され、下部に表示される)。
+    final canEdit = isOwnReport || appState.isAdmin;
+    final canDelete = isOwnReport || appState.isAdmin;
     final typeColor = responseTypeColor(report.responseType.label);
 
     return Scaffold(
@@ -60,7 +64,7 @@ class ReportDetailScreen extends StatelessWidget {
                   builder: (_) => AlertDialog(
                     title: const Text('日報を削除しますか?'),
                     content: Text(
-                      canEdit
+                      isOwnReport
                           ? 'この操作は取り消せません。'
                           : '管理者権限でこの日報を削除します。この操作は取り消せません。',
                     ),
@@ -196,6 +200,49 @@ class ReportDetailScreen extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+          // 【代筆編集の記録・2026-08導入】一般管理者以上が本人の代わりに
+          // 内容を追記・修正した場合、その記録を明示する(入力もれ対応の
+          // 権限拡大に伴う監査証跡。誰でも後から気づける状態にする)。
+          if (report.lastEditedByAdminId != null &&
+              (report.lastEditedByAdminName ?? '').isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.admin_panel_settings_outlined,
+                    size: 16,
+                    color: AppColors.warning,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      report.lastEditedByAdminAt != null
+                          ? '${report.lastEditedByAdminName}さん(管理者)が'
+                                '${dateFmt.format(report.lastEditedByAdminAt!)} '
+                                '${timeFmt.format(report.lastEditedByAdminAt!)}に'
+                                '代わりに編集しました'
+                          : '${report.lastEditedByAdminName}さん(管理者)が'
+                                '代わりに編集しました',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
           const Divider(height: 32),

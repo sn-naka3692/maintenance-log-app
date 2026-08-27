@@ -923,6 +923,16 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       r.fieldSources = _fieldSources;
       r.manualReviewNeeded = _manualReviewNeeded;
       r.matchedCacheJobNumber = _matchedCacheJobNumber;
+      // 【代筆編集の記録・2026-08導入】本人以外(一般管理者以上)が編集した
+      // 場合のみ、誰が・いつ代筆したかを記録する。現場の入力もれ・訂正対応の
+      // ための権限拡大であり、無記録での代筆を避けるための監査証跡。
+      // 本人による編集の場合は既存の記録(あれば)をそのまま維持する
+      // (本人が後から見返して編集しても、過去の代筆履歴を消さないため)。
+      if (r.authorId != user.id) {
+        r.lastEditedByAdminId = user.id;
+        r.lastEditedByAdminName = user.name;
+        r.lastEditedByAdminAt = DateTime.now();
+      }
       await appState.updateReport(r);
     } else {
       final report = WorkReport(
@@ -972,6 +982,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('yyyy年M月d日 (E)', 'ja_JP');
     final appState = context.watch<AppState>();
+    // 【代筆編集の記録・2026-08導入】一般管理者以上が本人以外の日報を
+    // 編集している場合、その旨を明示するための判定(入力もれ対応用)。
+    final isAdminEditingOthersReport =
+        isEditing &&
+        widget.existing!.authorId != appState.currentUser?.id;
     final selectedStore = _selectedStoreId != null
         ? appState.getStoreById(_selectedStoreId!)
         : null;
@@ -1008,6 +1023,42 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           cacheExtent: 5000,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
+            if (isAdminEditingOthersReport)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.warning.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.admin_panel_settings_outlined,
+                      size: 20,
+                      color: AppColors.warning,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '管理者権限で ${widget.existing!.authorName} さんの日報を'
+                        '代わりに編集しています。入力もれ・訂正対応以外での'
+                        '内容変更は控えてください。この編集は記録され、'
+                        '日報詳細画面に代筆履歴として表示されます。',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textPrimary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             _SectionTitle('基本情報'),
             const SizedBox(height: 8),
             // 【2026-08 導線改善】まず「何の作業か」(対応区分)を最初に選んで

@@ -44,6 +44,9 @@ void main() {
         tags: const ['冷蔵庫'],
         proWanRefNumber: 'PW-001',
         storeSystemReportCopy: StoreSystemReport(receiptNumber: 'R-001'),
+        lastEditedByAdminId: 'admin-1',
+        lastEditedByAdminName: '管理者花子',
+        lastEditedByAdminAt: now,
         createdAt: now,
         updatedAt: now,
       );
@@ -57,7 +60,35 @@ void main() {
       expect(restored.tags, contains('冷蔵庫'));
       expect(restored.storeSystemReportCopy.receiptNumber, 'R-001');
       expect(restored.coWorkerIds, ['user-2', 'user-3']);
+      expect(restored.lastEditedByAdminId, 'admin-1');
+      expect(restored.lastEditedByAdminName, '管理者花子');
+      expect(restored.lastEditedByAdminAt, isNotNull);
     });
+
+    test(
+      '代筆編集記録(lastEditedByAdmin*)が未設定でもnullのまま復元される',
+      () {
+        final now = DateTime.now();
+        final report = WorkReport(
+          id: 'test-id-2',
+          authorId: 'user-1',
+          authorName: 'テスト太郎',
+          clientName: 'テスト商店',
+          visitDate: now,
+          startTime: now,
+          endTime: now.add(const Duration(hours: 1)),
+          workContent: '定期点検を実施',
+          createdAt: now,
+          updatedAt: now,
+        );
+
+        final restored = WorkReport.fromMap(report.id, report.toMap());
+
+        expect(restored.lastEditedByAdminId, isNull);
+        expect(restored.lastEditedByAdminName, isNull);
+        expect(restored.lastEditedByAdminAt, isNull);
+      },
+    );
   });
 
   group('WorkReport.hasRefrigerantFilling', () {
