@@ -36,6 +36,13 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _refreshing = false;
   bool _exporting = false;
 
+  // 【出力対象選択機能・2026-08追加】
+  // 「選択して出力」を押すと選択モードに入り、チェックを付けた日報のみを
+  // Excel/PDF出力の対象にできる。選択モードでないときは検索結果全件が
+  // 対象になる(従来通りの挙動)。
+  bool _selectionMode = false;
+  final Set<String> _selectedIds = {};
+
   // 【検索結果のフォルダー化・2026-08追加】案件一覧と同様の方靈で、
   // 検索結果(日報)も訪問日の年→月のフォルダー(ExpansionTile)に
   // 分類して表示する。一番新しい年・年月のフォルダーだけを初期展開する。
@@ -87,7 +94,41 @@ class _SearchScreenState extends State<SearchScreen> {
     _computeNewestYearMonth(results);
     setState(() {
       _results = results;
+      // 検索条件が変わった際、選択済みIDの中に結果から消えたものが
+      // あれば取り除く(絞り込み変更後に見えない日報が選択されたまま
+      // 出力対象に残ってしまうのを防ぐ)。
+      final resultIds = results.map((r) => r.id).toSet();
+      _selectedIds.removeWhere((id) => !resultIds.contains(id));
     });
+  }
+
+  void _toggleSelectionMode() {
+    setState(() {
+      _selectionMode = !_selectionMode;
+      if (!_selectionMode) _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelected(String reportId) {
+    setState(() {
+      if (_selectedIds.contains(reportId)) {
+        _selectedIds.remove(reportId);
+      } else {
+        _selectedIds.add(reportId);
+      }
+    });
+  }
+
+  void _selectAllVisible() {
+    setState(() {
+      _selectedIds
+        ..clear()
+        ..addAll(_results.map((r) => r.id));
+    });
+  }
+
+  void _clearSelection() {
+    setState(() => _selectedIds.clear());
   }
 
   /// 一番新しい年・年月を算出し、フォルダーの初期展開状態の基準にする。
@@ -128,10 +169,19 @@ class _SearchScreenState extends State<SearchScreen> {
   /// 出力形式(Excel/PDF)と出力方法(共有/端末保存)を選択させ、
   /// [ExcelExporter]/[PdfExporter]を呼び出す。
   Future<void> _exportResults() async {
-    if (_results.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('出力対象の日報がありません')));
+    // 選択モード中はチェックした日報のみ、それ以外は検索結果全件を対象にする。
+    final targets = _selectionMode
+        ? _results.where((r) => _selectedIds.contains(r.id)).toList()
+        : _results;
+
+    if (targets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _selectionMode ? '出力する日報を選択してください' : '出力対象の日報がありません',
+          ),
+        ),
+      );
       return;
     }
 
@@ -152,13 +202,13 @@ class _SearchScreenState extends State<SearchScreen> {
               ListTile(
                 leading: const Icon(Icons.grid_on, color: Colors.green),
                 title: const Text('Excel(.xlsx)で出力'),
-                subtitle: Text('A4横向き表形式・${_results.length}件'),
+                subtitle: Text('A4横向き表形式・${targets.length}件'),
                 onTap: () => Navigator.pop(context, _ExportFormat.excel),
               ),
               ListTile(
                 leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
                 title: const Text('PDFで出力'),
-                subtitle: Text('A4帳票形式・${_results.length}件'),
+                subtitle: Text('A4帳票形式・${targets.length}件'),
                 onTap: () => Navigator.pop(context, _ExportFormat.pdf),
               ),
               const SizedBox(height: 8),
@@ -208,21 +258,28 @@ class _SearchScreenState extends State<SearchScreen> {
       String? savedFileName;
       if (format == _ExportFormat.excel) {
         if (method == _ExportMethod.share) {
-          await ExcelExporter.exportAndShare(_results);
+          await ExcelExporter.exportAndShare(targets);
         } else {
-          savedFileName = await ExcelExporter.exportAndSaveToDevice(_results);
+          savedFileName = await ExcelExporter.exportAndSaveToDevice(targets);
         }
       } else {
         if (method == _ExportMethod.share) {
-          await PdfExporter.exportAndShare(_results);
+          await PdfExporter.exportAndShare(targets);
         } else {
-          savedFileName = await PdfExporter.exportAndSaveToDevice(_results);
+          savedFileName = await PdfExporter.exportAndSaveToDevice(targets);
         }
       }
       if (mounted && savedFileName != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('保存しました: $savedFileName')),
         );
+      }
+      // 出力完了後は選択モードを解除して通常表示に戻す。
+      if (mounted && _selectionMode) {
+        setState(() {
+          _selectionMode = false;
+          _selectedIds.clear();
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -407,16 +464,34 @@ class _SearchScreenState extends State<SearchScreen> {
             child: Row(
               children: [
                 Text(
-                  '${_results.length}件の結果',
+                  _selectionMode
+                      ? '${_selectedIds.length}件選択中(全${_results.length}件)'
+                      : '${_results.length}件の結果',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                 ),
                 const Spacer(),
-                if (_results.isNotEmpty)
+                if (_selectionMode) ...[
+                  TextButton(
+                    onPressed: _selectAllVisible,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    child: const Text('全選択', style: TextStyle(fontSize: 12)),
+                  ),
+                  TextButton(
+                    onPressed: _clearSelection,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    child: const Text('解除', style: TextStyle(fontSize: 12)),
+                  ),
                   TextButton.icon(
                     onPressed: _exporting ? null : _exportResults,
                     icon: const Icon(Icons.file_download_outlined, size: 16),
                     label: const Text(
-                      'Excel/PDF出力',
+                      '出力',
                       style: TextStyle(fontSize: 12),
                     ),
                     style: TextButton.styleFrom(
@@ -424,6 +499,38 @@ class _SearchScreenState extends State<SearchScreen> {
                       minimumSize: const Size(0, 32),
                     ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    tooltip: '選択をやめる',
+                    onPressed: _toggleSelectionMode,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ] else if (_results.isNotEmpty) ...[
+                  TextButton.icon(
+                    onPressed: _toggleSelectionMode,
+                    icon: const Icon(Icons.checklist, size: 16),
+                    label: const Text(
+                      '選択して出力',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _exporting ? null : _exportResults,
+                    icon: const Icon(Icons.file_download_outlined, size: 16),
+                    label: const Text(
+                      '全件出力',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -554,6 +661,9 @@ class _SearchScreenState extends State<SearchScreen> {
               child: ReportCard(
                 report: r,
                 showAuthor: true,
+                selectionMode: _selectionMode,
+                selected: _selectedIds.contains(r.id),
+                onSelectToggle: () => _toggleSelected(r.id),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(

@@ -8,11 +8,21 @@ class ReportCard extends StatelessWidget {
   final VoidCallback onTap;
   final bool showAuthor;
 
+  /// 【出力対象選択機能・2026-08追加】
+  /// trueの場合、カード先頭にチェックボックスを表示し、タップ操作は
+  /// [onTap](詳細画面遷移)ではなく選択トグルとして扱われる。
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onSelectToggle;
+
   const ReportCard({
     super.key,
     required this.report,
     required this.onTap,
     this.showAuthor = false,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onSelectToggle,
   });
 
   @override
@@ -22,9 +32,15 @@ class ReportCard extends StatelessWidget {
     final typeColor = responseTypeColor(report.responseType.label);
 
     return Card(
+      shape: selectionMode && selected
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: const BorderSide(color: AppColors.primary, width: 1.6),
+            )
+          : null,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
+        onTap: selectionMode ? onSelectToggle : onTap,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -32,6 +48,16 @@ class ReportCard extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  if (selectionMode) ...[
+                    Checkbox(
+                      value: selected,
+                      onChanged: (_) => onSelectToggle?.call(),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize:
+                          MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
