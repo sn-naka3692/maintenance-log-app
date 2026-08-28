@@ -24,11 +24,21 @@ DateTime? tryParseScanDate(String text) {
   ).firstMatch(cleaned);
   if (match == null) return null;
   try {
-    return DateTime(
-      int.parse(match.group(1)!),
-      int.parse(match.group(2)!),
-      int.parse(match.group(3)!),
-    );
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final parsed = DateTime(year, month, day);
+    // 【不具合防止・2026-08-28】DartのDateTimeコンストラクタは、
+    // 2/30のような実在しない日付を例外を出さずに3/2へ自動繰り上げ
+    // (ロールオーバー)してしまう。OCRの誤読で実在しない日付が来た場合に
+    // 静かに別の日付として扱われると、月末チェックの日付一致判定
+    // (isSameCalendarDay)が意図しない挙動になるため、生成結果の
+    // year/month/dayが入力値と完全一致するか検証し、ズレていれば
+    // 「パース失敗」として null を返す。
+    if (parsed.year != year || parsed.month != month || parsed.day != day) {
+      return null;
+    }
+    return parsed;
   } catch (_) {
     return null;
   }
