@@ -20,6 +20,21 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.32',
+    date: '2026-09-01',
+    title: 'SDRS請求明細Excelの読み込み不具合を修正',
+    details: [
+      '実際にSDRSから届く請求明細Excelの一部で、部品情報突合機能への'
+          'アップロードが失敗する不具合を修正しました。',
+      '原因は、同じ部品名や受付Noなど「内容が完全に同じ文字列」が'
+          'Excelファイル内に複数回登場する場合、読み込みライブラリの'
+          '内部処理でデータの対応がずれてしまうことでした。',
+      'アップロード前にファイル内部を自動的に補正してから読み込む'
+          '処理を追加し、この状態でも正しく部品情報を取得できるように'
+          'しました。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.31',
     date: '2026-08-28',
     title: '部品情報突合機能を追加(SDRS月次請求明細Excelとの照合)',

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:archive/archive.dart';
 import 'package:excel/excel.dart' as xls;
+import 'package:xml/xml.dart';
 
 import '../models/billing_part_record.dart';
 
@@ -49,7 +50,7 @@ class BillingPartImportService {
   /// 該当箇所を無害化(該当numFmtエントリを除去)してから読み込むことで
   /// 回避する。
   static List<BillingPartRecord> parse(List<int> bytes) {
-    final sanitized = _sanitizeXlsxBytes(bytes);
+    final sanitized = _sanitizeSharedStrings(_sanitizeXlsxBytes(bytes));
     final excel = xls.Excel.decodeBytes(sanitized);
 
     // シート名は年月や版で完全一致しないことがあるため、
@@ -175,9 +176,15 @@ class BillingPartImportService {
       return value.asDateTimeLocal().toIso8601String();
     }
     if (value is xls.TextCellValue) {
-      return value.value.text?.trim() ?? '';
+      return _stripZeroWidthMarkers(value.value.text?.trim() ?? '');
     }
-    return value.toString().trim();
+    return _stripZeroWidthMarkers(value.toString().trim());
+  }
+
+  /// [_sanitizeSharedStrings]で重複解消のために埋め込んだ不可視マーカー
+  /// (ゼロ幅文字)を、実際に読み取ったテキストから取り除く。
+  static String _stripZeroWidthMarkers(String text) {
+    return text.replaceAll(RegExp('[\u200B\u200C\u200D\uFEFF]'), '');
   }
 
   static DateTime? _tryParseDateCell(xls.Data? cell) {
@@ -244,5 +251,110 @@ class BillingPartImportService {
       final id = int.tryParse(idMatch.group(1)!) ?? 0;
       return id < 164 ? '' : tag;
     });
+  }
+
+  /// 【不具合対応・2026-09】excelパッケージ(4.0.6)は`xl/sharedStrings.xml`
+  /// を読み込む際、内容(文字列値)が完全一致する`<si>`要素を「同一の共有
+  /// 文字列」として重複排除し、内部リスト(`_list`)に1つだけ保持する。
+  ///
+  /// しかし各ワークシートのセル(`<c t="s"><v>N</v></c>`)は、
+  /// sharedStrings.xml内での**元の出現順インデックス**(0始まり)を直接
+  /// 参照する。実際にSDRSから届くExcelには、内容が完全一致する`<si>`
+  /// (例:同じ部品名や同じ受付No文字列)が複数箇所に存在するため、
+  /// 重複排除後の`_list`の長さが元の`<si>`要素数より短くなり、
+  /// 後方の`<si>`を指すインデックスが範囲外となって
+  /// `Null check operator used on a null value` 例外を引き起こす。
+  ///
+  /// 【対応方針】読み込み前に`sharedStrings.xml`内の`<si>`要素をすべて
+  /// 「内容として重複しない」ように加工する。具体的には、2回目以降に
+  /// 出現する同一内容の`<si>`の末尾に、出現順で一意なゼロ幅文字列
+  /// (`\u200B`を出現回数分)を追加し、excelパッケージ側の重複排除
+  /// ロジックが別々の文字列として扱うようにする。これにより
+  /// `_list`の長さが常に元の`<si>`要素数と一致し、インデックス参照が
+  /// 破綻しなくなる。読み取り後は[_stripZeroWidthMarkers]で除去する
+  /// ため、アプリ側で扱う実際のテキスト内容には影響しない。
+  static List<int> _sanitizeSharedStrings(List<int> bytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(bytes);
+      final sharedStringsFile = archive.findFile('xl/sharedStrings.xml');
+      if (sharedStringsFile == null) return bytes;
+
+      final content = utf8.decode(sharedStringsFile.content as List<int>);
+      final sanitized = _dedupeSharedStringsXml(content);
+      if (sanitized == null) return bytes; // 変更不要 or 加工失敗
+
+      final newArchive = Archive();
+      for (final f in archive.files) {
+        if (f.name == 'xl/sharedStrings.xml') {
+          final data = utf8.encode(sanitized);
+          newArchive.addFile(ArchiveFile(f.name, data.length, data));
+        } else {
+          newArchive.addFile(f);
+        }
+      }
+      final encoded = ZipEncoder().encode(newArchive);
+      return encoded ?? bytes;
+    } catch (_) {
+      // 加工に失敗した場合は元のバイト列で通常通り読み込みを試みる
+      // (重複がなければそもそも問題は発生しないため安全側に倒す)。
+      return bytes;
+    }
+  }
+
+  /// sharedStrings.xml内の`<si>`要素のテキスト内容(rPh等の読み仮名は
+  /// 除く`<t>`テキストの結合値)を比較し、2回目以降に同一内容が出現した
+  /// 場合、その`<si>`内の最初の`<t>`要素にゼロ幅文字を追記して一意化する。
+  /// 重複が1件もなければ`null`を返す(加工不要)。
+  static String? _dedupeSharedStringsXml(String xmlContent) {
+    final XmlDocument document;
+    try {
+      document = XmlDocument.parse(xmlContent);
+    } catch (_) {
+      return null;
+    }
+
+    final siElements = document.findAllElements('si').toList();
+    final Map<String, int> occurrenceCount = {};
+    bool changed = false;
+
+    for (final si in siElements) {
+      final value = _sharedStringPlainText(si);
+      final count = occurrenceCount.update(
+        value,
+        (v) => v + 1,
+        ifAbsent: () => 1,
+      );
+      if (count > 1) {
+        // 2回目以降の出現: 一意化のためゼロ幅文字マーカーを追記する。
+        final marker = '\u200B' * count;
+        final tElement = si.findElements('t').isNotEmpty
+            ? si.findElements('t').first
+            : null;
+        if (tElement != null) {
+          tElement.children.add(XmlText(marker));
+          changed = true;
+        } else {
+          // <t>直下がなくランタン(<r>)構成のみの場合は、siの先頭に
+          // 新しい<t>要素を追加してマーカーを持たせる。
+          si.children.insert(0, XmlElement(XmlName('t'), [], [XmlText(marker)]));
+          changed = true;
+        }
+      }
+    }
+
+    if (!changed) return null;
+    return document.toXmlString();
+  }
+
+  /// [SharedString.stringValue]相当のロジック(読み仮名`rPh`を除いた
+  /// `<t>`テキストの結合)を、excelパッケージに依存せず算出する。
+  static String _sharedStringPlainText(XmlElement si) {
+    final buffer = StringBuffer();
+    for (final t in si.findAllElements('t')) {
+      final parent = t.parentElement;
+      if (parent != null && parent.name.local == 'rPh') continue;
+      buffer.write(t.innerText);
+    }
+    return buffer.toString();
   }
 }
