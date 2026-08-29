@@ -1293,14 +1293,21 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               ..._parts.asMap().entries.map((entry) {
                 final i = entry.key;
                 final p = entry.value;
+                final hasPartNumber =
+                    p.partNumber != null && p.partNumber!.isNotEmpty;
+                final hasNote = p.note != null && p.note!.isNotEmpty;
+                final subtitleText = [
+                  if (hasPartNumber) '図番: ${p.partNumber}',
+                  if (hasNote) p.note!,
+                ].join(' / ');
                 return Card(
                   margin: const EdgeInsets.only(bottom: 6),
                   child: ListTile(
                     dense: true,
                     leading: const Icon(Icons.inventory_2, size: 20),
                     title: Text('${p.name} × ${p.quantity}'),
-                    subtitle: p.note != null && p.note!.isNotEmpty
-                        ? Text(p.note!)
+                    subtitle: subtitleText.isNotEmpty
+                        ? Text(subtitleText)
                         : null,
                     trailing: IconButton(
                       icon: const Icon(Icons.close, size: 18),
@@ -2635,12 +2642,14 @@ class _PartInputDialog extends StatefulWidget {
 class _PartInputDialogState extends State<_PartInputDialog> {
   final _nameCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController(text: '1');
+  final _partNumberCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _qtyCtrl.dispose();
+    _partNumberCtrl.dispose();
     _noteCtrl.dispose();
     super.dispose();
   }
@@ -2664,8 +2673,17 @@ class _PartInputDialogState extends State<_PartInputDialog> {
           ),
           const SizedBox(height: 10),
           TextField(
+            controller: _partNumberCtrl,
+            decoration: const InputDecoration(
+              labelText: '部品図番(任意)',
+              hintText: '分かる場合のみ入力(月次請求明細との突合精度が上がります)',
+              hintMaxLines: 2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
             controller: _noteCtrl,
-            decoration: const InputDecoration(labelText: '補足(型番等・任意)'),
+            decoration: const InputDecoration(labelText: '補足(仕入先等・任意)'),
           ),
         ],
       ),
@@ -2683,6 +2701,9 @@ class _PartInputDialogState extends State<_PartInputDialog> {
               PartUsed(
                 name: name,
                 quantity: qty,
+                partNumber: _partNumberCtrl.text.trim().isEmpty
+                    ? null
+                    : _partNumberCtrl.text.trim(),
                 note: _noteCtrl.text.trim().isEmpty
                     ? null
                     : _noteCtrl.text.trim(),

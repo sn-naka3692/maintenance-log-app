@@ -3,6 +3,7 @@ import 'package:excel/excel.dart' as xls;
 import 'package:file_saver/file_saver.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import '../models/part_used.dart';
 import '../models/store_system_report.dart';
 import '../models/work_report.dart';
 
@@ -86,13 +87,20 @@ class ExcelExporter {
   ];
 
   static String _partsText(WorkReport r) {
-    return r.partsUsed
-        .map(
-          (p) => p.note != null && p.note!.trim().isNotEmpty
-              ? '${p.name}×${p.quantity}(${p.note})'
-              : '${p.name}×${p.quantity}',
-        )
-        .join(' / ');
+    return r.partsUsed.map(_singlePartText).join(' / ');
+  }
+
+  /// 部品1件分の表示テキストを組み立てる(図番・補足があれば併記)。
+  static String _singlePartText(PartUsed p) {
+    final hasPartNumber = p.partNumber != null && p.partNumber!.trim().isNotEmpty;
+    final hasNote = p.note != null && p.note!.trim().isNotEmpty;
+    final extras = [
+      if (hasPartNumber) '図番:${p.partNumber}',
+      if (hasNote) p.note!,
+    ].join(',');
+    return extras.isEmpty
+        ? '${p.name}×${p.quantity}'
+        : '${p.name}×${p.quantity}($extras)';
   }
 
   /// コンビニ側システム入力控えの「冷媒種類」表示テキスト。

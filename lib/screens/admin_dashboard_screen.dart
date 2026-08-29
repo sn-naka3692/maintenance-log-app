@@ -12,6 +12,7 @@ import '../widgets/report_card.dart';
 import '../utils/csv_exporter.dart';
 import 'report_detail_screen.dart';
 import 'submission_check_screen.dart';
+import 'parts_reconciliation_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -497,6 +498,65 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  /// 【部品情報突合機能】導線カード。
+  ///
+  /// SDRSから毎月末頃に届く「SE請求明細書」Excelをアップロードし、
+  /// 弊社受付Noを主キーとしてアプリ側の日報の使用部品記録と自動突合する
+  /// ことで、現場入力の漏れ・記録ミスを検知する機能。
+  Widget _buildPartsReconciliationCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.inventory_2_outlined,
+                color: AppColors.primary,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  '部品情報突合(月次請求明細)',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'SDRSから毎月末頃に届く「SE請求明細書」(Excel)をアップロードし、'
+            '弊社受付Noをキーにアプリ側の日報の使用部品記録と自動突合します。'
+            '入力漏れ・記録ミスの疑いがある案件を検知するための機能です。',
+            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const PartsReconciliationScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.upload_file, size: 18),
+              label: const Text('部品突合を開始(Excelアップロード)'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _exportStatusChip(String label, bool exported) {
     return Chip(
       avatar: Icon(
@@ -887,6 +947,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           const SizedBox(height: 20),
           _buildSubmissionCheckCard(),
+          const SizedBox(height: 12),
+          _buildPartsReconciliationCard(),
           const SizedBox(height: 8),
           if (filtered.isEmpty)
             Padding(
