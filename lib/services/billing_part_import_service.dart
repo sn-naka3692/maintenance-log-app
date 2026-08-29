@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:archive/archive.dart';
 import 'package:excel/excel.dart' as xls;
 
 import '../models/billing_part_record.dart';
@@ -37,8 +40,17 @@ class BillingPartImportService {
 
   /// SDRS請求明細Excel(xlsx)のバイト列を解析し、部品情報を含む
   /// 明細一覧を返す。対象シートが見つからない場合は例外を投げる。
+  ///
+  /// 【不具合対応・2026-08-28】実際にSDRSから届くExcelには、Excel本来の
+  /// 仕様(カスタム数値書式のnumFmtIdは164以上)から外れて164未満の値が
+  /// 使われているケースがあり(他ソフトでの編集・再保存等が原因と推測)、
+  /// excelパッケージ(4.0.6)がこれを不正な形式として例外を投げてしまう。
+  /// アプリ側では数値書式の情報自体は使わないため、事前にstyles.xml内の
+  /// 該当箇所を無害化(該当numFmtエントリを除去)してから読み込むことで
+  /// 回避する。
   static List<BillingPartRecord> parse(List<int> bytes) {
-    final excel = xls.Excel.decodeBytes(bytes);
+    final sanitized = _sanitizeXlsxBytes(bytes);
+    final excel = xls.Excel.decodeBytes(sanitized);
 
     // シート名は年月や版で完全一致しないことがあるため、
     // 「請求」を含むシート名を優先的に探す。見つからなければ先頭シート。
@@ -183,5 +195,54 @@ class BillingPartImportService {
       );
     }
     return null;
+  }
+
+  /// xlsx(zip)内の `xl/styles.xml` にある `<numFmt numFmtId="...">` のうち、
+  /// 164未満(Excel仕様上は組み込み書式用の番号帯)のエントリを取り除く。
+  ///
+  /// 用紙側の数値表示形式が変わるだけで、セルの実際の値
+  /// (TextCellValue/IntCellValue等)には影響しないため、部品名・数量の
+  /// 読み取りには支障がない。styles.xmlが見つからない、あるいは
+  /// 解析中に何らかの理由で失敗した場合は、元のバイト列をそのまま返す
+  /// (通常フォーマットのExcelであれば元々このワークアラウンドは不要な
+  /// ため、安全側に倒して既存の動作を壊さない)。
+  static List<int> _sanitizeXlsxBytes(List<int> bytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(bytes);
+      final stylesFile = archive.findFile('xl/styles.xml');
+      if (stylesFile == null) return bytes;
+
+      final content = utf8.decode(stylesFile.content as List<int>);
+      final sanitized = _stripInvalidNumFmts(content);
+      if (sanitized == content) return bytes; // 変更不要ならそのまま返す
+
+      final newArchive = Archive();
+      for (final f in archive.files) {
+        if (f.name == 'xl/styles.xml') {
+          final data = utf8.encode(sanitized);
+          newArchive.addFile(ArchiveFile(f.name, data.length, data));
+        } else {
+          newArchive.addFile(f);
+        }
+      }
+      final encoded = ZipEncoder().encode(newArchive);
+      return encoded ?? bytes;
+    } catch (_) {
+      // サニタイズに失敗した場合は元のバイト列で通常通り読み込みを試みる。
+      return bytes;
+    }
+  }
+
+  /// styles.xml内の `<numFmt numFmtId="N" .../>` のうち N<164 のものを
+  /// 文字列置換ベースで除去する(XMLパーサーを介さない軽量な実装)。
+  static String _stripInvalidNumFmts(String xmlContent) {
+    final numFmtPattern = RegExp(r'<numFmt\s+[^>]*?/>');
+    return xmlContent.replaceAllMapped(numFmtPattern, (match) {
+      final tag = match.group(0)!;
+      final idMatch = RegExp(r'numFmtId="(\d+)"').firstMatch(tag);
+      if (idMatch == null) return tag;
+      final id = int.tryParse(idMatch.group(1)!) ?? 0;
+      return id < 164 ? '' : tag;
+    });
   }
 }
