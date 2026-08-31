@@ -105,6 +105,26 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   late String _reportId;
   // 保存前に選択された写真をアップロード中かどうか(保存ボタンの多重押下防止用)。
   bool _isUploadingPhoto = false;
+  // 保存処理中の多重押下防止(Firestore書き込み中に連打されるのを防ぐ)。
+  bool _isSaving = false;
+
+  // 【不具合修正・2026-09】必須項目が未入力のまま保存ボタンが押された際、
+  // 従来は`Form.validate()`がfalseを返すだけで画面上に何の通知もなく、
+  // 保存も進まないという「サイレントバグ」だった(佐藤さんの案件反映漏れの
+  // 調査で判明したBug①)。ユーザーが「保存が終わったのに何も起きない」と
+  // 感じて操作を諦めてしまい、そのまま日報自体が保存されない事態を防ぐため、
+  // (1)明確なエラー通知を表示し、(2)最初に見つかった必須未入力欄まで
+  // 自動スクロールしてフォーカスすることで、入力者が確実に気づける設計にする。
+  //
+  // 対象はスクロールで画面外に隠れがちな「必須」バリデータ付きフィールド
+  // (表示条件によって出現する冷媒情報セクションなど)。ListViewには既に
+  // cacheExtent: 5000が設定されているため、画面外でもFormFieldStateが
+  // 生成済みであり、hasErrorを確実に判定できる。
+  final _workContentFieldKey = GlobalKey<FormFieldState<String>>();
+  final _nonSeRefrigerantTypeFieldKey = GlobalKey<FormFieldState<String>>();
+  final _nonSeRefrigerantAmountFieldKey = GlobalKey<FormFieldState<String>>();
+  final _seRefrigerantTypeFieldKey = GlobalKey<FormFieldState<String>>();
+  final _seRefrigerantAmountFieldKey = GlobalKey<FormFieldState<String>>();
 
   @override
   void initState() {
@@ -179,8 +199,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     };
     _tagInputCtrl = TextEditingController();
     _caseRoleNoteCtrl = TextEditingController(text: e?.caseRoleNote ?? '');
-    _caseRolePreset =
-        (e != null && e.caseRolePreset.isNotEmpty) ? e.caseRolePreset : null;
+    _caseRolePreset = (e != null && e.caseRolePreset.isNotEmpty)
+        ? e.caseRolePreset
+        : null;
 
     if (e != null) {
       _visitDate = e.visitDate;
@@ -596,8 +617,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
     int filledCount = 0;
 
-    void applyIfNotManual(String fieldKey, TextEditingController ctrl,
-        String? value) {
+    void applyIfNotManual(
+      String fieldKey,
+      TextEditingController ctrl,
+      String? value,
+    ) {
       final v = (value ?? '').trim();
       if (v.isEmpty) return;
       if (_fieldSources[fieldKey] == 'manual') return;
@@ -622,7 +646,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         _equipmentModelCtrl,
         confirmed['ModelSerial'],
       );
-      applyIfNotManual('work_content', _workContentCtrl, confirmed['WorkContent']);
+      applyIfNotManual(
+        'work_content',
+        _workContentCtrl,
+        confirmed['WorkContent'],
+      );
       applyIfNotManual(
         'non_se_refrigerant_type',
         _nonSeRefrigerantTypeCtrl,
@@ -756,9 +784,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isUploadingPhoto = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('写真のアップロードに失敗しました: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('写真のアップロードに失敗しました: $e')));
       }
     }
   }
@@ -771,8 +799,64 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     await PhotoUploadService.instance.deletePhoto(removed);
   }
 
+  /// 【不具合修正・2026-09・Bug①対応】必須項目が未入力のまま保存された際、
+  /// 画面上に何の通知もなく処理が止まってしまう「サイレントバグ」を防ぐため、
+  /// (1)エラー内容を明示するSnackBarを表示し、(2)最初に見つかった
+  /// 未入力の必須欄まで自動スクロールしてフォーカスを移す。
+  ///
+  /// 対象キーは画面上での出現順(上から下)に列挙する。表示条件によって
+  /// そもそも画面に存在しない項目のキーは`currentState`がnullになるため、
+  /// 自然にスキップされる。
+  void _scrollToFirstInvalidField() {
+    final candidates = [
+      _workContentFieldKey,
+      _seRefrigerantTypeFieldKey,
+      _seRefrigerantAmountFieldKey,
+      _nonSeRefrigerantTypeFieldKey,
+      _nonSeRefrigerantAmountFieldKey,
+    ];
+    for (final key in candidates) {
+      final state = key.currentState;
+      if (state != null && state.hasError) {
+        Scrollable.ensureVisible(
+          state.context,
+          alignment: 0.2,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+        // フォーカスも合わせて当てることで、入力し直すべき欄が
+        // どこかを視覚的にも明確にする(スクロールだけでは
+        // 画面が広い場合にどの欄か一瞬わかりにくいため)。
+        FocusScope.of(state.context).requestFocus(FocusNode());
+        return;
+      }
+    }
+  }
+
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_isSaving) return; // 多重押下防止
+
+    if (!_formKey.currentState!.validate()) {
+      // 【不具合修正・2026-09】従来はここで無言のreturnとなり、
+      // どの項目が未入力なのか・保存が失敗したこと自体すら
+      // 入力者に伝わらなかった(Bug①)。明確な通知+該当欄への
+      // 自動スクロールで、入力者が確実に気づける設計にする。
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('入力に不備があります。赤字の項目をご確認ください(保存されていません)'),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      // ビルド直後は該当欄のcontextがまだ取得できない場合があるため、
+      // 1フレーム後に実行する。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToFirstInvalidField();
+      });
+      return;
+    }
 
     final appState = context.read<AppState>();
     final user = appState.currentUser;
@@ -816,97 +900,119 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       technicianName: _pwCtrls['technicianName']!.text.trim(),
     );
 
-    if (isEditing) {
-      final r = widget.existing!;
-      r.coWorkerIds = List<String>.from(_selectedCoWorkerIds);
-      r.storeId = _selectedStoreId;
-      r.clientName = resolvedClientName;
-      r.visitDate = _visitDate;
-      r.startTime = start;
-      r.endTime = end;
-      r.workContent = _workContentCtrl.text.trim();
-      r.equipmentModel = _equipmentModelCtrl.text.trim();
-      r.responseType = _responseType;
-      r.partsUsed = _parts;
-      r.photoPaths = _photoPaths;
-      r.notes = _notesCtrl.text.trim();
-      r.successPoints = _successCtrl.text.trim();
-      r.issuesPoints = _issuesCtrl.text.trim();
-      r.tags = _tags;
-      r.proWanRefNumber = _proWanCtrl.text.trim();
-      r.storeSystemReportCopy = _buildStoreSystemReport();
-      r.nonSeRefrigerantType = _nonSeRefrigerantTypeCtrl.text.trim();
-      r.nonSeRefrigerantAmountKg = _nonSeRefrigerantAmountCtrl.text.trim();
-      r.proWanReportDetail = pwDetail;
-      r.caseRolePreset = _caseRolePreset ?? '';
-      r.caseRoleNote = _caseRoleNoteCtrl.text.trim();
-      r.fieldSources = _fieldSources;
-      r.manualReviewNeeded = _manualReviewNeeded;
-      r.matchedCacheJobNumber = _matchedCacheJobNumber;
-      // 【代筆編集の記録・2026-08導入】本人以外(一般管理者以上)が編集した
-      // 場合のみ、誰が・いつ代筆したかを記録する。現場の入力もれ・訂正対応の
-      // ための権限拡大であり、無記録での代筆を避けるための監査証跡。
-      // 本人による編集の場合は既存の記録(あれば)をそのまま維持する
-      // (本人が後から見返して編集しても、過去の代筆履歴を消さないため)。
-      if (r.authorId != user.id) {
-        r.lastEditedByAdminId = user.id;
-        r.lastEditedByAdminName = user.name;
-        r.lastEditedByAdminAt = DateTime.now();
+    // 【不具合修正・2026-09・Bug①付随対応】従来はここから下のFirestore
+    // 書き込み処理にtry/catchが一切なく、通信エラー等で例外が発生した場合、
+    // 画面には何も表示されずに処理が止まる(=保存できていないのに
+    // ユーザーには失敗が伝わらない)サイレントバグの温床になっていた。
+    // 明示的にエラーを捕捉し、ユーザーに再試行を促す。
+    setState(() => _isSaving = true);
+    try {
+      if (isEditing) {
+        final r = widget.existing!;
+        r.coWorkerIds = List<String>.from(_selectedCoWorkerIds);
+        r.storeId = _selectedStoreId;
+        r.clientName = resolvedClientName;
+        r.visitDate = _visitDate;
+        r.startTime = start;
+        r.endTime = end;
+        r.workContent = _workContentCtrl.text.trim();
+        r.equipmentModel = _equipmentModelCtrl.text.trim();
+        r.responseType = _responseType;
+        r.partsUsed = _parts;
+        r.photoPaths = _photoPaths;
+        r.notes = _notesCtrl.text.trim();
+        r.successPoints = _successCtrl.text.trim();
+        r.issuesPoints = _issuesCtrl.text.trim();
+        r.tags = _tags;
+        r.proWanRefNumber = _proWanCtrl.text.trim();
+        r.storeSystemReportCopy = _buildStoreSystemReport();
+        r.nonSeRefrigerantType = _nonSeRefrigerantTypeCtrl.text.trim();
+        r.nonSeRefrigerantAmountKg = _nonSeRefrigerantAmountCtrl.text.trim();
+        r.proWanReportDetail = pwDetail;
+        r.caseRolePreset = _caseRolePreset ?? '';
+        r.caseRoleNote = _caseRoleNoteCtrl.text.trim();
+        r.fieldSources = _fieldSources;
+        r.manualReviewNeeded = _manualReviewNeeded;
+        r.matchedCacheJobNumber = _matchedCacheJobNumber;
+        // 【代筆編集の記録・2026-08導入】本人以外(一般管理者以上)が編集した
+        // 場合のみ、誰が・いつ代筆したかを記録する。現場の入力もれ・訂正対応の
+        // ための権限拡大であり、無記録での代筆を避けるための監査証跡。
+        // 本人による編集の場合は既存の記録(あれば)をそのまま維持する
+        // (本人が後から見返して編集しても、過去の代筆履歴を消さないため)。
+        if (r.authorId != user.id) {
+          r.lastEditedByAdminId = user.id;
+          r.lastEditedByAdminName = user.name;
+          r.lastEditedByAdminAt = DateTime.now();
+        }
+        await appState.updateReport(r);
+      } else {
+        final report = WorkReport(
+          id: _reportId,
+          authorId: user.id,
+          authorName: user.name,
+          coWorkerIds: List<String>.from(_selectedCoWorkerIds),
+          storeId: _selectedStoreId,
+          clientName: resolvedClientName,
+          visitDate: _visitDate,
+          startTime: start,
+          endTime: end,
+          workContent: _workContentCtrl.text.trim(),
+          equipmentModel: _equipmentModelCtrl.text.trim(),
+          responseType: _responseType,
+          partsUsed: _parts,
+          photoPaths: _photoPaths,
+          notes: _notesCtrl.text.trim(),
+          successPoints: _successCtrl.text.trim(),
+          issuesPoints: _issuesCtrl.text.trim(),
+          tags: _tags,
+          proWanRefNumber: _proWanCtrl.text.trim(),
+          storeSystemReportCopy: _buildStoreSystemReport(),
+          nonSeRefrigerantType: _nonSeRefrigerantTypeCtrl.text.trim(),
+          nonSeRefrigerantAmountKg: _nonSeRefrigerantAmountCtrl.text.trim(),
+          proWanReportDetail: pwDetail,
+          caseRolePreset: _caseRolePreset ?? '',
+          caseRoleNote: _caseRoleNoteCtrl.text.trim(),
+          fieldSources: _fieldSources,
+          manualReviewNeeded: _manualReviewNeeded,
+          matchedCacheJobNumber: _matchedCacheJobNumber,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        await appState.addReport(report);
       }
-      await appState.updateReport(r);
-    } else {
-      final report = WorkReport(
-        id: _reportId,
-        authorId: user.id,
-        authorName: user.name,
-        coWorkerIds: List<String>.from(_selectedCoWorkerIds),
-        storeId: _selectedStoreId,
-        clientName: resolvedClientName,
-        visitDate: _visitDate,
-        startTime: start,
-        endTime: end,
-        workContent: _workContentCtrl.text.trim(),
-        equipmentModel: _equipmentModelCtrl.text.trim(),
-        responseType: _responseType,
-        partsUsed: _parts,
-        photoPaths: _photoPaths,
-        notes: _notesCtrl.text.trim(),
-        successPoints: _successCtrl.text.trim(),
-        issuesPoints: _issuesCtrl.text.trim(),
-        tags: _tags,
-        proWanRefNumber: _proWanCtrl.text.trim(),
-        storeSystemReportCopy: _buildStoreSystemReport(),
-        nonSeRefrigerantType: _nonSeRefrigerantTypeCtrl.text.trim(),
-        nonSeRefrigerantAmountKg: _nonSeRefrigerantAmountCtrl.text.trim(),
-        proWanReportDetail: pwDetail,
-        caseRolePreset: _caseRolePreset ?? '',
-        caseRoleNote: _caseRoleNoteCtrl.text.trim(),
-        fieldSources: _fieldSources,
-        manualReviewNeeded: _manualReviewNeeded,
-        matchedCacheJobNumber: _matchedCacheJobNumber,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      await appState.addReport(report);
-    }
 
-    if (mounted) {
-      // 【不具合対応・2026-08-31】電波不良でサーバーへの送信が保留中の場合、
-      // 保存自体は成功していても本人が気づけるよう注意文言を添える。
-      final hasPending = appState.pendingSyncCount > 0;
-      final baseMsg = isEditing ? '日報を更新しました' : '日報を保存しました';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            hasPending
-                ? '$baseMsg(電波状況により送信待ちです。ホーム画面をご確認ください)'
-                : baseMsg,
+      if (mounted) {
+        // 【不具合対応・2026-08-31】電波不良でサーバーへの送信が保留中の場合、
+        // 保存自体は成功していても本人が気づけるよう注意文言を添える。
+        final hasPending = appState.pendingSyncCount > 0;
+        final baseMsg = isEditing ? '日報を更新しました' : '日報を保存しました';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              hasPending ? '$baseMsg(電波状況により送信待ちです。ホーム画面をご確認ください)' : baseMsg,
+            ),
+            duration: Duration(seconds: hasPending ? 5 : 3),
+            backgroundColor: hasPending ? Colors.orange.shade800 : null,
           ),
-          duration: Duration(seconds: hasPending ? 5 : 3),
-          backgroundColor: hasPending ? Colors.orange.shade800 : null,
-        ),
-      );
-      Navigator.of(context).pop();
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      // 【不具合修正・2026-09・Bug①付随対応】保存処理中の例外(通信断・
+      // 権限エラー等)を捕捉し、画面を閉じずにエラーを明示する。
+      // 従来はここで例外が握られずに画面遷移も起きない状態のまま
+      // 静かに失敗しており、入力者は保存できたのか分からなかった。
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('保存に失敗しました。もう一度お試しください($e)'),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -917,8 +1023,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     // 【代筆編集の記録・2026-08導入】一般管理者以上が本人以外の日報を
     // 編集している場合、その旨を明示するための判定(入力もれ対応用)。
     final isAdminEditingOthersReport =
-        isEditing &&
-        widget.existing!.authorId != appState.currentUser?.id;
+        isEditing && widget.existing!.authorId != appState.currentUser?.id;
     final selectedStore = _selectedStoreId != null
         ? appState.getStoreById(_selectedStoreId!)
         : null;
@@ -1251,6 +1356,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               maxLines: 4,
               enableVoice: true,
               fieldKey: 'work_content',
+              formFieldKey: _workContentFieldKey,
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? '必須項目です' : null,
             ),
@@ -1380,19 +1486,18 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                                     width: 90,
                                     height: 90,
                                     fit: BoxFit.cover,
-                                    loadingBuilder:
-                                        (context, child, progress) {
-                                          if (progress == null) return child;
-                                          return const Center(
-                                            child: SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            ),
-                                          );
-                                        },
+                                    loadingBuilder: (context, child, progress) {
+                                      if (progress == null) return child;
+                                      return const Center(
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      );
+                                    },
                                     errorBuilder: (context, error, stack) =>
                                         const Icon(
                                           Icons.broken_image,
@@ -1528,6 +1633,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       icon: Icons.ac_unit,
                       hint: '例: R410A / NONE',
                       inputFormatters: [_halfWidthAlphaNumFormatter],
+                      formFieldKey: _seRefrigerantTypeFieldKey,
                       validator: _halfWidthAlphaNumValidator,
                     ),
                   ),
@@ -1539,6 +1645,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       icon: Icons.opacity,
                       hint: '例: 1.5 / 0',
                       inputFormatters: [_halfWidthAlphaNumFormatter],
+                      formFieldKey: _seRefrigerantAmountFieldKey,
                       validator: _halfWidthAlphaNumValidator,
                     ),
                   ),
@@ -1781,9 +1888,20 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
             const SizedBox(height: 28),
             ElevatedButton.icon(
-              onPressed: _save,
-              icon: const Icon(Icons.save),
-              label: Text(isEditing ? '更新する' : '日報を保存'),
+              onPressed: _isSaving ? null : _save,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save),
+              label: Text(
+                _isSaving ? '保存中...' : (isEditing ? '更新する' : '日報を保存'),
+              ),
             ),
           ],
         ),
@@ -1814,9 +1932,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               Icon(
                 hasValue ? Icons.check_circle_outline : Icons.info_outline,
                 size: 13,
-                color: hasValue
-                    ? AppColors.success
-                    : Colors.grey.shade500,
+                color: hasValue ? AppColors.success : Colors.grey.shade500,
               ),
               const SizedBox(width: 4),
               Expanded(
@@ -1827,9 +1943,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                             'より正確に自動でまとめられます',
                   style: TextStyle(
                     fontSize: 10.5,
-                    color: hasValue
-                        ? AppColors.success
-                        : Colors.grey.shade600,
+                    color: hasValue ? AppColors.success : Colors.grey.shade600,
                   ),
                 ),
               ),
@@ -1855,11 +1969,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     // 視覚的に示す(プロワン側システムと重複する項目を手入力しなくて済む
     // ことをユーザーに明示するため)。
     String? fieldKey,
+    // 【不具合修正・2026-09・Bug①対応】必須項目が未入力のまま保存された際に
+    // 該当欄まで自動スクロール・フォーカスするための識別キー。
+    // 対象を絞って付与する(全フィールドに付けると却って冗長になるため)。
+    GlobalKey<FormFieldState<String>>? formFieldKey,
   }) {
     final isListening = _activeListenController == controller;
-    final isAutoFilled =
-        fieldKey != null && _fieldSources[fieldKey] == 'auto';
+    final isAutoFilled = fieldKey != null && _fieldSources[fieldKey] == 'auto';
     return TextFormField(
+      key: formFieldKey,
       controller: controller,
       maxLines: maxLines,
       validator: validator,
@@ -1874,11 +1992,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             ? TextStyle(color: Colors.green.shade700, fontSize: 11)
             : null,
         suffixIcon: isAutoFilled
-            ? Icon(
-                Icons.auto_awesome,
-                size: 18,
-                color: Colors.green.shade600,
-              )
+            ? Icon(Icons.auto_awesome, size: 18, color: Colors.green.shade600)
             : (enableVoice
                   ? IconButton(
                       icon: Icon(
@@ -1990,6 +2104,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   icon: Icons.ac_unit,
                   hint: '例: R410A / なし',
                   fieldKey: 'non_se_refrigerant_type',
+                  formFieldKey: _nonSeRefrigerantTypeFieldKey,
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? '必須項目です(未充填時は「なし」)'
                       : null,
@@ -2003,6 +2118,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                   icon: Icons.opacity,
                   hint: '例: 1.5 / 0',
                   fieldKey: 'non_se_refrigerant_amount_kg',
+                  formFieldKey: _nonSeRefrigerantAmountFieldKey,
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? '必須項目です(未充填時は「0」)'
                       : null,

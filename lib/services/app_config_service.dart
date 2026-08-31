@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:package_info_plus/package_info_plus.dart';
+import '../build_info.dart';
 
 /// アプリ全体の「最低利用可能バージョン(ビルド番号)」および
 /// 「現在配布中の最新バージョン」を管理するサービス。
@@ -47,14 +49,30 @@ class AppConfigService {
   DocumentReference<Map<String, dynamic>> get _doc =>
       FirebaseFirestore.instance.collection(_collection).doc(_docId);
 
-  /// 実機のビルド番号を取得する(int変換に失敗した場合は0=最も古い扱い)。
+  /// 実機(APK版)または「今実行中のコード」(Web版)のビルド番号を取得する。
+  ///
+  /// 【不具合修正・2026-09・Bug②対応】Web版では`package_info_plus`を
+  /// 使わず、`build_info.dart`の`kCompiledBuildNumber`(コンパイル時に
+  /// JSへ直接焼き込まれる定数)を返す。理由: `PackageInfo.fromPlatform()`の
+  /// Web実装は実行時にHTTP経由で`version.json`を取得するだけの実装であり、
+  /// 「サーバー上の最新値」を返してしまうため、タブが古いJSのまま動作して
+  /// いても検知できない(ソース確認済みの既知の欠陥)。
+  /// APK版は端末に実際にインストールされたビルド番号を正しく返すため、
+  /// 従来通り`PackageInfo.fromPlatform()`を使用する。
   Future<int> getCurrentBuildNumber() async {
+    if (kIsWeb) {
+      return kCompiledBuildNumber;
+    }
     final info = await PackageInfo.fromPlatform();
     return int.tryParse(info.buildNumber) ?? 0;
   }
 
   /// 現在のバージョン名(表示用、例: "1.1.6")を取得する。
+  /// Web版は上記と同じ理由でコンパイル時定数を使用する。
   Future<String> getCurrentVersionName() async {
+    if (kIsWeb) {
+      return kCompiledVersionName;
+    }
     final info = await PackageInfo.fromPlatform();
     return info.version;
   }

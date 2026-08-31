@@ -1,5 +1,4 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
@@ -28,18 +27,30 @@ class _AuthGateState extends State<AuthGate> {
   // 強制アップデートゲート
   //
   // ログイン確認・AppState.init()完了後、MainNavigation表示前に
-  // 実機のビルド番号とFirestore側の最低利用可能バージョンを比較する。
-  // Web版(プレビュー)は常に最新が配信されるため対象外とする。
+  // 「今実行中のコード」のビルド番号とFirestore側の最低利用可能バージョンを
+  // 比較する。
+  //
+  // 【不具合修正・2026-09・Bug②対応】従来はWeb版をこのチェック自体の
+  // 対象外(`kIsWeb`で即スキップ)にしていたが、これは誤りだった。
+  // Flutter WebのService Workerはcache-firstでJS本体をキャッシュするため、
+  // 既に開いているタブ/PWAは新しいビルドがデプロイされた後も古いコードの
+  // まま動作し続けることがある(2026-08に実際に発生し、佐藤さんの案件反映
+  // 漏れの根本原因となった)。かつ`getCurrentBuildNumber()`はWeb版では
+  // コンパイル時定数(`build_info.dart`)を返すよう修正済みのため、この
+  // チェックで実行中コードの古さを正しく検知できるようになった。
+  //
+  // 【安全策・無限リロード防止】web/index.htmlに記録されている過去の
+  // 重大事故(Service Worker強制解除による無限リロードループ)を
+  // 再発させないため、このゲートは「ボタン操作によるページ再読み込みを
+  // 促す画面を表示する」のみとし、自動的なリロードや自動的なService
+  // Worker操作は一切行わない(UpdateRequiredScreen側でユーザーの
+  // 明示的なタップ操作のみ受け付ける)。
   // ------------------------------------------------------------
   bool _versionCheckStarted = false;
   bool _versionCheckDone = false;
   AppMinVersionConfig? _blockConfig;
 
   Future<void> _checkAppVersion() async {
-    if (kIsWeb) {
-      setState(() => _versionCheckDone = true);
-      return;
-    }
     try {
       final config = await AppConfigService.instance.fetchConfig();
       final currentBuild = await AppConfigService.instance
