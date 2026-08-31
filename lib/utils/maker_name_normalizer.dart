@@ -20,12 +20,16 @@ const String _dotChars = r'[・·\-]?';
 const String _corpSuffix = r'(?:株式会社|\(株\)|㈱)';
 
 final RegExp _oldNamePattern = RegExp(
-  'サンデン$_dotChars' 'リテール$_dotChars' 'システム$_corpSuffix?',
+  'サンデン$_dotChars'
+  'リテール$_dotChars'
+  'システム$_corpSuffix?',
 );
 
 // 法人格がない「サンデンリテールシステム」単体表記も対象に含める
 final RegExp _oldNameBarePattern = RegExp(
-  'サンデン$_dotChars' 'リテール$_dotChars' 'システム',
+  'サンデン$_dotChars'
+  'リテール$_dotChars'
+  'システム',
 );
 
 /// OCRテキストに含まれる旧社名表記を新社名に置換した文字列を返す。

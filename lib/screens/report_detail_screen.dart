@@ -169,10 +169,7 @@ class ReportDetailScreen extends StatelessWidget {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    '案件においての役割: ${[
-                      report.caseRolePreset,
-                      report.caseRoleNote,
-                    ].where((s) => s.isNotEmpty).join(' / ')}',
+                    '案件においての役割: ${[report.caseRolePreset, report.caseRoleNote].where((s) => s.isNotEmpty).join(' / ')}',
                     style: const TextStyle(color: AppColors.textSecondary),
                   ),
                 ),
@@ -209,10 +206,7 @@ class ReportDetailScreen extends StatelessWidget {
               (report.lastEditedByAdminName ?? '').isNotEmpty) ...[
             const SizedBox(height: 6),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.warning.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(8),
@@ -386,8 +380,7 @@ class ReportDetailScreen extends StatelessWidget {
           // 他の日報がある場合、この日報とまとめて表示する。
           // 複数人で同じ現場対応をした際、それぞれが個別に書いた日報を
           // 後から突き合わせやすくするための機能。
-          if (report.caseId.isNotEmpty)
-            _RelatedReportsSection(report: report),
+          if (report.caseId.isNotEmpty) _RelatedReportsSection(report: report),
 
           const SizedBox(height: 16),
           Text(
@@ -453,11 +446,10 @@ class _PhotoGalleryView extends StatelessWidget {
                                 ),
                               );
                             },
-                            errorBuilder: (context, error, stack) =>
-                                const Icon(
-                                  Icons.broken_image,
-                                  color: Colors.grey,
-                                ),
+                            errorBuilder: (context, error, stack) => const Icon(
+                              Icons.broken_image,
+                              color: Colors.grey,
+                            ),
                           )
                         : const Icon(
                             Icons.image_not_supported,

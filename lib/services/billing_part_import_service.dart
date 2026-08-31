@@ -24,15 +24,15 @@ class BillingPartImportService {
   BillingPartImportService._();
 
   /// 部品ペア(名称列, 個数列)を探すためのヘッダーラベルの組。
-  static const List<String> _partNameHeaders = [
-    '使用部品名1',
-    '使用部品名2',
-    '使用部品名3',
-  ];
+  static const List<String> _partNameHeaders = ['使用部品名1', '使用部品名2', '使用部品名3'];
   static const String _quantityHeaderSuffix = '使用個数';
 
   /// 突合キーとなる受付No列の候補ヘッダー名(表記ゆれに対応)。
-  static const List<String> _receiptNumberHeaders = ['弊社受付NO', '弊社受付No', '受付NO'];
+  static const List<String> _receiptNumberHeaders = [
+    '弊社受付NO',
+    '弊社受付No',
+    '受付NO',
+  ];
 
   static const List<String> _storeNameHeaders = ['店舗名称'];
   static const List<String> _storeNumberHeaders = ['店番'];
@@ -62,9 +62,7 @@ class BillingPartImportService {
         break;
       }
     }
-    sheet ??= excel.tables.values.isNotEmpty
-        ? excel.tables.values.first
-        : null;
+    sheet ??= excel.tables.values.isNotEmpty ? excel.tables.values.first : null;
     if (sheet == null) {
       throw const FormatException('Excel内にシートが見つかりませんでした。');
     }
@@ -336,7 +334,10 @@ class BillingPartImportService {
         } else {
           // <t>直下がなくランタン(<r>)構成のみの場合は、siの先頭に
           // 新しい<t>要素を追加してマーカーを持たせる。
-          si.children.insert(0, XmlElement(XmlName('t'), [], [XmlText(marker)]));
+          si.children.insert(
+            0,
+            XmlElement(XmlName('t'), [], [XmlText(marker)]),
+          );
           changed = true;
         }
       }

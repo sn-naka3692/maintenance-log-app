@@ -8,6 +8,7 @@ import '../models/work_report.dart';
 import '../services/case_service.dart';
 import '../services/case_sync_failure_service.dart';
 import '../services/pending_sync_service.dart';
+import '../services/report_outbox_service.dart';
 import '../services/report_service.dart';
 import '../services/store_service.dart';
 
@@ -18,6 +19,7 @@ class AppState extends ChangeNotifier {
   final CaseSyncFailureService _caseSyncFailureService =
       CaseSyncFailureService.instance;
   final PendingSyncService _pendingSyncService = PendingSyncService.instance;
+  final ReportOutboxService _outboxService = ReportOutboxService.instance;
 
   // 【不具合対応・2026-08-31】自分の日報のうち、まだサーバーへの送信が
   // 完了していない(電波不良等で端末内に留まっている)件数。
@@ -25,6 +27,17 @@ class AppState extends ChangeNotifier {
   StreamSubscription<int>? _pendingSyncSub;
   int _pendingSyncCount = 0;
   int get pendingSyncCount => _pendingSyncCount;
+
+  // 【恒久対策・2026-09導入】Firestoreの内部キャッシュとは独立した、
+  // アプリ独自のOutbox(Hive)に残っている「サーバー到達が未確認」の件数。
+  // pendingSyncCountはFirestore自身のローカルキャッシュに依存するため、
+  // そのキャッシュが消えると0件に見えてしまう(=気づけない)という
+  // 盲点があった。Outbox側はFirestoreの内部状態と無関係に、アプリが
+  // 明示的に「サーバー到達確認済み」と判断するまで残り続けるため、
+  // より確実な検知手段として併用する。
+  StreamSubscription<int>? _outboxPendingSub;
+  int _outboxPendingCount = 0;
+  int get outboxPendingCount => _outboxPendingCount;
 
   // 【機能追加・2026-08-31第2弾】アプリが起動している間、電波の復帰を
   // 検知して自動的に再送信を促す(nudgeReconnect)ための接続監視。
@@ -45,7 +58,20 @@ class AppState extends ChangeNotifier {
         notifyListeners();
       }
     });
+    _watchOutboxPending();
     _watchConnectivityForAutoRetry();
+  }
+
+  /// 【恒久対策・2026-09導入】Outbox(Hive)側の未送信件数を監視する。
+  void _watchOutboxPending() {
+    _outboxPendingSub?.cancel();
+    _outboxPendingCount = _outboxService.pendingCount;
+    _outboxPendingSub = _outboxService.watchPendingCount().listen((count) {
+      if (_outboxPendingCount != count) {
+        _outboxPendingCount = count;
+        notifyListeners();
+      }
+    });
   }
 
   void _watchConnectivityForAutoRetry() {
@@ -60,6 +86,11 @@ class AppState extends ChangeNotifier {
       // (オンライン中に何度もdisable/enableを繰り返すのは無駄なため)。
       if (_lastConnectivity == ConnectivityResult.none && !isOffline) {
         _pendingSyncService.nudgeReconnect();
+        // 【恒久対策・2026-09導入】電波復帰時、Outboxに残っている
+        // (=サーバー到達が未確認の)日報も同時に再送信を試みる。
+        // これにより、Firestoreの内部キャッシュが正常でも異常でも、
+        // どちらのケースでも電波復帰の瞬間に確実に再送信が走る。
+        unawaited(_outboxService.flushPending());
       }
       _lastConnectivity = current;
     });
@@ -72,12 +103,21 @@ class AppState extends ChangeNotifier {
   /// ユーザーが不信感を持つため)。
   Future<bool> retryPendingSyncNow() async {
     await _pendingSyncService.nudgeReconnect();
-    return _pendingSyncService.waitForPendingWrites();
+    // 【恒久対策・2026-09導入】Outbox側の再送信も同時に試みる。
+    // Outbox再送信はFirestore内部キャッシュの状態と独立しているため、
+    // 「今すぐ送信を試す」を押したときに両方を確実にカバーする。
+    final outboxFlushed = _outboxService.flushPending();
+    final serverConfirmed = await _pendingSyncService.waitForPendingWrites();
+    final outboxCount = await outboxFlushed;
+    return serverConfirmed ||
+        outboxCount > 0 ||
+        _outboxService.pendingCount == 0;
   }
 
   @override
   void dispose() {
     _pendingSyncSub?.cancel();
+    _outboxPendingSub?.cancel();
     _connectivitySub?.cancel();
     super.dispose();
   }
@@ -120,6 +160,13 @@ class AppState extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
   }
+
+  /// 総合的な「送信待ち」件数(バナー表示用)。
+  /// FirestoreのローカルキャッシュとOutbox(Hive)、両方の検知手段のうち
+  /// 大きい方を採用する(片方が0でも、もう片方が検知していれば警告する)。
+  int get totalPendingCount => _pendingSyncCount > _outboxPendingCount
+      ? _pendingSyncCount
+      : _outboxPendingCount;
 
   bool get isSignedIn => _service.isSignedIn;
 

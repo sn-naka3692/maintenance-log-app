@@ -984,7 +984,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       if (mounted) {
         // 【不具合対応・2026-08-31】電波不良でサーバーへの送信が保留中の場合、
         // 保存自体は成功していても本人が気づけるよう注意文言を添える。
-        final hasPending = appState.pendingSyncCount > 0;
+        final hasPending = appState.totalPendingCount > 0;
         final baseMsg = isEditing ? '日報を更新しました' : '日報を保存しました';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

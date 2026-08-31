@@ -177,9 +177,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (targets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            _selectionMode ? '出力する日報を選択してください' : '出力対象の日報がありません',
-          ),
+          content: Text(_selectionMode ? '出力する日報を選択してください' : '出力対象の日報がありません'),
         ),
       );
       return;
@@ -270,9 +268,9 @@ class _SearchScreenState extends State<SearchScreen> {
         }
       }
       if (mounted && savedFileName != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存しました: $savedFileName')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存しました: $savedFileName')));
       }
       // 出力完了後は選択モードを解除して通常表示に戻す。
       if (mounted && _selectionMode) {
@@ -490,10 +488,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   TextButton.icon(
                     onPressed: _exporting ? null : _exportResults,
                     icon: const Icon(Icons.file_download_outlined, size: 16),
-                    label: const Text(
-                      '出力',
-                      style: TextStyle(fontSize: 12),
-                    ),
+                    label: const Text('出力', style: TextStyle(fontSize: 12)),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: const Size(0, 32),
@@ -509,10 +504,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   TextButton.icon(
                     onPressed: _toggleSelectionMode,
                     icon: const Icon(Icons.checklist, size: 16),
-                    label: const Text(
-                      '選択して出力',
-                      style: TextStyle(fontSize: 12),
-                    ),
+                    label: const Text('選択して出力', style: TextStyle(fontSize: 12)),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: const Size(0, 32),
@@ -521,10 +513,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   TextButton.icon(
                     onPressed: _exporting ? null : _exportResults,
                     icon: const Icon(Icons.file_download_outlined, size: 16),
-                    label: const Text(
-                      '全件出力',
-                      style: TextStyle(fontSize: 12),
-                    ),
+                    label: const Text('全件出力', style: TextStyle(fontSize: 12)),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: const Size(0, 32),
@@ -541,8 +530,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   ? ListView(
                       children: [
                         SizedBox(
-                          height:
-                              MediaQuery.of(context).size.height * 0.5,
+                          height: MediaQuery.of(context).size.height * 0.5,
                           child: Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -555,9 +543,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 const SizedBox(height: 8),
                                 Text(
                                   '該当する日報が見つかりません',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                  ),
+                                  style: TextStyle(color: Colors.grey.shade600),
                                 ),
                               ],
                             ),

@@ -25,7 +25,9 @@ class PartsReconciliationService {
     // 受付No(正規化済み) -> 該当するWorkReport一覧のインデックスを構築。
     final Map<String, List<WorkReport>> reportsByReceipt = {};
     for (final r in allReports) {
-      final receipt = r.storeSystemReportCopy.receiptNumber.trim().toUpperCase();
+      final receipt = r.storeSystemReportCopy.receiptNumber
+          .trim()
+          .toUpperCase();
       if (receipt.isEmpty) continue;
       reportsByReceipt.putIfAbsent(receipt, () => []).add(r);
     }
@@ -99,7 +101,9 @@ class PartsReconciliationService {
       return PartsMatchStatus.missingOnBilling;
     }
 
-    final billingNames = billingParts.map((p) => _normalizeName(p.name)).toSet();
+    final billingNames = billingParts
+        .map((p) => _normalizeName(p.name))
+        .toSet();
     final siteNames = siteParts.map((p) => _normalizeName(p.name)).toSet();
 
     if (billingNames.length == siteNames.length &&

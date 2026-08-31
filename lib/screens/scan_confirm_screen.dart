@@ -84,7 +84,8 @@ class _ScanConfirmScreenState extends State<ScanConfirmScreen> {
     if (_hasUnconfirmedRequiredField) return; // 二重防止(ボタン無効化済みだが念のため)
 
     final finalValues = <String, String>{
-      for (final entry in _controllers.entries) entry.key: entry.value.text.trim(),
+      for (final entry in _controllers.entries)
+        entry.key: entry.value.text.trim(),
     };
 
     // AIの元の抽出結果と、ユーザーが最終的に確定した値との差分を記録する。
@@ -134,7 +135,11 @@ class _ScanConfirmScreenState extends State<ScanConfirmScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.info_outline, size: 18, color: Colors.amber.shade900),
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: Colors.amber.shade900,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(

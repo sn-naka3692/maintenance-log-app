@@ -42,6 +42,8 @@ dependencies:
 
   # Local storage
   shared_preferences: 2.5.3
+  hive: 2.2.3
+  hive_flutter: 1.1.0
 
   # Firebase (クラウド共有データベース)
   firebase_core: 3.6.0

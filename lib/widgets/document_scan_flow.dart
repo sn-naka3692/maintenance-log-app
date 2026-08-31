@@ -68,9 +68,9 @@ class DocumentScanFlow {
       }
       if (pdfBytes == null) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ファイルの読み込みに失敗しました')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('ファイルの読み込みに失敗しました')));
         }
         return null;
       }

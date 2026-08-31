@@ -53,8 +53,7 @@ class ReportCard extends StatelessWidget {
                       value: selected,
                       onChanged: (_) => onSelectToggle?.call(),
                       visualDensity: VisualDensity.compact,
-                      materialTapTargetSize:
-                          MaterialTapTargetSize.shrinkWrap,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     const SizedBox(width: 4),
                   ],

@@ -82,9 +82,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       final appState = context.read<AppState>();
       await appState.unlinkReportFromCase(report.id, widget.caseId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('日報を案件から切り離しました')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('日報を案件から切り離しました')));
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -177,7 +177,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                             leading: const Icon(Icons.person_outline),
                             title: Text(
                               r.authorName,
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             subtitle: Text(
                               '${dateFmt.format(r.visitDate)} ・ ${r.workContent}',
@@ -371,8 +373,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: (isConfirmed ? AppColors.success : AppColors.warning)
-            .withValues(alpha: 0.12),
+        color: (isConfirmed ? AppColors.success : AppColors.warning).withValues(
+          alpha: 0.12,
+        ),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(

@@ -40,7 +40,8 @@ class PdfExporter {
 
   /// 部品1件分の表示テキストを組み立てる(図番・補足があれば併記)。
   static String _singlePartText(PartUsed p) {
-    final hasPartNumber = p.partNumber != null && p.partNumber!.trim().isNotEmpty;
+    final hasPartNumber =
+        p.partNumber != null && p.partNumber!.trim().isNotEmpty;
     final hasNote = p.note != null && p.note!.trim().isNotEmpty;
     final extras = [
       if (hasPartNumber) '図番:${p.partNumber}',
@@ -162,7 +163,10 @@ class PdfExporter {
               ),
               pw.Text(
                 '出力日時: ${_dateTimeFmt.format(now)}',
-                style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                style: const pw.TextStyle(
+                  fontSize: 9,
+                  color: PdfColors.grey700,
+                ),
               ),
             ],
           ),
@@ -271,10 +275,8 @@ class PdfExporter {
             infoRow('作成者', r.authorName),
             if (r.equipmentModel.trim().isNotEmpty)
               infoRow('機器型番', r.equipmentModel),
-            if (r.workContent.trim().isNotEmpty)
-              infoRow('作業内容', r.workContent),
-            if (_partsText(r).trim().isNotEmpty)
-              infoRow('使用部品', _partsText(r)),
+            if (r.workContent.trim().isNotEmpty) infoRow('作業内容', r.workContent),
+            if (_partsText(r).trim().isNotEmpty) infoRow('使用部品', _partsText(r)),
             if (r.successPoints.trim().isNotEmpty)
               infoRow('うまくいったこと', r.successPoints),
             if (r.issuesPoints.trim().isNotEmpty)
@@ -339,9 +341,7 @@ class PdfExporter {
         margin: const pw.EdgeInsets.fromLTRB(28, 24, 28, 24),
         header: buildHeader,
         footer: buildFooter,
-        build: (context) => [
-          for (final r in reports) buildReportCard(r),
-        ],
+        build: (context) => [for (final r in reports) buildReportCard(r)],
       ),
     );
 

@@ -92,7 +92,8 @@ class ExcelExporter {
 
   /// 部品1件分の表示テキストを組み立てる(図番・補足があれば併記)。
   static String _singlePartText(PartUsed p) {
-    final hasPartNumber = p.partNumber != null && p.partNumber!.trim().isNotEmpty;
+    final hasPartNumber =
+        p.partNumber != null && p.partNumber!.trim().isNotEmpty;
     final hasNote = p.note != null && p.note!.trim().isNotEmpty;
     final extras = [
       if (hasPartNumber) '図番:${p.partNumber}',
@@ -226,10 +227,7 @@ class ExcelExporter {
       ];
       for (var col = 0; col < values.length; col++) {
         final cell = sheet.cell(
-          xls.CellIndex.indexByColumnRow(
-            columnIndex: col,
-            rowIndex: rowIndex,
-          ),
+          xls.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: rowIndex),
         );
         final v = values[col];
         if (v is int) {

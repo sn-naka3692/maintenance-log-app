@@ -124,9 +124,9 @@ class _HomeScreenState extends State<HomeScreen> {
             // いない日報がある場合、本人が気づけるように最優先で表示する。
             // (保存自体は成功しているように見えても、管理者側にはまだ
             // 反映されていない状態のため、他のお知らせより優先度を高くする)
-            if (appState.pendingSyncCount > 0)
+            if (appState.totalPendingCount > 0)
               SliverToBoxAdapter(
-                child: _PendingSyncBanner(count: appState.pendingSyncCount),
+                child: _PendingSyncBanner(count: appState.totalPendingCount),
               )
             else if (_hasServerUpdate)
               SliverToBoxAdapter(
@@ -293,7 +293,7 @@ class _HomeScreenState extends State<HomeScreen> {
             // 送信待ちの日報が無いときのみ表示。送信待ちバナーは逆に
             // 「開いたままお待ちください」と案内しているため、矛盾しない
             // ようにここで排他制御している。
-            if (appState.pendingSyncCount == 0)
+            if (appState.totalPendingCount == 0)
               const SliverToBoxAdapter(child: _CloseAppTipBanner()),
           ],
         ),

@@ -9,4 +9,5 @@
 ///   (package:web の <input type="file"> を直接操作する実装)
 library;
 
-export 'web_pdf_picker_web.dart' if (dart.library.io) 'web_pdf_picker_stub.dart';
+export 'web_pdf_picker_web.dart'
+    if (dart.library.io) 'web_pdf_picker_stub.dart';

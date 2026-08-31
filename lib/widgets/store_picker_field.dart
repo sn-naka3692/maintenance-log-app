@@ -59,9 +59,7 @@ class _StorePickerFieldState extends State<StorePickerField> {
               labelText: '訪問先店舗',
               prefixIcon: const Icon(Icons.storefront),
               suffixIcon: const Icon(Icons.arrow_drop_down),
-              helperText: selectedStore == null
-                  ? 'タップして店舗リストから選択'
-                  : null,
+              helperText: selectedStore == null ? 'タップして店舗リストから選択' : null,
             ),
             child: selectedStore == null
                 ? Text(
@@ -86,7 +84,9 @@ class _StorePickerFieldState extends State<StorePickerField> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    selectedStore.isSE ? Icons.storefront : Icons.handshake_outlined,
+                    selectedStore.isSE
+                        ? Icons.storefront
+                        : Icons.handshake_outlined,
                     size: 14,
                     color: selectedStore.isSE
                         ? Colors.orange.shade800
@@ -163,9 +163,7 @@ class _StorePickerFieldState extends State<StorePickerField> {
         children: [
           Icon(icon, size: 16, color: AppColors.primary),
           const SizedBox(width: 6),
-          Expanded(
-            child: Text(text, style: const TextStyle(fontSize: 13)),
-          ),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
         ],
       ),
     );
@@ -244,10 +242,7 @@ class _StoreSearchSheetState extends State<_StoreSearchSheet> {
                   ),
                   Text(
                     '${widget.allStores.length}件登録',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
               ),

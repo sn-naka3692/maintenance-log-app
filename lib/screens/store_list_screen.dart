@@ -121,9 +121,15 @@ class _StoreListScreenState extends State<StoreListScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (s.address.isNotEmpty)
-                                Text(s.address, style: const TextStyle(fontSize: 12)),
+                                Text(
+                                  s.address,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                               if (s.phone.isNotEmpty)
-                                Text(s.phone, style: const TextStyle(fontSize: 12)),
+                                Text(
+                                  s.phone,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Wrap(
@@ -137,8 +143,12 @@ class _StoreListScreenState extends State<StoreListScreen> {
                                       ),
                                       decoration: BoxDecoration(
                                         color: s.isSE
-                                            ? Colors.orange.withValues(alpha: 0.12)
-                                            : Colors.blueGrey.withValues(alpha: 0.10),
+                                            ? Colors.orange.withValues(
+                                                alpha: 0.12,
+                                              )
+                                            : Colors.blueGrey.withValues(
+                                                alpha: 0.10,
+                                              ),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
@@ -166,7 +176,8 @@ class _StoreListScreenState extends State<StoreListScreen> {
                               ),
                             ],
                           ),
-                          isThreeLine: s.address.isNotEmpty && s.phone.isNotEmpty,
+                          isThreeLine:
+                              s.address.isNotEmpty && s.phone.isNotEmpty,
                           trailing: IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 20),
                             onPressed: () => _openStoreForm(existing: s),
@@ -317,7 +328,10 @@ class _StoreFormSheetState extends State<_StoreFormSheet> {
                 ),
                 if (isEditing)
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.danger,
+                    ),
                     onPressed: _delete,
                   ),
               ],
@@ -379,7 +393,9 @@ class _StoreFormSheetState extends State<_StoreFormSheet> {
               decoration: BoxDecoration(
                 color: Colors.orange.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.25)),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.25),
+                ),
               ),
               child: SwitchListTile(
                 contentPadding: EdgeInsets.zero,

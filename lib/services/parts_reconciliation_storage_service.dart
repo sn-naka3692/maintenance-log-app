@@ -63,9 +63,7 @@ class PartsReconciliationStorageService {
     String checkMonth,
   ) async {
     try {
-      final snap = await _col
-          .where('check_month', isEqualTo: checkMonth)
-          .get();
+      final snap = await _col.where('check_month', isEqualTo: checkMonth).get();
       return snap.docs
           .map((d) => PartsReconciliationResult.fromMap(d.data()))
           .toList();

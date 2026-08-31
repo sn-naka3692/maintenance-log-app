@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/work_report.dart';
 import '../models/user.dart';
 import '../data/employee_master_data.dart';
+import 'report_outbox_service.dart';
 
 /// 日報・ユーザーデータの永続化を担当するサービス(Firestore)
 ///
@@ -17,6 +19,7 @@ class ReportService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final _uuid = const Uuid();
+  final ReportOutboxService _outbox = ReportOutboxService.instance;
 
   CollectionReference<Map<String, dynamic>> get _usersCol =>
       _db.collection('users');
@@ -261,16 +264,65 @@ class ReportService {
     }
   }
 
+  /// 【恒久対策・2026-09導入】日報保存の「必ず先にOutboxへ控えを残す」設計。
+  ///
+  /// 【背景】Firestoreのローカルキャッシュ(オフライン永続化)のみに
+  /// 依存していた従来設計では、そのキャッシュ自体が何らかの理由
+  /// (端末側のストレージ整理・アプリの異常終了等)で失われた場合、
+  /// 「入力した本人には保存できたように見えるが、サーバーには一切
+  /// 届かず、痕跡も残らない」という重大な事象が発生し得ることが、
+  /// 実際の現場データ調査で確認された。
+  ///
+  /// このため、Firestoreへの書き込みを試みる前に必ずアプリ独自の
+  /// 永続層(Hive、Outbox)へ控えを保存する。Firestore側のキャッシュが
+  /// 消えても、Outbox側の控えから復元・再送信できるようにする
+  /// (詳細は ReportOutboxService のドキュメント参照)。
   Future<WorkReport> createReport(WorkReport report) async {
-    await _reportsCol.doc(report.id).set(report.toMap());
+    await _outbox.stash(report, isUpdate: false);
+    try {
+      await _reportsCol.doc(report.id).set(report.toMap());
+      // ローカルキャッシュ確定だけでなく、実際にサーバーへ届いたことを
+      // 確認できてから初めてOutboxの控えを消す(電波が無い場所では
+      // ここでタイムアウトし、控えは残り続けるのが正しい挙動)。
+      await _waitForServerConfirmationThenClear(report.id);
+    } catch (e) {
+      // Firestoreへの書き込み自体が例外を投げた場合も、Outboxの控えは
+      // 消さずに残す(次回起動時・電波復帰時に自動再送信される)。
+      if (kDebugMode) {
+        debugPrint('日報の保存でエラーが発生(Outboxに控えを保持): $e');
+      }
+      rethrow;
+    }
     await _refreshReportsCache();
     return report;
   }
 
   Future<void> updateReport(WorkReport report) async {
     report.updatedAt = DateTime.now();
-    await _reportsCol.doc(report.id).update(report.toMap());
+    await _outbox.stash(report, isUpdate: true);
+    try {
+      await _reportsCol.doc(report.id).update(report.toMap());
+      await _waitForServerConfirmationThenClear(report.id);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('日報の更新でエラーが発生(Outboxに控えを保持): $e');
+      }
+      rethrow;
+    }
     await _refreshReportsCache();
+  }
+
+  /// Firestoreへの書き込みが実際にサーバーへ到達したこと
+  /// (`waitForPendingWrites`)を確認できた場合のみOutboxの控えを消す。
+  /// タイムアウトした場合は「まだ未確定」として控えを残したままにする
+  /// (Outboxのバックグラウンド再送信・起動時再送信に任せる)。
+  Future<void> _waitForServerConfirmationThenClear(String reportId) async {
+    try {
+      await _db.waitForPendingWrites().timeout(const Duration(seconds: 10));
+      await _outbox.clear(reportId);
+    } catch (_) {
+      // タイムアウト・失敗時は控えを残す(意図的、何もしない)。
+    }
   }
 
   Future<void> deleteReport(String id) async {

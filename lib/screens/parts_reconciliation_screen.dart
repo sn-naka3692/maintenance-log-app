@@ -35,8 +35,7 @@ class PartsReconciliationScreen extends StatefulWidget {
       _PartsReconciliationScreenState();
 }
 
-class _PartsReconciliationScreenState
-    extends State<PartsReconciliationScreen> {
+class _PartsReconciliationScreenState extends State<PartsReconciliationScreen> {
   Uint8List? _excelBytes;
   String? _excelFileName;
 
