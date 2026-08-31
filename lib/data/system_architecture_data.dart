@@ -35,10 +35,22 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.37',
+    buildNumber: 46,
+    releaseDate: '2026-09-01',
+    summary: '設計図・運用ルール(WEB/APK同時リリース等)をプロフィール内から閲覧可能に(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
+    versionName: '1.2.36',
+    buildNumber: 45,
+    releaseDate: '2026-09-01',
+    summary: '日報→案件反映の不具合対応・入力エラー通知の改善',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.13',
     buildNumber: 22,
     releaseDate: '2026-08-26',
-    summary: 'ホーム画面に「新しいバージョンがあります」お知らせバナーを追加(★配布中の最新版)',
+    summary: 'ホーム画面に「新しいバージョンがあります」お知らせバナーを追加',
   ),
   VersionBuildRecord(
     versionName: '1.2.12',
@@ -323,6 +335,15 @@ const List<FutureConsideration> futureConsiderations = [
 ];
 
 const List<AccountNote> accountStructureNotes = [
+  AccountNote(
+    title: '【運用ルール】WEB版とAPK版は必ず同時リリース(2026-09-01追加)',
+    description:
+        '過去にWeb版のみ本番デプロイを忘れ、APK版と表示バージョンが'
+        '食い違ったまま運用されていた事故があった。以後、機能変更・'
+        '不具合修正を行う際は、Firebase Hosting(Web版)へのデプロイと'
+        'APKビルドを必ずセットで実施すること。詳細と最新の設計図は'
+        '本画面上部の「設計図を見る」から確認できる',
+  ),
   AccountNote(
     title: 'アプリ内の権限は3段階',
     description:

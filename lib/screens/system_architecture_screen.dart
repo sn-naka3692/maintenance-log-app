@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../data/system_architecture_data.dart';
 import '../services/app_config_service.dart';
 import '../theme/app_theme.dart';
+import 'design_diagrams_screen.dart';
 
 /// アプリのシステム構成・外部サービス・アカウント関係の整理画面。
 ///
@@ -25,6 +26,28 @@ class SystemArchitectureScreen extends StatelessWidget {
           _WarningBanner(),
           const SizedBox(height: 20),
 
+          _SectionHeader(
+            icon: Icons.account_tree_outlined,
+            title: '設計図・運用ルール',
+            subtitle: 'アプリの動作フロー(設計図)と、開発・リリース時の運用ルール',
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              leading: const Icon(
+                Icons.account_tree_outlined,
+                color: AppColors.primary,
+              ),
+              title: const Text('設計図を見る'),
+              subtitle: const Text('日報入力〜案件反映〜バージョン管理のフロー・運用ルール一覧'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DesignDiagramsScreen()),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
           _SectionHeader(
             icon: Icons.shield_outlined,
             title: '強制アップデートゲート・更新お知らせ',
@@ -440,7 +463,9 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
     );
     final messageCtrl = TextEditingController(text: _config.message);
     final urlCtrl = TextEditingController(text: _config.downloadUrl);
-    final latestVersionCtrl = TextEditingController(text: _config.latestVersion);
+    final latestVersionCtrl = TextEditingController(
+      text: _config.latestVersion,
+    );
     final latestBuildCtrl = TextEditingController(
       text: _config.latestBuildNumber > 0
           ? _config.latestBuildNumber.toString()
@@ -533,9 +558,7 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
                 final parsedLatest = int.tryParse(latestBuildText);
                 if (parsedLatest == null || parsedLatest < 0) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(
-                      content: Text('最新ビルド番号は0以上の整数で入力してください。'),
-                    ),
+                    const SnackBar(content: Text('最新ビルド番号は0以上の整数で入力してください。')),
                   );
                   return;
                 }
@@ -700,10 +723,7 @@ class _ForceUpdateGateSectionState extends State<_ForceUpdateGateSection> {
             if (_config.latestVersion.isNotEmpty)
               _InfoRow(label: '最新バージョン名', value: _config.latestVersion),
             if (_config.latestBuildNumber > 0)
-              _InfoRow(
-                label: '最新ビルド番号',
-                value: '${_config.latestBuildNumber}',
-              ),
+              _InfoRow(label: '最新ビルド番号', value: '${_config.latestBuildNumber}'),
             const SizedBox(height: 8),
             Text(
               '※ 新しいAPKをビルドするたびに、ここで「最低ビルド番号」と'
@@ -755,7 +775,10 @@ class _VersionBuildTable extends StatelessWidget {
                 const Expanded(
                   child: Text(
                     'バージョン名 ⇔ ビルド番号 対応表',
-                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],
@@ -827,7 +850,10 @@ class _VersionBuildTable extends StatelessWidget {
                       '(system_architecture_data.dart の versionBuildHistory)。'
                       'このリストが古いままだと、ゲートに入力すべき数字を'
                       '間違えるおそれがあります。',
-                      style: TextStyle(fontSize: 11, color: Colors.orange.shade900),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.orange.shade900,
+                      ),
                     ),
                   ),
                 ],

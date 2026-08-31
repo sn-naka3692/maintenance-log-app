@@ -11,6 +11,7 @@ import '../services/update_notice_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/apk_update_flow.dart';
 import 'changelog_screen.dart';
+import 'design_diagrams_screen.dart';
 import 'manual_screen.dart';
 import 'system_architecture_screen.dart';
 import 'user_management_screen.dart';
@@ -182,6 +183,25 @@ class ProfileScreen extends StatelessWidget {
                     MaterialPageRoute(builder: (_) => const ManualScreen()),
                   ),
                 ),
+                if (appState.isSuperAdmin) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.account_tree_outlined,
+                      color: AppColors.primary,
+                    ),
+                    title: const Text('設計図(アプリの動作フロー)'),
+                    subtitle: const Text(
+                      '日報入力〜案件反映〜バージョン管理のフロー・運用ルール(最高管理者のみ)',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const DesignDiagramsScreen(),
+                      ),
+                    ),
+                  ),
+                ],
                 if (appState.isSuperAdmin) ...[
                   const Divider(height: 1),
                   ListTile(
