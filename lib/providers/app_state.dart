@@ -354,8 +354,13 @@ class AppState extends ChangeNotifier {
   /// 【2026-09追加】権限は限定しない。伝票No/受付No未入力+曖眛グルーピング
   /// 失敗により、まだどの案件にも紐付いていない日報を全員が確認できるように
   /// するための一覧。新しい訪問日順に並べる。
+  /// 【設計方針・2026-09追加】案件管理は「お客様先での現場対応」
+  /// (定期点検・故障対応・修理・新設設置)のみを対象とする。事務・倉庫作業
+  /// 等の社内業務は元々案件化不要なため、この一覧にも表示しない。
   List<WorkReport> get ungroupedReports {
-    final list = _reports.where((r) => r.caseId.trim().isEmpty).toList();
+    final list = _reports
+        .where((r) => r.caseId.trim().isEmpty && r.responseType.isCaseEligible)
+        .toList();
     list.sort((a, b) => b.visitDate.compareTo(a.visitDate));
     return list;
   }

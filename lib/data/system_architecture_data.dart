@@ -35,10 +35,16 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.39',
+    buildNumber: 48,
+    releaseDate: '2026-09-01',
+    summary: '案件化対象を定期点検・故障対応・修理・新設設置に限定+未グルーピング一覧のスクロール対応(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.38',
     buildNumber: 47,
     releaseDate: '2026-09-01',
-    summary: '未グルーピング日報を全員が「案件として登録」できる機能を追加(★配布中の最新版)',
+    summary: '未グルーピング日報を全員が「案件として登録」できる機能を追加',
   ),
   VersionBuildRecord(
     versionName: '1.2.37',
@@ -341,6 +347,18 @@ const List<FutureConsideration> futureConsiderations = [
 ];
 
 const List<AccountNote> accountStructureNotes = [
+  AccountNote(
+    title: '【設計原則】案件化の対象は「定期点検・故障対応・修理・新設設置」のみ(2026-09-01追加)',
+    description:
+        '案件管理は「お客様先での現場対応」を追跡する仕組みであり、事務・'
+        '現場事務・倉庫作業・環境整備・その他の社内業務は対象外とする。'
+        '本来は日報(現場対応)ありきで案件が生まれる設計のはずが、'
+        '過去バージョンでは対応区分を一切見ずに全日報を無差別に案件化'
+        'ロジックへ通していたため、設計と実態が逆転していた'
+        '(2026-09-01ユーザー指摘により発覚・修正)。新しい対応区分を'
+        '追加する際は、CaseEligible判定(WorkReport.isCaseEligible)への'
+        '反映を必ず検討すること',
+  ),
   AccountNote(
     title: '【運用ルール】WEB版とAPK版は必ず同時リリース(2026-09-01追加)',
     description:

@@ -732,8 +732,20 @@ class _CaseListScreenState extends State<CaseListScreen> {
   /// 【2026-09追加・全員向け】まだどの案件にも紐付いていない日報の一覧。
   /// 権限を限定せず、日報を書いた本人を含め誰でも見える・操作できる
   /// ようにすることで、「案件の存在を全員が把握できる」ことを最低ラインとする。
+  ///
+  /// 【不具合修正・2026-09】ExpansionTileの中身をそのままColumnで展開すると、
+  /// 件数が多い場合に画面の高さを超えて後続の案件一覧が見切れてしまう
+  /// (外側がスクロール不能なColumnのため)。件数に依存せず必ず全件へ
+  /// アクセスできるよう、内部を高さ固定+独立スクロールのリストにする。
   Widget _buildUngroupedSection(List<WorkReport> reports) {
     final dateFmt = DateFormat('yyyy/M/d');
+    // 件数が少ない場合は縮めて表示し、多い場合は最大高さで内部スクロールさせる。
+    final estimatedItemHeight = 132.0;
+    final maxHeight = 340.0;
+    final contentHeight = (reports.length * estimatedItemHeight).clamp(
+      estimatedItemHeight,
+      maxHeight,
+    );
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       decoration: BoxDecoration(
@@ -751,12 +763,24 @@ class _CaseListScreenState extends State<CaseListScreen> {
             '案件になっていない日報 ${reports.length}件',
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
           ),
-          subtitle: const Text(
-            '伝票No・受付Noが未入力等の理由で、まだ案件が作られていません。'
-            '「案件として登録」すれば全員が存在を確認できるようになります。',
-            style: TextStyle(fontSize: 11),
+          subtitle: Text(
+            '定期点検・故障対応・修理・新設設置のうち、伝票No・受付Noが'
+            '未入力等で案件が作られていない日報です。「案件として登録」で'
+            '全員が存在を確認できるようになります。'
+            '${reports.length > 2 ? "(下にスクロールできます)" : ""}',
+            style: const TextStyle(fontSize: 11),
           ),
-          children: [for (final r in reports) _buildUngroupedTile(r, dateFmt)],
+          children: [
+            SizedBox(
+              height: contentHeight,
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: reports.length,
+                itemBuilder: (context, index) =>
+                    _buildUngroupedTile(reports[index], dateFmt),
+              ),
+            ),
+          ],
         ),
       ),
     );

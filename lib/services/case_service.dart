@@ -58,6 +58,23 @@ class CaseService {
 
     late final String newCaseId;
 
+    // 【設計方針・2026-09追加】案件管理は「お客様先での現場対応」
+    // (定期点検・故障対応・修理・新設設置)を追跡するための仕組みであり、
+    // 事務・現場事務・倉庫作業・環境整備・その他の社内業務は対象外とする。
+    // 従来はこの区別を行わず全日報を無差別に案件化していたため、日報
+    // (現場対応)ありきで案件が生まれるはずの設計が逆転していた。
+    if (!report.responseType.isCaseEligible) {
+      newCaseId = '';
+      if (previousCaseId.isNotEmpty) {
+        try {
+          await unlinkReportFromCase(report.id, previousCaseId);
+        } catch (_) {
+          // ベストエフォート。
+        }
+      }
+      return newCaseId;
+    }
+
     // 1. プロワン伝票No優先
     final slip = report.proWanRefNumber.trim();
     if (slip.isNotEmpty) {
@@ -167,6 +184,9 @@ class CaseService {
     for (final doc in candidatesSnap.docs) {
       if (doc.id == report.id) continue;
       final candidate = WorkReport.fromMap(doc.id, doc.data());
+      // 事務・倉庫作業等の社内業務は案件化対象外のため、類似度マッチの
+      // 候補にも含めない(現場対応の日報同士でのみグルーピングする)。
+      if (!candidate.responseType.isCaseEligible) continue;
       // 【重要】候補側が確実キー(伝票No/受付No)を持つ既存日報も比較対象に
       // 含める。これは「同じ現場対応で、片方だけ伝票Noを入力し、もう片方は
       // 空欄のまま保存した」というケース(=複数人対応時に典型的に起こる)
@@ -419,6 +439,11 @@ class CaseService {
     final existing = report.caseId.trim();
     if (existing.isNotEmpty) {
       return existing;
+    }
+    // 事務・倉庫作業等の社内業務は案件化対象外(呼び出し元UIでも
+    // フィルタしているが、ロジック層でも二重に保証する)。
+    if (!report.responseType.isCaseEligible) {
+      throw Exception('この対応区分(${report.responseType.label})は案件管理の対象外です');
     }
 
     final ref = _casesCol.doc();

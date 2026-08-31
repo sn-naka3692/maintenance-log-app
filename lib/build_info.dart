@@ -22,7 +22,7 @@
 /// 【運用ルール】バージョンを上げるたびに、pubspec.yamlの`version:`と
 /// 同じビルド番号(`+`より後の数字)をここにも必ず反映すること。
 /// changelog_data.dartの更新と合わせてセットで更新する習慣とする。
-const int kCompiledBuildNumber = 47;
+const int kCompiledBuildNumber = 48;
 
 /// 表示用バージョン名(pubspec.yamlの`version:`の`+`より前の部分と一致させる)。
-const String kCompiledVersionName = '1.2.38';
+const String kCompiledVersionName = '1.2.39';

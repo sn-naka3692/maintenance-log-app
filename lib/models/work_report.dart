@@ -74,6 +74,27 @@ extension ResponseTypeLabel on ResponseType {
     }
   }
 
+  /// 【設計方針・2026-09追加】「案件」として管理する対象かどうか。
+  ///
+  /// 【背景】案件管理は「お客様先での現場対応(定期点検・故障対応・修理・
+  /// 新設設置)」を追跡するための仕組みであり、事務・現場事務・倉庫作業・
+  /// 環境整備・その他といった社内業務は対象外とすべきだった。しかし
+  /// CaseServiceは従来この区別を一切行わず全日報を無差別に案件化対象と
+  /// していたため、本来は日報(現場対応)ありきで案件が生まれるはずの
+  /// 設計が、実質「日報を書けば種別を問わず何でも案件になる」という
+  /// 逆転した状態になっていた(2026-09にユーザー指摘により発覚)。
+  bool get isCaseEligible {
+    switch (this) {
+      case ResponseType.regularInspection:
+      case ResponseType.breakdown:
+      case ResponseType.repair:
+      case ResponseType.installation:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   String get value {
     switch (this) {
       case ResponseType.regularInspection:
@@ -262,12 +283,7 @@ class WorkReport {
   /// この一覧に含まれておらず、単に「入力欄が空でなければ充填あり」と
   /// 誤判定していた(=正しく「未充填」と入力したのに「充填あり」扱いに
   /// なってしまうバグ)。両ルートで同じ判定基準を使うよう統一する。
-  static const Set<String> _notFilledTypeValues = {
-    '',
-    'なし',
-    '無し',
-    'none',
-  };
+  static const Set<String> _notFilledTypeValues = {'', 'なし', '無し', 'none'};
 
   /// 「未充填」を意味する入力値の一覧(充填量欄用)。
   static const Set<String> _notFilledAmountValues = {'', '0', '0.0', '0.00'};
@@ -421,14 +437,11 @@ class WorkReport {
         (k, v) => MapEntry(k, v.toString()),
       ),
       manualReviewNeeded: map['manual_review_needed'] as bool? ?? false,
-      matchedCacheJobNumber:
-          map['matched_cache_job_number'] as String? ?? '',
+      matchedCacheJobNumber: map['matched_cache_job_number'] as String? ?? '',
       caseId: map['case_id'] as String? ?? '',
       lastEditedByAdminId: map['last_edited_by_admin_id'] as String?,
       lastEditedByAdminName: map['last_edited_by_admin_name'] as String?,
-      lastEditedByAdminAt: _parseNullableDate(
-        map['last_edited_by_admin_at'],
-      ),
+      lastEditedByAdminAt: _parseNullableDate(map['last_edited_by_admin_at']),
       createdAt: _parseDate(map['created_at']),
       updatedAt: _parseDate(map['updated_at']),
     );
