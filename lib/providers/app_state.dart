@@ -225,6 +225,22 @@ class AppState extends ChangeNotifier {
     return result;
   }
 
+  /// 既存の全案件を、紐づく日報から正確に再計算する(管理者用)。
+  ///
+  /// 【想定シナリオ】過去の不具合(旧案件からの切り離し漏れ等)によって
+  /// 案件側の集計値(参加者・合計作業時間・冷媒充填有無・店舗名等)が
+  /// 実際の日報内容と食い違ってしまっている場合に、管理者がこの操作で
+  /// 一括修復できるようにする。既に案件に紐づいている日報の内容から
+  /// 案件を丸ごと作り直すだけなので、正常な案件に対して実行しても
+  /// 結果は変わらない(安全設計)。
+  Future<CaseRecalculateAllResult> recalculateAllCases() async {
+    final result = await _caseService.recalculateAllCases();
+    await _service.refreshAll();
+    _reports = _service.getAllReports();
+    notifyListeners();
+    return result;
+  }
+
   /// 複数の案件を1つにまとめる(管理者用・案件一覧のまとめ機能)。
   ///
   /// [targetCaseId] に [sourceCaseIds] の内容(紐づく日報)を統合する。

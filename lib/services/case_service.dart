@@ -47,28 +47,52 @@ class CaseService {
   /// 日報自体の保存(呼び出し元で既に完了している)には影響を与えない
   /// よう、呼び出し元で try-catch することを推奨する。
   Future<String> syncCaseForReport(WorkReport report) async {
+    // 【不具合修正・2026-08-31】
+    // 日報を編集して伝票No/受付Noを後から入力・変更した場合、判定される
+    // caseId(docId)が変わることがある。旧caseIdが既に存在し、かつ新しい
+    // caseIdと異なる場合、旧案件からのリンク解除(unlinkReportFromCase)を
+    // 行わないと、古い案件に古い集計値(参加者・合計作業時間・冷媒充填有無等)
+    // が取り残されたまま残ってしまう(=「日報にはあるが案件に反映されない」
+    // 不整合の主要因)。判定処理の最初に、まず旧caseIdを退避しておく。
+    final previousCaseId = report.caseId.trim();
+
+    late final String newCaseId;
+
     // 1. プロワン伝票No優先
     final slip = report.proWanRefNumber.trim();
     if (slip.isNotEmpty) {
-      return _linkToConfirmedCase(
+      newCaseId = await _linkToConfirmedCase(
         report: report,
         keyType: 'prowan_slip',
         keyValue: slip,
       );
+    } else {
+      // 2. SE店舗の弊社受付No
+      final receipt = report.storeSystemReportCopy.receiptNumber.trim();
+      if (receipt.isNotEmpty) {
+        newCaseId = await _linkToConfirmedCase(
+          report: report,
+          keyType: 'se_receipt',
+          keyValue: receipt,
+        );
+      } else {
+        // 3. 番号なし -> 曖昧グルーピングを試みる
+        newCaseId = await _linkToSuggestedCase(report);
+      }
     }
 
-    // 2. SE店舗の弊社受付No
-    final receipt = report.storeSystemReportCopy.receiptNumber.trim();
-    if (receipt.isNotEmpty) {
-      return _linkToConfirmedCase(
-        report: report,
-        keyType: 'se_receipt',
-        keyValue: receipt,
-      );
+    // 旧caseIdが存在し、かつ新しい判定結果と異なる(=キー変更等により
+    // 案件が切り替わった)場合、旧案件から自分を切り離す。
+    if (previousCaseId.isNotEmpty && previousCaseId != newCaseId) {
+      try {
+        await unlinkReportFromCase(report.id, previousCaseId);
+      } catch (_) {
+        // 旧案件が既に削除済み等で失敗しても、新しい紐付け自体は
+        // 完了しているためベストエフォートとして無視する。
+      }
     }
 
-    // 3. 番号なし -> 曖昧グルーピングを試みる
-    return _linkToSuggestedCase(report);
+    return newCaseId;
   }
 
   /// 伝票No/受付Noをドキュメントキーとして正規化する
@@ -325,6 +349,15 @@ class CaseService {
 
   /// 誤結合を管理画面から手動で解除する(1件の日報を案件から切り離す)。
   /// 切り離した日報は再度単独案件(または未グルーピング)として扱われる。
+  ///
+  /// 【不具合修正・2026-08-31】
+  /// 従来は日報側の case_id を無条件に空文字へクリアしていたが、これだと
+  /// 「新しい案件へ既に紐付け済みの日報」に対してこの関数を後始末目的で
+  /// 呼び出した場合(syncCaseForReport() 内の旧案件クリーンアップ処理など)、
+  /// せっかく設定した新しい case_id を誤って上書き消去してしまう危険がある。
+  /// そのため、日報の現在の case_id が「これから切り離そうとしている
+  /// caseId」と一致している場合のみクリアするようにする(=既に別の案件へ
+  /// 付け替え済みなら、この日報の case_id には触れない)。
   Future<void> unlinkReportFromCase(String reportId, String caseId) async {
     final caseRef = _casesCol.doc(caseId);
     await _db.runTransaction((tx) async {
@@ -341,7 +374,18 @@ class CaseService {
         });
       }
     });
-    await _reportsCol.doc(reportId).update({'case_id': ''});
+
+    final reportRef = _reportsCol.doc(reportId);
+    final reportSnap = await reportRef.get();
+    if (reportSnap.exists) {
+      final currentCaseId = (reportSnap.data()?['case_id'] as String?) ?? '';
+      // まだこの案件に紐づいたままの場合のみクリアする。
+      // (既に別の案件へ付け替え済みなら、その正しい値を維持する)
+      if (currentCaseId == caseId) {
+        await reportRef.update({'case_id': ''});
+      }
+    }
+
     if (caseId.isNotEmpty) {
       await recalculateCase(caseId);
     }
@@ -501,6 +545,81 @@ class CaseService {
       errors: errors,
     );
   }
+
+  // ------------------------------------------------------------
+  // 既存案件の一括再計算(管理画面用・2026-08-31追加)
+  // ------------------------------------------------------------
+  //
+  // 【背景】
+  // resyncUngroupedReports() は「まだどの案件にも紐づいていない日報」
+  // だけを対象とするため、「既に案件へ紐づいてはいるが、過去の不具合
+  // (旧案件からの切り離し漏れ等)によって集計値(参加者・合計作業時間・
+  // 冷媒充填有無・店舗名等)が古いまま/不正確になってしまっている案件」
+  // は一切修復されない。
+  //
+  // このメソッドは、既存の cases コレクションを全件走査し、各案件を
+  // recalculateCase() で「紐づく日報から正確に作り直す」ことで、
+  // 過去に蓄積された不整合を一括で解消するための管理者向け機能。
+  //
+  // 【安全性】
+  // recalculateCase() 自体は既に「紐づく日報一覧から都度作り直す」
+  // 冪等な処理であるため、正常な案件に対して再実行しても値は変わらない
+  // (=副作用のない安全な操作)。
+  Future<CaseRecalculateAllResult> recalculateAllCases() async {
+    final snap = await _casesCol.get();
+    final caseIds = snap.docs.map((d) => d.id).toList();
+
+    var successCount = 0;
+    var deletedCount = 0; // 紐づく日報が既に存在しなかった等で削除された件数
+    var errorCount = 0;
+    final errors = <String>[];
+
+    for (final caseId in caseIds) {
+      try {
+        final existedBefore = await _casesCol.doc(caseId).get();
+        await recalculateCase(caseId);
+        if (existedBefore.exists) {
+          final existsAfter = await _casesCol.doc(caseId).get();
+          if (!existsAfter.exists) {
+            deletedCount++;
+          } else {
+            successCount++;
+          }
+        }
+      } catch (e) {
+        errorCount++;
+        errors.add('案件ID $caseId: $e');
+      }
+    }
+
+    return CaseRecalculateAllResult(
+      totalTargets: caseIds.length,
+      successCount: successCount,
+      deletedCount: deletedCount,
+      errorCount: errorCount,
+      errors: errors,
+    );
+  }
+}
+
+/// [CaseService.recalculateAllCases] の実行結果。
+class CaseRecalculateAllResult {
+  final int totalTargets; // 対象だった案件数
+  final int successCount; // 正常に再計算できた件数
+  final int deletedCount; // 紐づく日報が消滅していた等で削除された件数
+  final int errorCount; // 処理中にエラーが発生した件数
+  final List<String> errors; // エラー内容
+
+  const CaseRecalculateAllResult({
+    required this.totalTargets,
+    required this.successCount,
+    required this.deletedCount,
+    required this.errorCount,
+    required this.errors,
+  });
+
+  bool get hasTargets => totalTargets > 0;
+  bool get hasErrors => errorCount > 0;
 }
 
 /// [CaseService.resyncUngroupedReports] の実行結果。

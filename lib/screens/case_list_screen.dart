@@ -27,6 +27,7 @@ class _CaseListScreenState extends State<CaseListScreen> {
   bool _onlySuggested = false;
   bool _onlyRefrigerantFilling = false;
   bool _resyncing = false;
+  bool _recalculating = false;
   bool _mergeMode = false;
   final Set<String> _selectedForMerge = {};
 
@@ -207,6 +208,91 @@ class _CaseListScreenState extends State<CaseListScreen> {
       ).showSnackBar(SnackBar(content: Text('再判定処理に失敗しました: $e')));
     } finally {
       if (mounted) setState(() => _resyncing = false);
+    }
+  }
+
+  /// 既存の全案件を、紐づく日報から正確に再計算する(管理者用)。
+  ///
+  /// 【背景】過去の不具合(日報の伝票No/受付Noを後から入力・変更した際に
+  /// 旧案件からの切り離しが行われず、参加者・合計作業時間・冷媒充填有無
+  /// 等の集計値が古いまま残ってしまう)により、既に案件へ紐付いている
+  /// はずのデータが実際の日報内容と食い違ってしまうケースがあることが
+  /// 判明した。このボタンは、既存の全案件を紐づく日報から丸ごと
+  /// 作り直すことで、そうした不整合を一括で解消する。
+  Future<void> _recalculateAll() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('全案件の再計算'),
+        content: const Text(
+          '既存のすべての案件を、現在紐づいている日報の内容から'
+          '正確に作り直します。\n\n'
+          '・日報の紐付け自体は変更しません\n'
+          '・参加者・合計作業時間・冷媒充填有無・店舗名などの'
+          '集計値を、日報の最新内容に基づいて再計算します\n'
+          '・正常な案件の値は変化しません(安全な操作です)\n\n'
+          '実行してよろしいですか?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('実行する'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    setState(() => _recalculating = true);
+    try {
+      final appState = context.read<AppState>();
+      final result = await appState.recalculateAllCases();
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('再計算が完了しました'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('対象の案件数: ${result.totalTargets}件'),
+              Text('再計算できた: ${result.successCount}件'),
+              if (result.deletedCount > 0)
+                Text('紐づく日報が消滅していたため削除: ${result.deletedCount}件'),
+              if (result.hasErrors)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'エラー: ${result.errorCount}件\n'
+                    '${result.errors.take(3).join('\n')}',
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('再計算処理に失敗しました: $e')));
+    } finally {
+      if (mounted) setState(() => _recalculating = false);
     }
   }
 
@@ -404,6 +490,18 @@ class _CaseListScreenState extends State<CaseListScreen> {
                   : const Icon(Icons.sync_problem_outlined),
               tooltip: '未グルーピング日報を再判定',
               onPressed: _resyncing ? null : _resyncUngrouped,
+            ),
+          if (isAdmin && !_mergeMode)
+            IconButton(
+              icon: _recalculating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.calculate_outlined),
+              tooltip: '全案件を再計算(集計値の不整合を修復)',
+              onPressed: _recalculating ? null : _recalculateAll,
             ),
           if (!_mergeMode)
             IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
