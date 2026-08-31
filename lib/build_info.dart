@@ -22,7 +22,13 @@
 /// 【運用ルール】バージョンを上げるたびに、pubspec.yamlの`version:`と
 /// 同じビルド番号(`+`より後の数字)をここにも必ず反映すること。
 /// changelog_data.dartの更新と合わせてセットで更新する習慣とする。
-const int kCompiledBuildNumber = 48;
+///
+/// 【再発防止・2026-09】v1.2.40リリース時、pubspec.yamlは更新した一方で
+/// この定数の更新を一度失念し、APK自体のversionName(aapt上は正しい)と
+/// アプリ内表示バージョンが不一致になる事故が発生した。pubspec.yamlの
+/// バージョンを上げる際は、必ずこのファイルとchangelog_data.dart /
+/// system_architecture_data.dartのversionBuildHistoryをセットで確認すること。
+const int kCompiledBuildNumber = 49;
 
 /// 表示用バージョン名(pubspec.yamlの`version:`の`+`より前の部分と一致させる)。
-const String kCompiledVersionName = '1.2.39';
+const String kCompiledVersionName = '1.2.40';

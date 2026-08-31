@@ -35,10 +35,16 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.40',
+    buildNumber: 49,
+    releaseDate: '2026-09-01',
+    summary: '端末側二重保存(Outbox)による恒久的データ消失防止対策(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.39',
     buildNumber: 48,
     releaseDate: '2026-09-01',
-    summary: '案件化対象を定期点検・故障対応・修理・新設設置に限定+未グルーピング一覧のスクロール対応(★配布中の最新版)',
+    summary: '案件化対象を定期点検・故障対応・修理・新設設置に限定+未グルーピング一覧のスクロール対応',
   ),
   VersionBuildRecord(
     versionName: '1.2.38',
