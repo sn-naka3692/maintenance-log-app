@@ -35,10 +35,16 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.38',
+    buildNumber: 47,
+    releaseDate: '2026-09-01',
+    summary: '未グルーピング日報を全員が「案件として登録」できる機能を追加(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.37',
     buildNumber: 46,
     releaseDate: '2026-09-01',
-    summary: '設計図・運用ルール(WEB/APK同時リリース等)をプロフィール内から閲覧可能に(★配布中の最新版)',
+    summary: '設計図・運用ルール(WEB/APK同時リリース等)をプロフィール内から閲覧可能に',
   ),
   VersionBuildRecord(
     versionName: '1.2.36',
@@ -343,6 +349,18 @@ const List<AccountNote> accountStructureNotes = [
         '不具合修正を行う際は、Firebase Hosting(Web版)へのデプロイと'
         'APKビルドを必ずセットで実施すること。詳細と最新の設計図は'
         '本画面上部の「設計図を見る」から確認できる',
+  ),
+  AccountNote(
+    title: '【運用ルール】APKビルド後は必ずGitHub Releaseも作成する(2026-09-01追加)',
+    description:
+        'APK版の「最新版をダウンロード」ボタンはGitHub Releasesの"Latest"'
+        'タグが指すファイルを固定URLで参照する仕組みになっている。ローカルで'
+        'APKをビルドしただけではGitHub Release自体は更新されず、結果として'
+        '「新しいビルドをFirestore上は最新と設定したのに、実際にダウンロード'
+        'されるAPKは古いまま」という不整合(更新案内バナーが消えない不具合)'
+        'が発生した事故があった(2026-09-01発覚)。以後、APKをビルドしたら'
+        '`gh release create vX.Y.Z <apkパス>` でGitHub Releaseを必ず作成し、'
+        '`gh release list`で"Latest"が新しいバージョンになっているか確認すること',
   ),
   AccountNote(
     title: 'アプリ内の権限は3段階',

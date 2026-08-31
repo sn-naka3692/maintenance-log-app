@@ -350,6 +350,32 @@ class AppState extends ChangeNotifier {
     return list;
   }
 
+  /// 未グルーピングの日報一覧を取得する(検索・案件一覧画面用)。
+  /// 【2026-09追加】権限は限定しない。伝票No/受付No未入力+曖眛グルーピング
+  /// 失敗により、まだどの案件にも紐付いていない日報を全員が確認できるように
+  /// するための一覧。新しい訪問日順に並べる。
+  List<WorkReport> get ungroupedReports {
+    final list = _reports.where((r) => r.caseId.trim().isEmpty).toList();
+    list.sort((a, b) => b.visitDate.compareTo(a.visitDate));
+    return list;
+  }
+
+  /// 未グルーピングの日報1件を、その場で「単独案件」として登録する。
+  /// 【2026-09追加】権限を限定せず、誰でも実行できる(=「案件の存在を
+  /// 全員が把握できる」ことを最低ラインとするための機能)。
+  /// 伝票No等を後から入力すれば、正しい確定案件へ自動的に統合される。
+  Future<String> createStandaloneCase(WorkReport report) async {
+    final caseId = await _caseService.createStandaloneCase(report);
+    if (caseId.isNotEmpty && report.caseId != caseId) {
+      report.caseId = caseId;
+      await _service.updateReport(report);
+    }
+    await _service.refreshAll();
+    _reports = _service.getAllReports();
+    notifyListeners();
+    return caseId;
+  }
+
   /// 誤って自動グルーピングされた日報を案件から手動で切り離す(管理画面用)。
   Future<void> unlinkReportFromCase(String reportId, String caseId) async {
     await _caseService.unlinkReportFromCase(reportId, caseId);

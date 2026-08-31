@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/case.dart';
+import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 import 'case_detail_screen.dart';
 import 'case_sync_failure_screen.dart';
+import 'report_detail_screen.dart';
 
 /// 「案件」一覧画面。
 ///
@@ -32,6 +34,11 @@ class _CaseListScreenState extends State<CaseListScreen> {
   bool _mergeMode = false;
   int _syncFailureCount = 0;
   final Set<String> _selectedForMerge = {};
+  // 【2026-09追加】未グルーピング日報(伝票No/受付No未入力+曖眛グルーピング
+  // 失敗により、どの案件にも紐付いていない日報)セクションの開閉状態。
+  // 全員が見える最低ラインの情報共有として、権限を限定せず表示する。
+  bool _ungroupedExpanded = true;
+  final Set<String> _registeringIds = {};
 
   // 【案件フォルダー化・2026-08追加】案件が増えてきた際の一覧性対策として、
   // 確定案件(status != 'suggested')を年→月のフォルダー(ExpansionTile)に
@@ -315,6 +322,36 @@ class _CaseListScreenState extends State<CaseListScreen> {
     }
   }
 
+  /// 【2026-09追加・全員向け】未グルーピングの日報1件を、その場で
+  /// 「単独案件」として登録する。権限は限定しない(誰でも実行できる)。
+  ///
+  /// 【設計思想】「案件の存在を全員が把握できる」ことを最低ラインとし、
+  /// 精度(伝票No等による確実な統合)は後から自然に上がっていく仕組みとする。
+  /// 伝票No/受付Noが後から入力されて日報が再保存されれば、通常の自動判定
+  /// ロジックが正しい確定案件へ自動的に付け替える(この登録は暫定的な足場)。
+  Future<void> _registerStandalone(WorkReport report) async {
+    setState(() => _registeringIds.add(report.id));
+    try {
+      final appState = context.read<AppState>();
+      await appState.createStandaloneCase(report);
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('案件として登録しました。伝票No等を入力すると自動的に正しい案件へ統合されます。'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('登録に失敗しました: $e')));
+    } finally {
+      if (mounted) setState(() => _registeringIds.remove(report.id));
+    }
+  }
+
   void _toggleMergeMode() {
     setState(() {
       _mergeMode = !_mergeMode;
@@ -479,7 +516,9 @@ class _CaseListScreenState extends State<CaseListScreen> {
           .toList();
     }
 
-    final isAdmin = context.watch<AppState>().isAdmin;
+    final appStateWatch = context.watch<AppState>();
+    final isAdmin = appStateWatch.isAdmin;
+    final ungroupedReports = appStateWatch.ungroupedReports;
 
     return Scaffold(
       appBar: AppBar(
@@ -617,6 +656,8 @@ class _CaseListScreenState extends State<CaseListScreen> {
             ),
           ),
           const Divider(height: 1),
+          if (!_mergeMode && ungroupedReports.isNotEmpty)
+            _buildUngroupedSection(ungroupedReports),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -684,6 +725,108 @@ class _CaseListScreenState extends State<CaseListScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// 【2026-09追加・全員向け】まだどの案件にも紐付いていない日報の一覧。
+  /// 権限を限定せず、日報を書いた本人を含め誰でも見える・操作できる
+  /// ようにすることで、「案件の存在を全員が把握できる」ことを最低ラインとする。
+  Widget _buildUngroupedSection(List<WorkReport> reports) {
+    final dateFmt = DateFormat('yyyy/M/d');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: _ungroupedExpanded,
+          onExpansionChanged: (v) => setState(() => _ungroupedExpanded = v),
+          leading: const Icon(Icons.report_gmailerrorred, color: Colors.orange),
+          title: Text(
+            '案件になっていない日報 ${reports.length}件',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+          ),
+          subtitle: const Text(
+            '伝票No・受付Noが未入力等の理由で、まだ案件が作られていません。'
+            '「案件として登録」すれば全員が存在を確認できるようになります。',
+            style: TextStyle(fontSize: 11),
+          ),
+          children: [for (final r in reports) _buildUngroupedTile(r, dateFmt)],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUngroupedTile(WorkReport r, DateFormat dateFmt) {
+    final registering = _registeringIds.contains(r.id);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                r.clientName.isNotEmpty ? r.clientName : '(店舗不明)',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${r.authorName} ・ ${dateFmt.format(r.visitDate)}',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+              if (r.workContent.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  r.workContent,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ReportDetailScreen(reportId: r.id),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.description_outlined, size: 16),
+                    label: const Text('日報を見る'),
+                  ),
+                  const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: registering
+                        ? null
+                        : () => _registerStandalone(r),
+                    icon: registering
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.add_task, size: 16),
+                    label: const Text('案件として登録'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -961,21 +1104,32 @@ class _CaseListScreenState extends State<CaseListScreen> {
   }
 
   Widget _statusBadge(WorkCase c) {
-    final isConfirmed = c.isConfirmed;
+    // 【2026-09追加】standalone(暫定登録)を追加。伝票No等が入力されれば
+    // 自動的に確実な案件へ統合されるため「暫定」として区別して表示する。
+    final String label;
+    final Color color;
+    if (c.isConfirmed) {
+      label = '確実';
+      color = AppColors.success;
+    } else if (c.isStandalone) {
+      label = '暫定登録';
+      color = Colors.blueGrey;
+    } else {
+      label = '推測';
+      color = AppColors.warning;
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: (isConfirmed ? AppColors.success : AppColors.warning).withValues(
-          alpha: 0.12,
-        ),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        isConfirmed ? '確実' : '推測',
+        label,
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: isConfirmed ? AppColors.success : AppColors.warning,
+          color: color,
         ),
       ),
     );

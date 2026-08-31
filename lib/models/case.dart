@@ -57,6 +57,11 @@ class WorkCase {
 
   bool get isConfirmed => status == 'confirmed';
   bool get isMultiPerson => participants.length > 1;
+  // 【2026-09追加】伝票No/受付No等の確実なキーが無く、かつ曖眛グルーピングも
+  // 成立しなかった日報を、誰でもその場で「単独案件」として登録できるように
+  // した際のステータス。「案件の存在を全員が把握できる」ことを最低ラインとし、
+  // 後から伝票No等が入力されれば正しい確定案件へ自動的に統合される(暫定状態)。
+  bool get isStandalone => status == 'standalone';
 
   Map<String, dynamic> toMap() {
     return {

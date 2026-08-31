@@ -282,7 +282,10 @@ class CaseService {
       );
     } else {
       caseObj.participants.add(
-        CaseParticipant(authorId: report.authorId, authorName: report.authorName),
+        CaseParticipant(
+          authorId: report.authorId,
+          authorName: report.authorName,
+        ),
       );
     }
 
@@ -391,6 +394,53 @@ class CaseService {
     }
   }
 
+  // ------------------------------------------------------------
+  // 未グルーピング日報を「単独案件」として登録する(全員向け・2026-09追加)
+  // ------------------------------------------------------------
+  //
+  // 【背景】
+  // 伝票No/受付Noが未入力、かつ曖眛グルーピングも成立しなかった日報は、
+  // これまで cases コレクションに一切現れず、「案件の存在自体が誰にも
+  // 見えない」状態になっていた。これは技術的な不具合ではなく仕組み上の
+  // 正常な挙動だが、現場からは「入力途中でも案件の存在だけは全員が
+  // 把握できるようにしたい」という要望が強い。
+  //
+  // 【設計方針】
+  // - 「案件の存在を共有できる」ことを最低ラインとし、精度(伝票No等の
+  //   確実な紐付け)は後から自然に上がっていく仕組みとする。
+  // - 権限を限定せず、日報を書いた本人を含め誰でも実行できる
+  //   (=「見つけた人がその場で案件化する」運用を想定)。
+  // - 単独案件として作成後も、日報側に伝票No/受付Noが入力されて
+  //   再保存されれば、通常の syncCaseForReport() が正しい確定案件へ
+  //   自動的に付け替える(=この単独案件はあくまで暫定的な足場)。
+  // - 既に案件へ紐付いている日報に対して誤って呼ばれても安全なように、
+  //   caseIdが空でない場合は何もせずそのまま返す。
+  Future<String> createStandaloneCase(WorkReport report) async {
+    final existing = report.caseId.trim();
+    if (existing.isNotEmpty) {
+      return existing;
+    }
+
+    final ref = _casesCol.doc();
+    final caseId = ref.id;
+
+    await _db.runTransaction((tx) async {
+      final caseObj = WorkCase(
+        id: caseId,
+        primaryKeyType: 'standalone',
+        primaryKeyValue: '',
+        status: 'standalone',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      _applyReportToCase(caseObj, report);
+      tx.set(ref, caseObj.toMap(), SetOptions(merge: false));
+    });
+
+    await _reportsCol.doc(report.id).update({'case_id': caseId});
+    return caseId;
+  }
+
   Future<List<WorkCase>> getAllCases() async {
     final snap = await _casesCol.get();
     final list = snap.docs
@@ -433,7 +483,10 @@ class CaseService {
     required String targetCaseId,
     required List<String> sourceCaseIds,
   }) async {
-    final otherIds = sourceCaseIds.where((id) => id != targetCaseId).toSet().toList();
+    final otherIds = sourceCaseIds
+        .where((id) => id != targetCaseId)
+        .toSet()
+        .toList();
     if (otherIds.isEmpty) return;
 
     final targetRef = _casesCol.doc(targetCaseId);
@@ -463,7 +516,9 @@ class CaseService {
     final reportIds = allReportIds.toList();
     const chunkSize = 400;
     for (var i = 0; i < reportIds.length; i += chunkSize) {
-      final end = (i + chunkSize > reportIds.length) ? reportIds.length : i + chunkSize;
+      final end = (i + chunkSize > reportIds.length)
+          ? reportIds.length
+          : i + chunkSize;
       final batch = _db.batch();
       for (final rid in reportIds.sublist(i, end)) {
         batch.update(_reportsCol.doc(rid), {'case_id': targetCaseId});
