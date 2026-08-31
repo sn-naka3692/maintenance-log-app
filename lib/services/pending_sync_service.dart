@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 /// 【不具合対応・2026-08-31】
 /// 「本人には保存できたように見えるが、実際はまだサーバーに届いていない」
@@ -20,6 +22,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// (Firestoreの設計上、管理者が「Aさんの端末に未送信データがある」ことを
 /// 遠隔から直接知る手段は存在しない)。そのため、この機能は「本人が自分の
 /// 未送信状態に気づける」ことを目的とし、各ユーザーの端末上で有効に働く。
+///
+/// 【機能追加・2026-08-31第2弾】アプリが開いている(フォアグラウンド/
+/// バックグラウンドで動作中)間、電波の回復を検知して自動的に再送信を
+/// 促す仕組みと、「今すぐ送信を試す」ボタンから明確な結果フィードバックを
+/// 得られる仕組みを追加した。
+///
+/// 【できないこと(正直な制約)】アプリのプロセスそのものが完全に終了
+/// (タスクから削除、またはOSによる強制終了)している間は、Dartコードは
+/// 一切実行されないため、この仕組みでは再送信できない。これはFirestoreの
+/// 設計というより、アプリが動いていない=何のコードも動かせないという
+/// OSの制約による限界。
 class PendingSyncService {
   static final PendingSyncService instance = PendingSyncService._internal();
   PendingSyncService._internal();
@@ -44,9 +57,48 @@ class PendingSyncService {
           // この端末発の書き込み」を指す。サーバーから正常に読み込めた
           // ドキュメント(他人の書き込みも含む正常な最新データ)は
           // hasPendingWrites が false になるため誤検知しない。
-          return snap.docs
-              .where((d) => d.metadata.hasPendingWrites)
-              .length;
+          return snap.docs.where((d) => d.metadata.hasPendingWrites).length;
         });
+  }
+
+  /// Firestoreの内部ネットワーク接続を一度切って入れ直すことで、
+  /// 電波復帰直後などに再接続・再送信を即座に試みるよう促す
+  /// (「揺さぶる」処理)。
+  ///
+  /// 【背景】Firestoreは通常、電波状態を自動監視して再接続するが、
+  /// Android端末によっては、OSレベルでの接続復帰通知がFirestore
+  /// クライアントに正しく伝わらず、内部の再試行タイマー(バックオフ)
+  /// が数十秒〜数分待ってから動くことがある。明示的に
+  /// disableNetwork→enableNetworkを呼ぶことで、この待ち時間を
+  /// スキップして即座に再接続を試みさせることができる。
+  Future<void> nudgeReconnect() async {
+    try {
+      await _db.disableNetwork();
+      await _db.enableNetwork();
+    } catch (_) {
+      // 失敗しても致命的ではない(次の自動再試行に任せる)。
+    }
+  }
+
+  /// 送信待ちの書き込みが完了する(サーバーに届く)まで待機する。
+  /// [timeout] 以内に完了しなければ false を返す(タイムアウト)。
+  /// 電波が全く無い場所では成功しないため、明確に「失敗」を伝えるための
+  /// もの。
+  Future<bool> waitForPendingWrites({
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
+    try {
+      await _db.waitForPendingWrites().timeout(timeout);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 端末の接続状態(Wi-Fi/モバイルデータ/オフライン)の変化を流す。
+  /// 「オフライン→オンライン」に切り替わった瞬間を検知して
+  /// [nudgeReconnect] を呼ぶための監視に使う。
+  Stream<List<ConnectivityResult>> watchConnectivity() {
+    return Connectivity().onConnectivityChanged;
   }
 }

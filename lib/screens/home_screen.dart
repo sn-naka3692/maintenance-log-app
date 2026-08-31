@@ -387,9 +387,17 @@ class _NewVersionBanner extends StatelessWidget {
 /// 電波が回復するまで保留される。この状態を放置してアプリを閉じる・
 /// 端末を再起動する等をすると、送信されないまま止まってしまう
 /// ことがあるため、目立つ位置に常時表示して気づきを促す。
-class _PendingSyncBanner extends StatelessWidget {
+class _PendingSyncBanner extends StatefulWidget {
   final int count;
   const _PendingSyncBanner({required this.count});
+
+  @override
+  State<_PendingSyncBanner> createState() => _PendingSyncBannerState();
+}
+
+class _PendingSyncBannerState extends State<_PendingSyncBanner> {
+  // 【自動再送信機能・2026-08-31追加】ボタン押下中の多重タップ防止用フラグ。
+  bool _isRetrying = false;
 
   void _showDetail(BuildContext context) {
     showDialog(
@@ -397,12 +405,13 @@ class _PendingSyncBanner extends StatelessWidget {
       builder: (_) => AlertDialog(
         title: const Text('送信待ちの日報があります'),
         content: Text(
-          'まだサーバーに送信できていない日報が$count件あります。\n\n'
+          'まだサーバーに送信できていない日報が${widget.count}件あります。\n\n'
           '現場の電波状況が悪い場所で保存すると、この画面には表示され'
           'ますが、会社のサーバー・管理者からはまだ見えていない状態です。\n\n'
           '【対応方法】\n'
           '・このアプリを開いたまま、電波の良い場所(Wi-Fiなど)で\n'
           '  数十秒ほどお待ちください。自動的に送信されます。\n'
+          '・下の「今すぐ送信を試す」ボタンでも再送信を試みます。\n'
           '・送信が完了すると、このお知らせは自動的に消えます。',
         ),
         actions: [
@@ -415,57 +424,123 @@ class _PendingSyncBanner extends StatelessWidget {
     );
   }
 
+  /// 【自動再送信機能・2026-08-31追加】
+  /// ボタン押下で「今すぐ」Firestoreへの再接続を促し、送信完了(または
+  /// タイムアウト)まで待って結果をSnackBarで知らせる。
+  /// 電波が実際に無い場所ではタイムアウトして失敗表示になるのが正しい挙動。
+  Future<void> _retryNow() async {
+    if (_isRetrying) return;
+    setState(() => _isRetrying = true);
+    final appState = context.read<AppState>();
+    bool success = false;
+    try {
+      success = await appState.retryPendingSyncNow();
+    } finally {
+      if (mounted) {
+        setState(() => _isRetrying = false);
+      }
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? '送信できました(画面表示の更新まで数秒かかる場合があります)'
+              : 'まだ送信できていません。電波の良い場所でもう一度お試しください。',
+        ),
+        backgroundColor: success ? Colors.green.shade700 : Colors.red.shade700,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => _showDetail(context),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.red.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => _showDetail(context),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.cloud_off,
+                    size: 18,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '送信待ちの日報が${widget.count}件あります',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          color: Colors.red.shade900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '電波の良い場所でアプリを開いたままお待ちください(タップで詳細)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.red.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: Colors.red.shade400),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: _isRetrying ? null : _retryNow,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red.shade800,
+                side: BorderSide(color: Colors.red.shade400),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
               ),
-              child: Icon(
-                Icons.cloud_off,
-                size: 18,
-                color: Colors.red.shade700,
+              icon: _isRetrying
+                  ? SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.red.shade800,
+                      ),
+                    )
+                  : const Icon(Icons.sync, size: 16),
+              label: Text(
+                _isRetrying ? '送信中...' : '今すぐ送信を試す',
+                style: const TextStyle(fontSize: 12.5),
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '送信待ちの日報が$count件あります',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
-                      color: Colors.red.shade900,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '電波の良い場所でアプリを開いたままお待ちください(タップで詳細)',
-                    style: TextStyle(fontSize: 11, color: Colors.red.shade700),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.red.shade400),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

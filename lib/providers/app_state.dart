@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import '../models/case.dart';
 import '../models/store.dart';
@@ -25,22 +26,59 @@ class AppState extends ChangeNotifier {
   int _pendingSyncCount = 0;
   int get pendingSyncCount => _pendingSyncCount;
 
+  // 【機能追加・2026-08-31第2弾】アプリが起動している間、電波の復帰を
+  // 検知して自動的に再送信を促す(nudgeReconnect)ための接続監視。
+  // これにより「アプリを開いたまま待つ」だけでなく、電波が戻った瞬間に
+  // 積極的に再送信のきっかけを作れる(通常のFirestore自動再試行の
+  // 待ち時間を短縮する)。
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  ConnectivityResult _lastConnectivity = ConnectivityResult.none;
+
   void _watchPendingSync(String authorId) {
     _pendingSyncSub?.cancel();
     _pendingSyncCount = 0;
-    _pendingSyncSub = _pendingSyncService
-        .watchPendingCount(authorId)
-        .listen((count) {
-          if (_pendingSyncCount != count) {
-            _pendingSyncCount = count;
-            notifyListeners();
-          }
-        });
+    _pendingSyncSub = _pendingSyncService.watchPendingCount(authorId).listen((
+      count,
+    ) {
+      if (_pendingSyncCount != count) {
+        _pendingSyncCount = count;
+        notifyListeners();
+      }
+    });
+    _watchConnectivityForAutoRetry();
+  }
+
+  void _watchConnectivityForAutoRetry() {
+    _connectivitySub?.cancel();
+    _connectivitySub = _pendingSyncService.watchConnectivity().listen((
+      results,
+    ) {
+      final isOffline =
+          results.isEmpty || results.every((r) => r == ConnectivityResult.none);
+      final current = isOffline ? ConnectivityResult.none : results.first;
+      // オフライン→オンラインへ変化した瞬間だけ「揺さぶり」を行う
+      // (オンライン中に何度もdisable/enableを繰り返すのは無駄なため)。
+      if (_lastConnectivity == ConnectivityResult.none && !isOffline) {
+        _pendingSyncService.nudgeReconnect();
+      }
+      _lastConnectivity = current;
+    });
+  }
+
+  /// 【機能追加・2026-08-31第2弾】「今すぐ送信を試す」ボタン用。
+  /// 明示的に再接続を促し、送信待ちの書き込みがサーバーに届くまで
+  /// (最大12秒)待機する。成功/失敗をはっきり返すことで、
+  /// ボタンに実際の意味を持たせる(押しても何も起きない、では
+  /// ユーザーが不信感を持つため)。
+  Future<bool> retryPendingSyncNow() async {
+    await _pendingSyncService.nudgeReconnect();
+    return _pendingSyncService.waitForPendingWrites();
   }
 
   @override
   void dispose() {
     _pendingSyncSub?.cancel();
+    _connectivitySub?.cancel();
     super.dispose();
   }
 
@@ -102,6 +140,9 @@ class AppState extends ChangeNotifier {
     await _pendingSyncSub?.cancel();
     _pendingSyncSub = null;
     _pendingSyncCount = 0;
+    await _connectivitySub?.cancel();
+    _connectivitySub = null;
+    _lastConnectivity = ConnectivityResult.none;
     await _service.signOut();
     _currentUser = null;
     notifyListeners();
@@ -292,7 +333,9 @@ class AppState extends ChangeNotifier {
 
   /// 指定した案件に紐づく日報一覧を取得する(新しい順)。
   List<WorkReport> getReportsForCase(WorkCase c) {
-    final list = _reports.where((r) => c.linkedReportIds.contains(r.id)).toList();
+    final list = _reports
+        .where((r) => c.linkedReportIds.contains(r.id))
+        .toList();
     list.sort((a, b) => b.visitDate.compareTo(a.visitDate));
     return list;
   }
