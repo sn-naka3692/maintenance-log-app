@@ -120,7 +120,15 @@ class _HomeScreenState extends State<HomeScreen> {
             // 【更新お知らせ・v1.2.13】サーバー側で本当に新しいバージョンが
             // 配布されている場合はこちらを優先表示(未ダウンロードの端末にも
             // 気づかせる)。それ以外は従来の「更新履歴・未読」バナーを表示する。
-            if (_hasServerUpdate)
+            // 【不具合対応・2026-08-31】電波不良等でまだサーバーに送信できて
+            // いない日報がある場合、本人が気づけるように最優先で表示する。
+            // (保存自体は成功しているように見えても、管理者側にはまだ
+            // 反映されていない状態のため、他のお知らせより優先度を高くする)
+            if (appState.pendingSyncCount > 0)
+              SliverToBoxAdapter(
+                child: _PendingSyncBanner(count: appState.pendingSyncCount),
+              )
+            else if (_hasServerUpdate)
               SliverToBoxAdapter(
                 child: _NewVersionBanner(
                   latestVersion: _serverLatestVersion,
@@ -363,6 +371,99 @@ class _NewVersionBanner extends StatelessWidget {
               ),
             ),
             Icon(Icons.chevron_right, color: Colors.orange.shade400),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 【不具合対応・2026-08-31】
+/// 電波不良等で、自分が保存した日報がまだサーバーに送信されていない
+/// (端末内に留まっている)ことを本人に知らせるバナー。
+///
+/// Firestoreはオフライン永続化がデフォルト有効なため、保存操作自体は
+/// 電波が無い場所でも「成功」して見えるが、実際のサーバーへの反映は
+/// 電波が回復するまで保留される。この状態を放置してアプリを閉じる・
+/// 端末を再起動する等をすると、送信されないまま止まってしまう
+/// ことがあるため、目立つ位置に常時表示して気づきを促す。
+class _PendingSyncBanner extends StatelessWidget {
+  final int count;
+  const _PendingSyncBanner({required this.count});
+
+  void _showDetail(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('送信待ちの日報があります'),
+        content: Text(
+          'まだサーバーに送信できていない日報が$count件あります。\n\n'
+          '現場の電波状況が悪い場所で保存すると、この画面には表示され'
+          'ますが、会社のサーバー・管理者からはまだ見えていない状態です。\n\n'
+          '【対応方法】\n'
+          '・このアプリを開いたまま、電波の良い場所(Wi-Fiなど)で\n'
+          '  数十秒ほどお待ちください。自動的に送信されます。\n'
+          '・送信が完了すると、このお知らせは自動的に消えます。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => _showDetail(context),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.cloud_off,
+                size: 18,
+                color: Colors.red.shade700,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '送信待ちの日報が$count件あります',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      color: Colors.red.shade900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '電波の良い場所でアプリを開いたままお待ちください(タップで詳細)',
+                    style: TextStyle(fontSize: 11, color: Colors.red.shade700),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.red.shade400),
           ],
         ),
       ),

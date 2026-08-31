@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/case.dart';
 import '../models/store.dart';
@@ -5,6 +6,7 @@ import '../models/user.dart';
 import '../models/work_report.dart';
 import '../services/case_service.dart';
 import '../services/case_sync_failure_service.dart';
+import '../services/pending_sync_service.dart';
 import '../services/report_service.dart';
 import '../services/store_service.dart';
 
@@ -14,6 +16,33 @@ class AppState extends ChangeNotifier {
   final CaseService _caseService = CaseService.instance;
   final CaseSyncFailureService _caseSyncFailureService =
       CaseSyncFailureService.instance;
+  final PendingSyncService _pendingSyncService = PendingSyncService.instance;
+
+  // 【不具合対応・2026-08-31】自分の日報のうち、まだサーバーへの送信が
+  // 完了していない(電波不良等で端末内に留まっている)件数。
+  // 0件なら正常。ホーム画面の警告バナー表示に使う。
+  StreamSubscription<int>? _pendingSyncSub;
+  int _pendingSyncCount = 0;
+  int get pendingSyncCount => _pendingSyncCount;
+
+  void _watchPendingSync(String authorId) {
+    _pendingSyncSub?.cancel();
+    _pendingSyncCount = 0;
+    _pendingSyncSub = _pendingSyncService
+        .watchPendingCount(authorId)
+        .listen((count) {
+          if (_pendingSyncCount != count) {
+            _pendingSyncCount = count;
+            notifyListeners();
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    _pendingSyncSub?.cancel();
+    super.dispose();
+  }
 
   AppUser? _currentUser;
   AppUser? get currentUser => _currentUser;
@@ -43,6 +72,9 @@ class AppState extends ChangeNotifier {
       _currentUser = _service.getCurrentUser();
       _reports = _service.getAllReports();
       _stores = _storeService.getAll();
+      if (_currentUser != null) {
+        _watchPendingSync(_currentUser!.id);
+      }
       _error = null;
     } catch (e) {
       _error = 'データの読み込みに失敗しました: $e';
@@ -61,11 +93,15 @@ class AppState extends ChangeNotifier {
     if (_currentUser != null) {
       _reports = _service.getAllReports();
       _stores = _storeService.getAll();
+      _watchPendingSync(_currentUser!.id);
     }
     notifyListeners();
   }
 
   Future<void> signOut() async {
+    await _pendingSyncSub?.cancel();
+    _pendingSyncSub = null;
+    _pendingSyncCount = 0;
     await _service.signOut();
     _currentUser = null;
     notifyListeners();
