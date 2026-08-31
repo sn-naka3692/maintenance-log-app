@@ -4,6 +4,7 @@ import '../models/store.dart';
 import '../models/user.dart';
 import '../models/work_report.dart';
 import '../services/case_service.dart';
+import '../services/case_sync_failure_service.dart';
 import '../services/report_service.dart';
 import '../services/store_service.dart';
 
@@ -11,6 +12,8 @@ class AppState extends ChangeNotifier {
   final ReportService _service = ReportService.instance;
   final StoreService _storeService = StoreService.instance;
   final CaseService _caseService = CaseService.instance;
+  final CaseSyncFailureService _caseSyncFailureService =
+      CaseSyncFailureService.instance;
 
   AppUser? _currentUser;
   AppUser? get currentUser => _currentUser;
@@ -147,20 +150,85 @@ class AppState extends ChangeNotifier {
   ///
   /// 【重要】これはあくまで「後から便利に検索・集計できるようにする」
   /// 付随機能であり、日報の保存自体(従業員にとっての本来の目的)を
-  /// 妨げてはならない。そのため失敗してもエラーを表に出さず、
-  /// ログに記録するだけに留める(ベストエフォート)。
+  /// 妨げてはならない。そのため失敗しても例外は表に投げず、
+  /// ベストエフォートで処理を続ける。
+  ///
+  /// 【不具合修正・2026-08-31】
+  /// 以前は失敗時にデバッグモードでの `debugPrint` のみで記録しており、
+  /// 本番環境では失敗が発生していても管理者から一切見えなかった
+  /// (=「日報にはある情報が案件に反映されない」不整合に気づく手段が
+  /// なかった)。CaseSyncFailureServiceを使って失敗をFirestoreへ記録し、
+  /// 案件一覧画面の管理者向けバッジ・一覧から気づけるようにする。
+  /// 成功した場合は、過去に記録が残っていれば消去する。
   Future<void> _syncCaseSilently(WorkReport report) async {
     try {
       final caseId = await _caseService.syncCaseForReport(report);
       if (caseId.isNotEmpty && report.caseId != caseId) {
         report.caseId = caseId;
       }
+      // 成功したので、過去にこの日報の失敗記録が残っていればクリアする。
+      await _caseSyncFailureService.clearFailure(report.id);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('案件グルーピング処理に失敗しました(日報自体は保存済み): $e');
       }
+      final summary =
+          '${report.clientName.isNotEmpty ? report.clientName : "(店舗不明)"}'
+          ' ・ ${report.authorName} ・ '
+          '${report.visitDate.year}/${report.visitDate.month}/${report.visitDate.day}';
+      await _caseSyncFailureService.recordFailure(
+        reportId: report.id,
+        reportSummary: summary,
+        errorMessage: e.toString(),
+      );
     }
   }
+
+  /// 【管理者用】現在記録されている「案件への自動反映に失敗した日報」の
+  /// 一覧を取得する。
+  Future<List<CaseSyncFailure>> getCaseSyncFailures() =>
+      _caseSyncFailureService.getAllFailures();
+
+  /// 【管理者用】未解決の同期失敗件数のみを取得する(バッジ表示用)。
+  Future<int> countCaseSyncFailures() =>
+      _caseSyncFailureService.countFailures();
+
+  /// 【管理者用】同期失敗した日報1件について、現在の判定ロジックで
+  /// 再同期を試みる。成功すれば失敗記録は自動的に消える。
+  Future<bool> retryCaseSync(String reportId) async {
+    final report = _service.getReportById(reportId);
+    if (report == null) {
+      // 日報自体が既に削除されている場合は、記録だけ消してあげる。
+      await _caseSyncFailureService.clearFailure(reportId);
+      return false;
+    }
+    try {
+      final caseId = await _caseService.syncCaseForReport(report);
+      if (caseId.isNotEmpty && report.caseId != caseId) {
+        report.caseId = caseId;
+        await _service.updateReport(report);
+      }
+      await _caseSyncFailureService.clearFailure(reportId);
+      await refreshReports();
+      return true;
+    } catch (e) {
+      final summary =
+          '${report.clientName.isNotEmpty ? report.clientName : "(店舗不明)"}'
+          ' ・ ${report.authorName} ・ '
+          '${report.visitDate.year}/${report.visitDate.month}/${report.visitDate.day}';
+      await _caseSyncFailureService.recordFailure(
+        reportId: report.id,
+        reportSummary: summary,
+        errorMessage: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// 【管理者用】同期失敗記録を「解決済み」として手動で消す
+  /// (例: 日報自体が意図的に未グルーピングのままで問題ないと判断した場合)。
+  Future<void> dismissCaseSyncFailure(String reportId) =>
+      _caseSyncFailureService.clearFailure(reportId);
 
   Future<void> deleteReport(String id) async {
     // 削除前に案件からの切り離しを試みる(失敗しても日報削除は継続する)

@@ -5,6 +5,7 @@ import '../models/case.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 import 'case_detail_screen.dart';
+import 'case_sync_failure_screen.dart';
 
 /// 「案件」一覧画面。
 ///
@@ -29,6 +30,7 @@ class _CaseListScreenState extends State<CaseListScreen> {
   bool _resyncing = false;
   bool _recalculating = false;
   bool _mergeMode = false;
+  int _syncFailureCount = 0;
   final Set<String> _selectedForMerge = {};
 
   // 【案件フォルダー化・2026-08追加】案件が増えてきた際の一覧性対策として、
@@ -46,6 +48,23 @@ class _CaseListScreenState extends State<CaseListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _loadSyncFailureCount(),
+    );
+  }
+
+  /// 【管理者用】「日報→案件」自動反映の失敗件数を取得する
+  /// (AppBarのバッジ表示用)。取得に失敗しても画面自体には影響させない。
+  Future<void> _loadSyncFailureCount() async {
+    try {
+      final appState = context.read<AppState>();
+      if (!appState.isAdmin) return;
+      final count = await appState.countCaseSyncFailures();
+      if (!mounted) return;
+      setState(() => _syncFailureCount = count);
+    } catch (_) {
+      // バッジ表示のための補助情報取得なので、失敗しても無視する。
+    }
   }
 
   @override
@@ -473,6 +492,24 @@ class _CaseListScreenState extends State<CaseListScreen> {
               )
             : null,
         actions: [
+          if (isAdmin && !_mergeMode)
+            IconButton(
+              icon: Badge(
+                isLabelVisible: _syncFailureCount > 0,
+                label: Text('$_syncFailureCount'),
+                backgroundColor: AppColors.danger,
+                child: const Icon(Icons.warning_amber_outlined),
+              ),
+              tooltip: '日報→案件の反映エラー一覧',
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const CaseSyncFailureScreen(),
+                  ),
+                );
+                if (mounted) await _loadSyncFailureCount();
+              },
+            ),
           if (isAdmin && !_mergeMode)
             IconButton(
               icon: const Icon(Icons.merge_type),

@@ -148,6 +148,26 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ------------------------------------------------------------
+    // case_sync_failures: 「日報→案件」自動グルーピング処理
+    // (CaseService.syncCaseForReport)の失敗記録(2026-08-31導入)。
+    // 従来は失敗してもデバッグログのみで本番からは見えなかった問題への
+    // 対応として、失敗をここへ記録し、案件一覧画面(管理者用)から
+    // 一覧・再試行・解決済みマークができるようにする。
+    // ドキュメントIDは対象日報のreportIdと同一(=同一日報の失敗記録は
+    // 上書きされ、複数レコードが積み上がらない)。
+    // - 読み取り: 管理者(一般/最高)のみ(現場ユーザーには不要な情報のため)
+    // - 作成/更新: ログイン済みなら誰でも可。日報保存(本人 or 管理者)に
+    //   付随してAppState._syncCaseSilentlyが裏側で自動的に書き込むため、
+    //   work_reportsの操作権限と整合させている。
+    // - 削除: ログイン済みなら誰でも可(再同期成功時の自動クリア、
+    //   および管理者による「解決済みにする」操作の両方で必要)。
+    // ------------------------------------------------------------
+    match /case_sync_failures/{reportId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isSignedIn();
+    }
+
     // その他の未定義コレクションはデフォルトで拒否
     match /{document=**} {
       allow read, write: if false;
