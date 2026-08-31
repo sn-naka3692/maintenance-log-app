@@ -289,6 +289,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   }, childCount: displayedReports.length),
                 ),
               ),
+            // 【使用後クローズ案内・2026-08-31追加】
+            // 送信待ちの日報が無いときのみ表示。送信待ちバナーは逆に
+            // 「開いたままお待ちください」と案内しているため、矛盾しない
+            // ようにここで排他制御している。
+            if (appState.pendingSyncCount == 0)
+              const SliverToBoxAdapter(child: _CloseAppTipBanner()),
           ],
         ),
       ),
@@ -541,6 +547,69 @@ class _PendingSyncBannerState extends State<_PendingSyncBanner> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 【使用後クローズ案内・2026-08-31追加】
+///
+/// 作業終了後にアプリを閉じることを促す控えめな案内バナー。
+/// 送信待ちの日報が無い(=送信完了済み)ときのみ表示され、一覧の一番下に
+/// ひっそりと表示する。タップすると理由を説明するダイアログを開く。
+///
+/// 【表示する理由】
+/// ・Web版はブラウザの仕様上、タブを開いたままだと新しいバージョンに
+///   永久に切り替わらないことがある(タブを閉じるまで古い版が残る)。
+/// ・APK版でも、アプリを開いたままにしておくとバッテリー・通信量を
+///   余計に消費する。
+class _CloseAppTipBanner extends StatelessWidget {
+  const _CloseAppTipBanner();
+
+  void _showDetail(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('作業が終わったらアプリを閉じましょう'),
+        content: const Text(
+          '本日の日報登録・作業が終わったら、アプリを閉じることをおすすめ'
+          'します。\n\n'
+          '【理由】\n'
+          '・Web版をお使いの方:ブラウザのタブを開いたままにしていると、'
+          '新しいバージョンに切り替わらないことがあります(タブを閉じる'
+          'まで古い版が残り続ける仕組みのためです)。\n'
+          '・APK版をお使いの方:アプリを開いたままにしておくと、バッテリー'
+          'や通信量を余計に消費してしまいます。\n\n'
+          '※送信待ちの日報がある間は、先に送信が完了する(この画面の'
+          '警告が消える)のを確認してから閉じてください。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('わかりました'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => _showDetail(context),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.info_outline, size: 14, color: Colors.grey.shade500),
+            const SizedBox(width: 6),
+            Text(
+              '作業が終わったらアプリを閉じてください(理由を見る)',
+              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade500),
+            ),
+          ],
+        ),
       ),
     );
   }
