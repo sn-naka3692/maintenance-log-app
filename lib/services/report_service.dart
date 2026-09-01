@@ -349,6 +349,7 @@ class ReportService {
     bool onlySuccess = false,
     bool onlyIssues = false,
     bool onlyRefrigerantFilling = false,
+    bool onlyKnowledgeOverdue = false,
   }) {
     var list = List<WorkReport>.from(_reportsCache);
 
@@ -388,6 +389,9 @@ class ReportService {
     }
     if (onlyRefrigerantFilling) {
       list = list.where((r) => r.hasRefrigerantFilling).toList();
+    }
+    if (onlyKnowledgeOverdue) {
+      list = list.where((r) => r.isKnowledgeOverdue).toList();
     }
     if (keyword != null && keyword.trim().isNotEmpty) {
       final kw = keyword.trim().toLowerCase();

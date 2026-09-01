@@ -586,6 +586,7 @@ class AppState extends ChangeNotifier {
     bool onlySuccess = false,
     bool onlyIssues = false,
     bool onlyRefrigerantFilling = false,
+    bool onlyKnowledgeOverdue = false,
   }) {
     return _service.search(
       keyword: keyword,
@@ -598,6 +599,7 @@ class AppState extends ChangeNotifier {
       onlySuccess: onlySuccess,
       onlyIssues: onlyIssues,
       onlyRefrigerantFilling: onlyRefrigerantFilling,
+      onlyKnowledgeOverdue: onlyKnowledgeOverdue,
     );
   }
 

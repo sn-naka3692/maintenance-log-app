@@ -28,6 +28,7 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _onlySuccess = false;
   bool _onlyIssues = false;
   bool _onlyRefrigerantFilling = false;
+  bool _onlyKnowledgeOverdue = false;
   DateTime? _from;
   DateTime? _to;
   String? _filterStoreId;
@@ -90,6 +91,7 @@ class _SearchScreenState extends State<SearchScreen> {
       onlySuccess: _onlySuccess,
       onlyIssues: _onlyIssues,
       onlyRefrigerantFilling: _onlyRefrigerantFilling,
+      onlyKnowledgeOverdue: _onlyKnowledgeOverdue,
     );
     _computeNewestYearMonth(results);
     setState(() {
@@ -416,6 +418,28 @@ class _SearchScreenState extends State<SearchScreen> {
                         selected: _onlyRefrigerantFilling,
                         onSelected: (v) {
                           setState(() => _onlyRefrigerantFilling = v);
+                          _runSearch();
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      FilterChip(
+                        label: const Text('ナレッジ未入力(1週間超過)'),
+                        avatar: Icon(
+                          Icons.schedule,
+                          size: 16,
+                          color: _onlyKnowledgeOverdue
+                              ? Colors.white
+                              : Colors.orange.shade800,
+                        ),
+                        selected: _onlyKnowledgeOverdue,
+                        selectedColor: Colors.orange.shade700,
+                        labelStyle: TextStyle(
+                          color: _onlyKnowledgeOverdue
+                              ? Colors.white
+                              : Colors.orange.shade800,
+                        ),
+                        onSelected: (v) {
+                          setState(() => _onlyKnowledgeOverdue = v);
                           _runSearch();
                         },
                       ),
