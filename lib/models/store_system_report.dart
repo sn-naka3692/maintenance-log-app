@@ -6,6 +6,12 @@
 /// 自由記述だと項目の記入漏れが起きやすいため、項目ごとに入力欄を分ける。
 class StoreSystemReport {
   String receiptNumber; // 弊社受付No.
+  // 【2026-09追加】コンビニ側システムで発行される「お客様受付No」。
+  // 弊社受付Noとは別の番号で、後日SDRS等から届く請求明細・突合資料は
+  // このお客様受付Noで管理されているケースがあるため、現場入力時点で
+  // 併せて記録しておくことで、後からの突合(記入漏れチェック・請求確認)
+  // を確実に行えるようにする。
+  String customerReceiptNumber; // お客様受付No.(コンビニ側発行)
   String refrigerantType; // 冷媒種類
   String refrigerantAmount; // 充填量
   String requestContent; // 依頼内容
@@ -40,6 +46,7 @@ class StoreSystemReport {
 
   StoreSystemReport({
     this.receiptNumber = '',
+    this.customerReceiptNumber = '',
     this.refrigerantType = '',
     this.refrigerantAmount = '',
     this.requestContent = '',
@@ -73,6 +80,7 @@ class StoreSystemReport {
   /// すべての項目が空かどうか(未入力判定用)
   bool get isEmpty =>
       receiptNumber.isEmpty &&
+      customerReceiptNumber.isEmpty &&
       refrigerantType.isEmpty &&
       refrigerantAmount.isEmpty &&
       requestContent.isEmpty &&
@@ -96,6 +104,7 @@ class StoreSystemReport {
   Map<String, dynamic> toMap() {
     return {
       'receipt_number': receiptNumber,
+      'customer_receipt_number': customerReceiptNumber,
       'refrigerant_type': refrigerantType,
       'refrigerant_amount': refrigerantAmount,
       'request_content': requestContent,
@@ -131,6 +140,7 @@ class StoreSystemReport {
     if (map == null) return StoreSystemReport();
     return StoreSystemReport(
       receiptNumber: map['receipt_number'] as String? ?? '',
+      customerReceiptNumber: map['customer_receipt_number'] as String? ?? '',
       refrigerantType: map['refrigerant_type'] as String? ?? '',
       refrigerantAmount: map['refrigerant_amount'] as String? ?? '',
       requestContent: map['request_content'] as String? ?? '',

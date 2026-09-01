@@ -168,6 +168,27 @@ class ReportCard extends StatelessWidget {
                         color: AppColors.primary,
                       ),
                     ),
+                  // 【2026-09追加】ナレッジ未入力バッジ。
+                  // 現場対応(バックオフィス系業務は対象外)で、
+                  // 「うまくいったこと」「課題・改善点」の両方が未入力の場合に
+                  // 控えめな注意アイコンを表示する。現場作業終了直後は最低限の
+                  // 必須項目のみ入力し、ナレッジ部分は後日追記する運用を想定
+                  // しており、これは「エラー」ではなく「未完了のリマインド」
+                  // として警告色より弱いグレー系で表示する。
+                  if (!report.responseType.isBackOffice &&
+                      !report.hasSuccess &&
+                      !report.hasIssues)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Tooltip(
+                        message: 'ナレッジ未入力(うまくいったこと・課題)',
+                        child: Icon(
+                          Icons.edit_note,
+                          size: 16,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
                   if (report.photoPaths.isNotEmpty)
                     const Padding(
                       padding: EdgeInsets.only(left: 4),

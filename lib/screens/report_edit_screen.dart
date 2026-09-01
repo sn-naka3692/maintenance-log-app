@@ -125,6 +125,14 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   final _nonSeRefrigerantAmountFieldKey = GlobalKey<FormFieldState<String>>();
   final _seRefrigerantTypeFieldKey = GlobalKey<FormFieldState<String>>();
   final _seRefrigerantAmountFieldKey = GlobalKey<FormFieldState<String>>();
+  // 【2026-09追加】後日の突合(記入漏れチェック・請求確認・お客様問い合わせ対応)
+  // を可能にするため、現場で必ず控えてもらう3種の管理番号を必須項目化する。
+  // - プロワン管轄案件: 伝票No(_proWanCtrl)
+  // - SE店舗案件      : 弊社受付No・お客様受付No(両方)
+  final _proWanRefFieldKey = GlobalKey<FormFieldState<String>>();
+  final _seReceiptNumberFieldKey = GlobalKey<FormFieldState<String>>();
+  final _seCustomerReceiptNumberFieldKey =
+      GlobalKey<FormFieldState<String>>();
 
   @override
   void initState() {
@@ -168,6 +176,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     final ss = e?.storeSystemReportCopy ?? StoreSystemReport();
     _ssCtrls = {
       'receiptNumber': TextEditingController(text: ss.receiptNumber),
+      'customerReceiptNumber': TextEditingController(
+        text: ss.customerReceiptNumber,
+      ),
       'refrigerantType': TextEditingController(text: ss.refrigerantType),
       'refrigerantAmount': TextEditingController(text: ss.refrigerantAmount),
       'requestContent': TextEditingController(text: ss.requestContent),
@@ -439,6 +450,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   StoreSystemReport _buildStoreSystemReport() {
     return StoreSystemReport(
       receiptNumber: _ssCtrls['receiptNumber']!.text.trim(),
+      customerReceiptNumber: _ssCtrls['customerReceiptNumber']!.text.trim(),
       refrigerantType: _ssCtrls['refrigerantType']!.text.trim(),
       refrigerantAmount: _ssCtrls['refrigerantAmount']!.text.trim(),
       requestContent: _ssCtrls['requestContent']!.text.trim(),
@@ -810,6 +822,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   void _scrollToFirstInvalidField() {
     final candidates = [
       _workContentFieldKey,
+      _proWanRefFieldKey,
+      _seReceiptNumberFieldKey,
+      _seCustomerReceiptNumberFieldKey,
       _seRefrigerantTypeFieldKey,
       _seRefrigerantAmountFieldKey,
       _nonSeRefrigerantTypeFieldKey,
@@ -1373,10 +1388,20 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             const SizedBox(height: 12),
             _buildField(
               controller: _proWanCtrl,
-              label: 'プロワン管理番号(伝票No・任意)',
+              label: !isSEStore && !_responseType.isBackOffice
+                  ? 'プロワン管理番号(伝票No・必須)'
+                  : 'プロワン管理番号(伝票No・任意)',
               icon: Icons.numbers,
               hint: 'プロワン側で管理している案件番号(伝票Noと同じ)',
               fieldKey: 'pro_wan_ref_number',
+              formFieldKey: _proWanRefFieldKey,
+              // 【2026-09追加】プロワン管轄案件(SE店舗以外)では、後日SDRS等の
+              // 請求明細・記入漏れチェックとの突合キーとなるため必須とする。
+              // SE店舗案件は弊社受付No/お客様受付Noが突合キーの役割を担うため
+              // ここでは任意のままとする。
+              validator: (!isSEStore && !_responseType.isBackOffice)
+                  ? (v) => (v == null || v.trim().isEmpty) ? '必須項目です' : null
+                  : null,
             ),
             _buildCaseGroupingHint(_proWanCtrl),
             const SizedBox(height: 12),
@@ -1598,10 +1623,26 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               const SizedBox(height: 12),
               _buildField(
                 controller: _ssCtrls['receiptNumber']!,
-                label: '弊社受付No.',
+                label: '弊社受付No.(必須)',
                 icon: Icons.confirmation_number_outlined,
+                formFieldKey: _seReceiptNumberFieldKey,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? '必須項目です' : null,
               ),
               _buildCaseGroupingHint(_ssCtrls['receiptNumber']!),
+              const SizedBox(height: 12),
+              // 【2026-09追加】コンビニ側システムで発行される「お客様受付No」。
+              // SDRSから届く請求明細書等はこの番号で管理されているケースがあり、
+              // 後日の突合(記入漏れチェック・請求確認)を確実にするため必須とする。
+              _buildField(
+                controller: _ssCtrls['customerReceiptNumber']!,
+                label: 'お客様受付No.(コンビニ側発行・必須)',
+                icon: Icons.confirmation_number,
+                hint: 'コンビニ側システムで発行された受付No',
+                formFieldKey: _seCustomerReceiptNumberFieldKey,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? '必須項目です' : null,
+              ),
               const SizedBox(height: 12),
               _buildField(
                 controller: _ssCtrls['storeNumber']!,
