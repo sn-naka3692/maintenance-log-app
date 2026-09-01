@@ -63,6 +63,15 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   // OCR(AIスキャン)はこの項目を対象外とする(誤検出対策・運用効率化のため)。
   static const String _workerNameOtherValue = '__other__';
   String? _workerNameSelection;
+  // 【2026-09追加】冷媒種類の入力方式:
+  // 表記ゆれ防止のため、事務側が提供したマスタデータ(RefrigerantTypeOptions)
+  // からのプルダウン選択を基本とする。リストに無い冷媒が現場で使われた場合の
+  // 逃げ道として「その他」を選ぶと自由入力欄が現れる(半角英数チェックは
+  // 従来通りSE店舗側のみ適用)。SE店舗側・プロワン管轄側はそれぞれ別の
+  // コントローラー(_ssCtrls['refrigerantType'] / _nonSeRefrigerantTypeCtrl)
+  // を持つため、選択状態も個別に管理する。
+  String? _seRefrigerantTypeSelection;
+  String? _nonSeRefrigerantTypeSelection;
   DateTime _visitDate = DateTime.now();
   TimeOfDay _startTime = TimeOfDay.now();
   TimeOfDay _endTime = TimeOfDay.now();
@@ -227,6 +236,24 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       _manualReviewNeeded = e.manualReviewNeeded;
       _matchedCacheJobNumber = e.matchedCacheJobNumber;
     }
+    // 既存データの「冷媒種類」(過去の自由入力・OCR取り込み分含む)を、
+    // マスタ選択肢(RefrigerantTypeOptions.all)と照合し、一致すれば
+    // その選択肢を選択済み状態にする。一致しない場合(過去の表記ゆれ・
+    // リスト未収録の冷媒等)は「その他」として扱い、自由入力欄に既存値を
+    // 保持したまま表示する。
+    final existingSeRefrigerant = _ssCtrls['refrigerantType']!.text.trim();
+    _seRefrigerantTypeSelection = existingSeRefrigerant.isEmpty
+        ? null
+        : (RefrigerantTypeOptions.all.contains(existingSeRefrigerant)
+              ? existingSeRefrigerant
+              : RefrigerantTypeOptions.otherValue);
+    final existingNonSeRefrigerant = _nonSeRefrigerantTypeCtrl.text.trim();
+    _nonSeRefrigerantTypeSelection = existingNonSeRefrigerant.isEmpty
+        ? null
+        : (RefrigerantTypeOptions.all.contains(existingNonSeRefrigerant)
+              ? existingNonSeRefrigerant
+              : RefrigerantTypeOptions.otherValue);
+
     // 既存データの「作業者氏名」(過去の手入力・OCR取り込み分含む)を、
     // 従業員マスタの氏名と照合し、一致すればその社員を選択済み状態にする。
     // 一致しない場合(退職者・協力会社など)は「その他(手入力)」として扱う。
@@ -668,6 +695,16 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         _nonSeRefrigerantTypeCtrl,
         confirmed['RefrigerantType'],
       );
+      // 【2026-09追加】冷媒種類をプルダウン化した際、OCR自動反映された値が
+      // マスタ選択肢に含まれる場合はプルダウンの選択状態も同期する
+      // (含まれない場合は「その他」として自由入力欄に表示され続ける)。
+      final syncedNonSeRefrigerant = _nonSeRefrigerantTypeCtrl.text.trim();
+      if (syncedNonSeRefrigerant.isNotEmpty) {
+        _nonSeRefrigerantTypeSelection =
+            RefrigerantTypeOptions.all.contains(syncedNonSeRefrigerant)
+            ? syncedNonSeRefrigerant
+            : RefrigerantTypeOptions.otherValue;
+      }
       applyIfNotManual(
         'non_se_refrigerant_amount_kg',
         _nonSeRefrigerantAmountCtrl,
@@ -1665,36 +1702,28 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildField(
-                      controller: _ssCtrls['refrigerantType']!,
-                      label: '冷媒種類',
-                      icon: Icons.ac_unit,
-                      hint: '例: R410A / NONE',
-                      inputFormatters: [_halfWidthAlphaNumFormatter],
-                      formFieldKey: _seRefrigerantTypeFieldKey,
-                      validator: _halfWidthAlphaNumValidator,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildField(
-                      controller: _ssCtrls['refrigerantAmount']!,
-                      label: '充填量(kg)',
-                      icon: Icons.opacity,
-                      hint: '例: 1.5 / 0',
-                      inputFormatters: [_halfWidthAlphaNumFormatter],
-                      formFieldKey: _seRefrigerantAmountFieldKey,
-                      validator: _halfWidthAlphaNumValidator,
-                    ),
-                  ),
-                ],
+              _buildRefrigerantTypeDropdown(
+                selection: _seRefrigerantTypeSelection,
+                onSelectionChanged: (v) =>
+                    setState(() => _seRefrigerantTypeSelection = v),
+                controller: _ssCtrls['refrigerantType']!,
+                formFieldKey: _seRefrigerantTypeFieldKey,
+                requireHalfWidthOnOther: true,
+              ),
+              const SizedBox(height: 12),
+              _buildField(
+                controller: _ssCtrls['refrigerantAmount']!,
+                label: '充填量(kg)',
+                icon: Icons.opacity,
+                hint: '例: 1.5 / 0',
+                inputFormatters: [_halfWidthAlphaNumFormatter],
+                formFieldKey: _seRefrigerantAmountFieldKey,
+                validator: _halfWidthAlphaNumValidator,
               ),
               _buildRefrigerantNotice(
-                '半角英数のみ入力できます。充填していない場合は「冷媒種類」に'
-                '「NONE」、「充填量」に「0」と入力してください。',
+                '冷媒種類はリストから選択してください(リストにない場合は'
+                '「その他」を選び手入力・半角英数のみ)。充填していない場合は'
+                '「冷媒種類」に「NONE」、「充填量」に「0」を選択・入力してください。',
               ),
               const SizedBox(height: 16),
               Text(
@@ -2049,11 +2078,84 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   }
 
   /// 半角英数のみ許可する入力フォーマッタ(コンビニ側システム入力控えの
-  /// 冷媒種類・充填量用。コンビニ側の業務システム入力ルールに準拠するため
+  /// 充填量用。コンビニ側の業務システム入力ルールに準拠するため
   /// 全角文字や記号・スペースの混入を防ぐ)。
   static final _halfWidthAlphaNumFormatter = FilteringTextInputFormatter.allow(
     RegExp(r'[A-Za-z0-9.]'),
   );
+
+  /// 【2026-09追加】冷媒種類プルダウン(SE店舗側・プロワン管轄側で共用)。
+  ///
+  /// 【設計】表記ゆれ防止のため、事務側提供のマスタ(RefrigerantTypeOptions)
+  /// からの選択を基本とする。リストに無い冷媒が現場で使われた場合の逃げ道
+  /// として「その他」を用意し、選択時のみ下に自由入力欄を表示する。
+  /// 選択結果は常にcontrollerのtextへ反映するため、保存処理(_buildField側の
+  /// バリデーション、_buildStoreSystemReport/_save等)は変更不要。
+  ///
+  /// [selection]/[onSelectionChanged]: 選択中の値を保持するstate変数との橋渡し。
+  /// [controller]: 実際の保存対象(_ssCtrls['refrigerantType'] または
+  /// _nonSeRefrigerantTypeCtrl)。
+  /// [requireHalfWidthOnOther]: 「その他」選択時の自由入力欄に半角英数の
+  /// バリデーションを適用するか(SE店舗側はコンビニ側システムの入力規則に
+  /// 合わせてtrue、プロワン管轄側は全角も許容するためfalse)。
+  Widget _buildRefrigerantTypeDropdown({
+    required String? selection,
+    required void Function(String?) onSelectionChanged,
+    required TextEditingController controller,
+    required GlobalKey<FormFieldState<String>> formFieldKey,
+    required bool requireHalfWidthOnOther,
+  }) {
+    final isOther = selection == RefrigerantTypeOptions.otherValue;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String?>(
+          initialValue: selection,
+          decoration: const InputDecoration(
+            labelText: '冷媒種類',
+            prefixIcon: Icon(Icons.ac_unit),
+          ),
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem<String?>(value: null, child: Text('選択してください')),
+            ...RefrigerantTypeOptions.all.map(
+              (v) => DropdownMenuItem<String?>(
+                value: v,
+                child: Text(v, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ],
+          validator: (v) => (v == null || v.trim().isEmpty) ? '必須項目です' : null,
+          onChanged: (v) {
+            onSelectionChanged(v);
+            if (v != null && v != RefrigerantTypeOptions.otherValue) {
+              controller.text = v;
+            } else if (v == null) {
+              controller.text = '';
+            }
+            // 「その他」選択時は下の自由入力欄の値をそのまま使うため、
+            // ここではcontrollerを変更しない(既存の自由入力を保持)。
+          },
+        ),
+        if (isOther) ...[
+          const SizedBox(height: 10),
+          _buildField(
+            controller: controller,
+            label: '冷媒種類(その他・手入力)',
+            icon: Icons.edit_outlined,
+            hint: requireHalfWidthOnOther ? '例: R290 (半角英数のみ)' : '例: R290',
+            inputFormatters: requireHalfWidthOnOther
+                ? [_halfWidthAlphaNumFormatter]
+                : null,
+            formFieldKey: formFieldKey,
+            validator: requireHalfWidthOnOther
+                ? _halfWidthAlphaNumValidator
+                : (v) => (v == null || v.trim().isEmpty) ? '必須項目です' : null,
+          ),
+        ],
+      ],
+    );
+  }
 
   String? _halfWidthAlphaNumValidator(String? v) {
     if (v == null || v.trim().isEmpty) {
@@ -2135,41 +2237,30 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _buildField(
-                  controller: _nonSeRefrigerantTypeCtrl,
-                  label: '冷媒種類',
-                  icon: Icons.ac_unit,
-                  hint: '例: R410A / なし',
-                  fieldKey: 'non_se_refrigerant_type',
-                  formFieldKey: _nonSeRefrigerantTypeFieldKey,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? '必須項目です(未充填時は「なし」)'
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildField(
-                  controller: _nonSeRefrigerantAmountCtrl,
-                  label: '冷媒量(kg)',
-                  icon: Icons.opacity,
-                  hint: '例: 1.5 / 0',
-                  fieldKey: 'non_se_refrigerant_amount_kg',
-                  formFieldKey: _nonSeRefrigerantAmountFieldKey,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? '必須項目です(未充填時は「0」)'
-                      : null,
-                ),
-              ),
-            ],
+          _buildRefrigerantTypeDropdown(
+            selection: _nonSeRefrigerantTypeSelection,
+            onSelectionChanged: (v) =>
+                setState(() => _nonSeRefrigerantTypeSelection = v),
+            controller: _nonSeRefrigerantTypeCtrl,
+            formFieldKey: _nonSeRefrigerantTypeFieldKey,
+            requireHalfWidthOnOther: false,
+          ),
+          const SizedBox(height: 12),
+          _buildField(
+            controller: _nonSeRefrigerantAmountCtrl,
+            label: '冷媒量(kg)',
+            icon: Icons.opacity,
+            hint: '例: 1.5 / 0',
+            fieldKey: 'non_se_refrigerant_amount_kg',
+            formFieldKey: _nonSeRefrigerantAmountFieldKey,
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? '必須項目です(未充填時は「0」)'
+                : null,
           ),
           _buildRefrigerantNotice(
-            '充填していない場合は「冷媒種類」に「なし」、「冷媒量」に「0」と'
-            '入力してください。充填有無に関わらず両方の入力が必須です。',
+            '冷媒種類はリストから選択してください(リストにない場合は'
+            '「その他」を選び手入力可)。充填していない場合は「冷媒種類」に'
+            '「なし」、「冷媒量」に「0」を選択・入力してください。',
           ),
         ],
       ),

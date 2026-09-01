@@ -37,6 +37,53 @@ class CaseRoleOptions {
   ];
 }
 
+/// 「冷媒種類」のプルダウン選択肢(定型)。
+///
+/// 【設計方針・2026-09追加】これまで冷媒種類は自由入力(SE店舗側は
+/// 半角英数のみのバリデーションあり)だったが、表記ゆれ(例: "R410A"
+/// "r410a" "R-410A" 等)が請求業務・部品突合の妨げになっていたため、
+/// 事務側が実際に使用している冷媒データ(2026-09-01提供)をもとに
+/// プルダウン化した。
+///
+/// 【未充填時の表記】「充填なし」「NONE」「なし」の3表記が実データ上
+/// 混在しているため、いずれも選択肢として残す(過去データとの表記統一は
+/// 行わず、既存の運用表記をそのまま許容する)。
+///
+/// 【リストにない冷媒への対応】現場で今後リストにない新しい冷媒が
+/// 使われる可能性があるため、末尾に「その他」を用意し、選択時は
+/// 自由入力欄を表示して手入力できるようにする(=マスタ更新が必要な
+/// 場合の逃げ道)。「その他」を追加したい冷媒名の頻度が増えてきたら、
+/// このリストに正式追加することを想定している。
+class RefrigerantTypeOptions {
+  RefrigerantTypeOptions._();
+
+  static const String otherValue = 'その他';
+
+  /// 充填が無いことを表す表記(いずれも過去データ・現場表記との互換性のため
+  /// 残している)。
+  static const List<String> noneValues = ['NONE', '充填なし', 'なし'];
+
+  /// 実在する冷媒種類(2026-09-01提供データに基づく)。
+  static const List<String> refrigerantValues = [
+    'R22',
+    'R404A',
+    'R448A',
+    'R410A',
+    'R32',
+    'R744',
+    'R474B',
+    'R463A-J',
+    'HFC-134a',
+  ];
+
+  /// プルダウンに表示する全選択肢(未充填表記 + 冷媒種類 + その他)。
+  static const List<String> all = [
+    ...noneValues,
+    ...refrigerantValues,
+    otherValue,
+  ];
+}
+
 extension ResponseTypeLabel on ResponseType {
   String get label {
     switch (this) {
