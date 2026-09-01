@@ -4,9 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_state.dart';
 import '../services/app_config_service.dart';
+import '../services/app_update_service.dart' as app_update;
 import '../theme/app_theme.dart';
-import '../utils/web_reload_stub.dart'
-    if (dart.library.js_interop) '../utils/web_reload_web.dart';
 
 /// 強制アップデートゲート: 実行中のコードが古すぎる場合に表示される
 /// 全画面ブロック画面。日報の閲覧・入力を含め、アプリを一切操作できない。
@@ -80,8 +79,17 @@ class UpdateRequiredScreen extends StatelessWidget {
                   // 再読み込みボタンを表示する。自動リロードは過去に
                   // 無限ループ事故を起こした経緯があるため、あくまで
                   // ユーザーの明示的なタップ操作のみで実行する。
+                  // 【不具合修正・2026-09-01】単純なlocation.reload()
+                  // だとService Workerのcache-firstキャッシュにより
+                  // 古いJSが返され続け、このブロック画面から永久に
+                  // 抜け出せなくなるおそれがあった。v1.2.7から実績のある
+                  // reloadForLatestVersion()(キャッシュ全削除→Service
+                  // Worker全解除→リロード)に統一し、確実に最新版へ
+                  // 更新されるようにした(skipWaiting/clients.claimは
+                  // 呼ばないため、過去のcontrollerchange無限ループ障害
+                  // の引き金にはならない)。
                   FilledButton.icon(
-                    onPressed: () => reloadWebPage(),
+                    onPressed: () => app_update.reloadForLatestVersion(),
                     icon: const Icon(Icons.refresh),
                     label: const Text('ページを再読み込みする'),
                   )

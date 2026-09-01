@@ -5,10 +5,9 @@ import 'package:provider/provider.dart';
 import '../data/changelog_data.dart';
 import '../providers/app_state.dart';
 import '../services/app_config_service.dart';
+import '../services/app_update_service.dart' as app_update;
 import '../services/update_notice_service.dart';
 import '../utils/apk_update_flow.dart';
-import '../utils/web_reload_stub.dart'
-    if (dart.library.js_interop) '../utils/web_reload_web.dart';
 import '../widgets/report_card.dart';
 import 'changelog_screen.dart';
 import 'report_detail_screen.dart';
@@ -132,8 +131,18 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverToBoxAdapter(
                 child: _NewVersionBanner(
                   latestVersion: _serverLatestVersion,
+                  // 【不具合修正・2026-09-01】以前はWeb版タップ時に単純な
+                  // location.reload()のみを行っていたため、Service Worker
+                  // のcache-firstキャッシュにより古いJSが読み込まれ続け、
+                  // 「更新のお知らせが消えない」症状(v1.2.40で発生)の
+                  // 原因になっていた。v1.2.7からプロフィール画面で実績の
+                  // あるreloadForLatestVersion()(キャッシュ全削除→
+                  // Service Worker全解除→リロード。skipWaiting/clients.claim
+                  // は呼ばないため、過去のcontrollerchange無限ループ障害の
+                  // 引き金にはならない設計)に統一し、確実に最新版へ更新
+                  // されるようにした。
                   onTap: () => kIsWeb
-                      ? reloadWebPage()
+                      ? app_update.reloadForLatestVersion()
                       : downloadAndInstallLatestApkWithDialog(context),
                 ),
               )
