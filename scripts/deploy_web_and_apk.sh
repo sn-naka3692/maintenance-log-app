@@ -62,6 +62,20 @@
 # を実行し、Firestore app_config/settings の latest_version /
 # latest_build_number / download_url を更新すること(アプリ内の
 # 「新しいバージョンがあります」通知バナーが機能しなくなるため)。
+#
+# 【重大障害・2026-09-01発生・教訓】v1.2.41で firestore.rules に
+# refrigerant_types コレクションのルールを追加したが、当時の本スクリプト
+# は `firebase deploy --only hosting` のみで firestore:rules のデプロイ
+# ステップが欠落していた。結果、本番Firestoreのルールが更新されず、
+# ログイン後に AppState.init() が refrigerant_types を読み取る際に
+# ルール未定義(デフォルト拒否)で PERMISSION_DENIED となり、WEB版・
+# APK版ともに「ログイン画面は表示されるがログイン後の全データ読み込みが
+# 失敗する」という重大障害を引き起こした。
+# 【絶対に守ること】firestore.rules を変更した回のリリースでは、
+# 必ず `firebase deploy --only firestore:rules` も実行し、本番の
+# ルールが実際に更新されたことを(Firebase Rules APIやコンソール等で)
+# 確認すること。本スクリプトの Step 5/7 として組み込み済みなので、
+# 手動デプロイに切り替える場合も本ステップを省略しないこと。
 
 set -e
 cd "$(dirname "$0")/.."
@@ -80,16 +94,16 @@ else
   echo "⚠️  警告: $SECRETS_FILE が見つかりません。スキャン機能は401エラーになります。"
 fi
 
-echo "▶ 1/6 配布用APK(arm64-v8a専用)をビルドします..."
+echo "▶ 1/7 配布用APK(arm64-v8a専用)をビルドします..."
 bash scripts/build_release_apk.sh
 APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
 
-echo "▶ 2/6 Web版をビルドします(Service Workerキャッシュ無効化 --pwa-strategy=none)..."
+echo "▶ 2/7 Web版をビルドします(Service Workerキャッシュ無効化 --pwa-strategy=none)..."
 flutter build web --release \
   --pwa-strategy=none \
   --dart-define=SCAN_PROXY_FUNCTION_KEY="${SCAN_PROXY_FUNCTION_KEY:-}"
 
-echo "▶ 3/6 Service Workerを無害な空ファイルに置き換えます(古いSW対策)..."
+echo "▶ 3/7 Service Workerを無害な空ファイルに置き換えます(古いSW対策)..."
 # 【重要】scripts/kill_switch_service_worker.js は現在「何もしない、
 # 完全に無害な空のService Worker」。過去に「自動で強制的に古いSWを
 # 一掃する」実装を試みたが無限リロードループの障害を起こしたため撤回
@@ -97,17 +111,26 @@ echo "▶ 3/6 Service Workerを無害な空ファイルに置き換えます(古
 # scripts/kill_switch_service_worker.js 内のコメントを参照)。
 cp scripts/kill_switch_service_worker.js build/web/flutter_service_worker.js
 
-echo "▶ 4/6 Web版をFirebase Hostingへデプロイします..."
+echo "▶ 4/7 Web版をFirebase Hostingへデプロイします..."
 GOOGLE_APPLICATION_CREDENTIALS=/opt/flutter/firebase-admin-sdk.json \
   firebase deploy --only hosting --project sn-report
 
-echo "▶ 5/6 APKをGitHub Releasesへ公開します(tag: ${TAG})..."
+echo "▶ 5/7 Firestoreセキュリティルールをデプロイします..."
+# 【重要・2026-09-01追加】v1.2.41で firestore.rules を更新したにも関わらず
+# 本ステップが欠落していたため、ルール未反映(refrigerant_types 未定義→
+# デフォルト拒否)によりログイン後の全データ読み込みが失敗する重大障害が
+# 発生した。firestore.rules の変更を確実に本番へ反映するため、hosting と
+# 同時に必ずデプロイすること。
+GOOGLE_APPLICATION_CREDENTIALS=/opt/flutter/firebase-admin-sdk.json \
+  firebase deploy --only firestore:rules --project sn-report
+
+echo "▶ 6/7 APKをGitHub Releasesへ公開します(tag: ${TAG})..."
 gh release create "${TAG}" "${APK_PATH}" \
   --title "${TAG}" \
   --notes "自動生成リリース。詳細はアプリ内の更新履歴画面を参照してください。" \
   || gh release upload "${TAG}" "${APK_PATH}" --clobber
 
-echo "▶ 6/6 app_config/settings の最新バージョン情報を更新します(更新通知バナー用)..."
+echo "▶ 7/7 app_config/settings の最新バージョン情報を更新します(更新通知バナー用)..."
 BUILD_NUMBER=$(grep -m1 '^version:' pubspec.yaml | sed 's/.*+//')
 python3 scripts/release_version_config.py "${VERSION}" "${BUILD_NUMBER}" \
   || echo "⚠️  警告: app_config/settings の更新に失敗しました。手動で release_version_config.py を実行してください。"
