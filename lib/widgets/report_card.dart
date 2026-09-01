@@ -168,24 +168,31 @@ class ReportCard extends StatelessWidget {
                         color: AppColors.primary,
                       ),
                     ),
-                  // 【2026-09追加】ナレッジ未入力バッジ。
+                  // 【2026-09追加・締切管理ルール追加で強化】ナレッジ未入力バッジ。
                   // 現場対応(バックオフィス系業務は対象外)で、
                   // 「うまくいったこと」「課題・改善点」の両方が未入力の場合に
-                  // 控えめな注意アイコンを表示する。現場作業終了直後は最低限の
+                  // 注意アイコンを表示する。現場作業終了直後は最低限の
                   // 必須項目のみ入力し、ナレッジ部分は後日追記する運用を想定
-                  // しており、これは「エラー」ではなく「未完了のリマインド」
+                  // しており、通常は「エラー」ではなく「未完了のリマインド」
                   // として警告色より弱いグレー系で表示する。
+                  // 【締切管理ルール・2026-09導入】ただし作業報告書作成後
+                  // (=作業日 visitDate 基準)1週間を過ぎても未入力の場合は、
+                  // 対応漏れの可能性が高いため警告色(オレンジ)に切り替える。
                   if (!report.responseType.isBackOffice &&
                       !report.hasSuccess &&
                       !report.hasIssues)
-                    const Padding(
-                      padding: EdgeInsets.only(left: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
                       child: Tooltip(
-                        message: 'ナレッジ未入力(うまくいったこと・課題)',
+                        message: report.isKnowledgeOverdue
+                            ? 'ナレッジ未入力(作業日から1週間超過・要対応)'
+                            : 'ナレッジ未入力(うまくいったこと・課題)',
                         child: Icon(
                           Icons.edit_note,
                           size: 16,
-                          color: AppColors.textSecondary,
+                          color: report.isKnowledgeOverdue
+                              ? AppColors.warning
+                              : AppColors.textSecondary,
                         ),
                       ),
                     ),

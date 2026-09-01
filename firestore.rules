@@ -168,6 +168,20 @@ service cloud.firestore {
       allow create, update, delete: if isSignedIn();
     }
 
+    // ------------------------------------------------------------
+    // refrigerant_types: 冷媒種類マスタ(管理者昇格分・2026-09導入)
+    // 日報の冷媒種類入力欄で「その他」選択時に自由入力された冷媒名のうち、
+    // 今後恒常的に使われそうなものを管理者がここへ正式登録することで、
+    // 全端末のプルダウン選択肢に反映される(RefrigerantTypeOptions.all
+    // という固定リストとマージして表示)。
+    // - 読み取り: ログイン済みなら誰でも可(全員のドロップダウン表示に必要)
+    // - 書き込み: 管理者(一般/最高)のみ(種類が乱立しないよう管理者に限定)
+    // ------------------------------------------------------------
+    match /refrigerant_types/{typeId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
     // その他の未定義コレクションはデフォルトで拒否
     match /{document=**} {
       allow read, write: if false;

@@ -237,20 +237,28 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       _matchedCacheJobNumber = e.matchedCacheJobNumber;
     }
     // 既存データの「冷媒種類」(過去の自由入力・OCR取り込み分含む)を、
-    // マスタ選択肢(RefrigerantTypeOptions.all)と照合し、一致すれば
+    // マスタ選択肢(固定リスト+管理者昇格分)と照合し、一致すれば
     // その選択肢を選択済み状態にする。一致しない場合(過去の表記ゆれ・
     // リスト未収録の冷媒等)は「その他」として扱い、自由入力欄に既存値を
     // 保持したまま表示する。
+    final refrigerantExtraNames = context
+        .read<AppState>()
+        .refrigerantTypes
+        .map((e) => e.name)
+        .toList();
+    final refrigerantAllOptions = RefrigerantTypeOptions.allWithExtra(
+      refrigerantExtraNames,
+    );
     final existingSeRefrigerant = _ssCtrls['refrigerantType']!.text.trim();
     _seRefrigerantTypeSelection = existingSeRefrigerant.isEmpty
         ? null
-        : (RefrigerantTypeOptions.all.contains(existingSeRefrigerant)
+        : (refrigerantAllOptions.contains(existingSeRefrigerant)
               ? existingSeRefrigerant
               : RefrigerantTypeOptions.otherValue);
     final existingNonSeRefrigerant = _nonSeRefrigerantTypeCtrl.text.trim();
     _nonSeRefrigerantTypeSelection = existingNonSeRefrigerant.isEmpty
         ? null
-        : (RefrigerantTypeOptions.all.contains(existingNonSeRefrigerant)
+        : (refrigerantAllOptions.contains(existingNonSeRefrigerant)
               ? existingNonSeRefrigerant
               : RefrigerantTypeOptions.otherValue);
 
@@ -700,8 +708,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       // (含まれない場合は「その他」として自由入力欄に表示され続ける)。
       final syncedNonSeRefrigerant = _nonSeRefrigerantTypeCtrl.text.trim();
       if (syncedNonSeRefrigerant.isNotEmpty) {
+        final syncedOptions = RefrigerantTypeOptions.allWithExtra(
+          context.read<AppState>().refrigerantTypes.map((e) => e.name).toList(),
+        );
         _nonSeRefrigerantTypeSelection =
-            RefrigerantTypeOptions.all.contains(syncedNonSeRefrigerant)
+            syncedOptions.contains(syncedNonSeRefrigerant)
             ? syncedNonSeRefrigerant
             : RefrigerantTypeOptions.otherValue;
       }
@@ -2106,6 +2117,10 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     required bool requireHalfWidthOnOther,
   }) {
     final isOther = selection == RefrigerantTypeOptions.otherValue;
+    // 【2026-09追加】固定リストに加え、管理者がマスタへ追加した冷媒種類
+    // (AppState.refrigerantTypes)もマージして表示する(マスタ昇格ルート)。
+    final extraNames = context.watch<AppState>().refrigerantTypes.map((e) => e.name);
+    final options = RefrigerantTypeOptions.allWithExtra(extraNames.toList());
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2118,7 +2133,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
           isExpanded: true,
           items: [
             const DropdownMenuItem<String?>(value: null, child: Text('選択してください')),
-            ...RefrigerantTypeOptions.all.map(
+            ...options.map(
               (v) => DropdownMenuItem<String?>(
                 value: v,
                 child: Text(v, overflow: TextOverflow.ellipsis),

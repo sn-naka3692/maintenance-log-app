@@ -77,11 +77,28 @@ class RefrigerantTypeOptions {
   ];
 
   /// プルダウンに表示する全選択肢(未充填表記 + 冷媒種類 + その他)。
+  /// 【注意】これは固定リストのみのバージョン。管理者がマスタ昇格した
+  /// 冷媒種類(RefrigerantTypeService)も含めたい場合は[allWithExtra]を使う。
   static const List<String> all = [
     ...noneValues,
     ...refrigerantValues,
     otherValue,
   ];
+
+  /// 固定リストに加え、管理者がマスタへ追加した冷媒種類([extraNames])も
+  /// 含めたプルダウン表示用の全選択肢。
+  ///
+  /// 【設計方針・2026-09追加】ユーザー要望「その他選択時に新しい冷媒を
+  /// 追加できるルートがあると便利」を受け、管理者がダッシュボードから
+  /// 正式追加した冷媒種類(AppState.refrigerantTypes)をマージして
+  /// 表示できるようにする(ユーザー承認: 管理者側マスタ昇格ルート)。
+  /// 重複は除去し、「その他」は常に末尾に残す。
+  static List<String> allWithExtra(List<String> extraNames) {
+    final merged = <String>[...noneValues, ...refrigerantValues, ...extraNames];
+    final seen = <String>{};
+    final deduped = merged.where((v) => seen.add(v)).toList();
+    return [...deduped, otherValue];
+  }
 }
 
 extension ResponseTypeLabel on ResponseType {
@@ -317,6 +334,29 @@ class WorkReport {
 
   bool get hasIssues => issuesPoints.trim().isNotEmpty;
   bool get hasSuccess => successPoints.trim().isNotEmpty;
+
+  /// ナレッジ(うまくいったこと・課題)未入力の締切日数(2026-09導入)。
+  ///
+  /// 【設計方針】ユーザー指示「作業報告書作成後1週間の締め切りで設定」を
+  /// 反映する。「作業報告書作成後」の起点は、更新日(updatedAt)ではなく
+  /// 実際に作業した日(visitDate)を基準とする。これは前回、日報データの
+  /// 有無調査を更新日ベースで判定してしまい指摘を受けた反省を踏まえ、
+  /// 「アプリ側での日報・案件の日付は入力日ではなく作業した日付が該当する」
+  /// という確定ルールに合わせるためである。
+  static const int knowledgeDeadlineDays = 7;
+
+  /// ナレッジ未入力の締切(visitDateの[knowledgeDeadlineDays]日後)。
+  DateTime get knowledgeDeadline =>
+      visitDate.add(const Duration(days: knowledgeDeadlineDays));
+
+  /// ナレッジ(うまくいったこと・課題)が締切(作業日から1週間)を過ぎても
+  /// 未入力かどうか。バックオフィス系業務(事務・倉庫作業等)はそもそも
+  /// ナレッジ入力の対象外のため、常にfalseを返す。
+  bool get isKnowledgeOverdue {
+    if (responseType.isBackOffice) return false;
+    if (hasSuccess || hasIssues) return false;
+    return DateTime.now().isAfter(knowledgeDeadline);
+  }
 
   /// 「未充填」を意味する入力値の一覧(冷媒種類欄用)。
   ///

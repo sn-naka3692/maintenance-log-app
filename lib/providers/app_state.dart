@@ -2,12 +2,14 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import '../models/case.dart';
+import '../models/refrigerant_type_entry.dart';
 import '../models/store.dart';
 import '../models/user.dart';
 import '../models/work_report.dart';
 import '../services/case_service.dart';
 import '../services/case_sync_failure_service.dart';
 import '../services/pending_sync_service.dart';
+import '../services/refrigerant_type_service.dart';
 import '../services/report_outbox_service.dart';
 import '../services/report_service.dart';
 import '../services/store_service.dart';
@@ -20,6 +22,8 @@ class AppState extends ChangeNotifier {
       CaseSyncFailureService.instance;
   final PendingSyncService _pendingSyncService = PendingSyncService.instance;
   final ReportOutboxService _outboxService = ReportOutboxService.instance;
+  final RefrigerantTypeService _refrigerantTypeService =
+      RefrigerantTypeService.instance;
 
   // 【不具合対応・2026-08-31】自分の日報のうち、まだサーバーへの送信が
   // 完了していない(電波不良等で端末内に留まっている)件数。
@@ -134,6 +138,23 @@ class AppState extends ChangeNotifier {
   List<Store> _stores = [];
   List<Store> get stores => _stores;
 
+  // 【2026-09導入】冷媒種類マスタ(管理者昇格分)。RefrigerantTypeOptions.all
+  // (固定リスト)とマージしてドロップダウンに表示するための動的リスト。
+  List<RefrigerantTypeEntry> _refrigerantTypes = [];
+  List<RefrigerantTypeEntry> get refrigerantTypes => _refrigerantTypes;
+
+  /// 固定リスト(RefrigerantTypeOptions.refrigerantValues)+管理者追加分を
+  /// マージした、ドロップダウン表示用の冷媒種類一覧(重複除去済み)。
+  /// 「なし」等の未充填表記・「その他」は呼び出し側(画面)で別途付加する。
+  List<String> get mergedRefrigerantValues {
+    final merged = <String>[
+      ...RefrigerantTypeOptions.refrigerantValues,
+      ..._refrigerantTypes.map((e) => e.name),
+    ];
+    final seen = <String>{};
+    return merged.where((v) => seen.add(v)).toList();
+  }
+
   bool _isLoading = true;
   bool get isLoading => _isLoading;
 
@@ -146,10 +167,12 @@ class AppState extends ChangeNotifier {
     try {
       await _service.init();
       await _storeService.init();
+      await _refrigerantTypeService.init();
       _users = _service.getAllUsers();
       _currentUser = _service.getCurrentUser();
       _reports = _service.getAllReports();
       _stores = _storeService.getAll();
+      _refrigerantTypes = _refrigerantTypeService.getAll();
       if (_currentUser != null) {
         _watchPendingSync(_currentUser!.id);
       }
@@ -178,6 +201,7 @@ class AppState extends ChangeNotifier {
     if (_currentUser != null) {
       _reports = _service.getAllReports();
       _stores = _storeService.getAll();
+      _refrigerantTypes = _refrigerantTypeService.getAll();
       _watchPendingSync(_currentUser!.id);
     }
     notifyListeners();
@@ -239,6 +263,26 @@ class AppState extends ChangeNotifier {
   Future<void> deleteStore(String id) async {
     await _storeService.deleteStore(id);
     _stores = _storeService.getAll();
+    notifyListeners();
+  }
+
+  // ------------ 冷媒種類マスタ(2026-09導入) ------------
+
+  /// 管理者が新しい冷媒種類をマスタへ正式追加する
+  /// (現場が「その他」で入力した冷媒名を昇格させる想定)。
+  Future<RefrigerantTypeEntry> addRefrigerantType(String name) async {
+    final entry = await _refrigerantTypeService.addType(
+      name: name,
+      addedByName: _currentUser?.name ?? '',
+    );
+    _refrigerantTypes = _refrigerantTypeService.getAll();
+    notifyListeners();
+    return entry;
+  }
+
+  Future<void> deleteRefrigerantType(String id) async {
+    await _refrigerantTypeService.deleteType(id);
+    _refrigerantTypes = _refrigerantTypeService.getAll();
     notifyListeners();
   }
 

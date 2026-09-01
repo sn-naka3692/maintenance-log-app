@@ -27,6 +27,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _isSaving = false;
 
   // ------------------------------------------------------------
+  // 冷媒種類マスタ(管理者昇格ルート・2026-09導入)関連
+  // ------------------------------------------------------------
+  final TextEditingController _newRefrigerantCtrl = TextEditingController();
+  bool _addingRefrigerantType = false;
+
+  // ------------------------------------------------------------
   // 月次CSVエクスポート(SE店舗分・プロワン案件分・社内業務分)関連
   // ------------------------------------------------------------
   final MonthlyExportStatusService _monthlyExportService =
@@ -60,6 +66,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _loadSubmissionCheckEnabled(),
     );
+  }
+
+  @override
+  void dispose() {
+    _newRefrigerantCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSubmissionCheckEnabled() async {
@@ -557,6 +569,148 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  /// 新しい冷媒種類をマスタへ正式追加する(管理者昇格ルート)。
+  Future<void> _addRefrigerantType() async {
+    final name = _newRefrigerantCtrl.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _addingRefrigerantType = true);
+    try {
+      await context.read<AppState>().addRefrigerantType(name);
+      _newRefrigerantCtrl.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('「$name」を冷媒種類マスタへ追加しました')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('追加に失敗しました: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _addingRefrigerantType = false);
+    }
+  }
+
+  Future<void> _confirmDeleteRefrigerantType(
+    BuildContext context,
+    String id,
+    String name,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('冷媒種類マスタから削除'),
+        content: Text('「$name」をマスタから削除しますか?\n(既存の日報データには影響しません)'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('削除', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await context.read<AppState>().deleteRefrigerantType(id);
+    }
+  }
+
+  /// 【設計方針・2026-09追加】冷媒種類は「その他」入力の逃げ道を用意して
+  /// いるが、現場で頻出する新しい冷媒はここから管理者が正式にマスタへ
+  /// 昇格登録できる(ユーザー承認: 「管理者側でのマスタ昇格ルートでOK」。
+  /// 種類が急激に増える想定ではないため、シンプルな一覧+追加フォームのみ。
+  Widget _buildRefrigerantMasterCard() {
+    final appState = context.watch<AppState>();
+    final types = appState.refrigerantTypes;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.ac_unit, color: AppColors.primary, size: 22),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  '冷媒種類マスタ管理',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '日報の冷媒種類入力欄で「その他」選択時に自由入力された冷媒のうち、'
+            '今後も使われそうなものをここでマスタへ正式追加すると、'
+            '全社員のプルダウン選択肢に反映されます。',
+            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _newRefrigerantCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '新しい冷媒種類(例: R290)',
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: _addingRefrigerantType ? null : _addRefrigerantType,
+                child: _addingRefrigerantType
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('追加'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (types.isEmpty)
+            Text(
+              'まだマスタへ追加された冷媒種類はありません。',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: types
+                  .map(
+                    (t) => Chip(
+                      label: Text(t.name),
+                      onDeleted: () =>
+                          _confirmDeleteRefrigerantType(context, t.id, t.name),
+                      deleteIconColor: Colors.grey.shade600,
+                      backgroundColor: AppColors.primary.withValues(
+                        alpha: 0.08,
+                      ),
+                      side: BorderSide.none,
+                    ),
+                  )
+                  .toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _exportStatusChip(String label, bool exported) {
     return Chip(
       avatar: Icon(
@@ -588,6 +742,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     final successCount = allReports.where((r) => r.hasSuccess).length;
     final issuesCount = allReports.where((r) => r.hasIssues).length;
+    // 【締切管理ルール・2026-09導入】作業報告書作成後(作業日基準)1週間を
+    // 過ぎてもナレッジ未入力の日報件数(要対応の目安として管理者へ表示)。
+    final overdueCount = allReports.where((r) => r.isKnowledgeOverdue).length;
 
     final currentUser = appState.currentUser;
     final isSuperAdmin = appState.isSuperAdmin;
@@ -700,6 +857,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          // 【締切管理ルール・2026-09導入】作業報告書作成後(作業日基準)
+          // 1週間を過ぎてもナレッジ未入力の件数。0件でなければ管理者が
+          // 一目で気づけるよう警告色で表示する。
+          _MiniStat(
+            label: 'ナレッジ未入力(1週間超過)',
+            value: '$overdueCount件',
+            color: overdueCount > 0 ? AppColors.warning : Colors.grey,
+            icon: Icons.schedule,
           ),
 
           const SizedBox(height: 20),
@@ -949,6 +1116,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           _buildSubmissionCheckCard(),
           const SizedBox(height: 12),
           _buildPartsReconciliationCard(),
+          const SizedBox(height: 12),
+          _buildRefrigerantMasterCard(),
           const SizedBox(height: 8),
           if (filtered.isEmpty)
             Padding(
