@@ -1211,6 +1211,50 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
             ),
+            // 【2026-09追加】定期点検は、SE店舗案件・プロワン管轄案件の
+            // どちらであっても、後日の請求業務・記入漏れチェックの突合キー
+            // として「プロワン管理番号(伝票No)」が必要になる。他の対応区分
+            // (故障対応・修理等)ではSE店舗案件は弊社受付No/お客様受付Noが
+            // 突合キーの役割を担うため任意のままだが、定期点検はプロワン側の
+            // 案件管理番号のみで一元管理されているため、SE店舗案件でも入力を
+            // 徹底してもらう必要がある。対応区分選択時点で気づいてもらえる
+            // よう、選択直後にこの案内を表示する。
+            if (_responseType == ResponseType.regularInspection)
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.orange.shade800,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '定期点検は、SE店舗・プロワン管轄案件のどちらの場合も、'
+                        '下の「プロワン管理番号(伝票No)」に案件管理番号を'
+                        '必ず入力してください。',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange.shade900,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 12),
             if (_responseType.isBackOffice)
               _buildField(
