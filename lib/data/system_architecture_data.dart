@@ -35,10 +35,16 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.43',
+    buildNumber: 52,
+    releaseDate: '2026-09-02',
+    summary: '定期点検選択時にプロワン管理番号の入力案内を追加(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.42',
     buildNumber: 51,
     releaseDate: '2026-09-02',
-    summary: '冷媒充填判定バグ修正(「充填なし」表記の登録漏れ)+WEB版更新お知らせの再読み込み処理改善(★配布中の最新版)',
+    summary: '冷媒充填判定バグ修正(「充填なし」表記の登録漏れ)+WEB版更新お知らせの再読み込み処理改善',
   ),
   VersionBuildRecord(
     versionName: '1.2.41',

@@ -28,7 +28,7 @@
 /// アプリ内表示バージョンが不一致になる事故が発生した。pubspec.yamlの
 /// バージョンを上げる際は、必ずこのファイルとchangelog_data.dart /
 /// system_architecture_data.dartのversionBuildHistoryをセットで確認すること。
-const int kCompiledBuildNumber = 51;
+const int kCompiledBuildNumber = 52;
 
 /// 表示用バージョン名(pubspec.yamlの`version:`の`+`より前の部分と一致させる)。
-const String kCompiledVersionName = '1.2.42';
+const String kCompiledVersionName = '1.2.43';
