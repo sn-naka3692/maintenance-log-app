@@ -35,10 +35,16 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.42',
+    buildNumber: 51,
+    releaseDate: '2026-09-02',
+    summary: '冷媒充填判定バグ修正(「充填なし」表記の登録漏れ)+WEB版更新お知らせの再読み込み処理改善(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.41',
     buildNumber: 50,
     releaseDate: '2026-09-02',
-    summary: '冷媒種類マスタ昇格ルート追加+ナレッジ未入力の締切管理ルール(作業日基準1週間)導入(★配布中の最新版)',
+    summary: '冷媒種類マスタ昇格ルート追加+ナレッジ未入力の締切管理ルール(作業日基準1週間)導入',
   ),
   VersionBuildRecord(
     versionName: '1.2.40',
