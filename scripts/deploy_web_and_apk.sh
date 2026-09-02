@@ -81,7 +81,29 @@ set -e
 cd "$(dirname "$0")/.."
 
 VERSION=$(grep -m1 '^version:' pubspec.yaml | sed 's/version: *//' | cut -d'+' -f1)
+BUILD_NUMBER=$(grep -m1 '^version:' pubspec.yaml | sed 's/.*+//')
 TAG="v${VERSION}"
+
+# 【重大障害・2026-09-02発生・教訓】v1.2.42リリース時、pubspec.yamlの
+# バージョンは更新したが lib/build_info.dart の kCompiledBuildNumber /
+# kCompiledVersionName の更新を失念した。Web版の更新チェックは
+# package_info_plus ではなくこのコンパイル時定数を見て「自分自身が
+# 古いビルドか」を判定する仕組みのため、これが古いままだと
+# Firestoreのlatest_build_numberを更新しても「新しいバージョンが
+# あります」バナーが永久に消えない(=何度リロードしても効果がない)
+# 事故になる。ビルド前に必ず整合性を検証し、不一致なら即停止する。
+COMPILED_BUILD=$(grep -m1 'kCompiledBuildNumber' lib/build_info.dart | grep -o '[0-9]\+')
+COMPILED_VERSION=$(grep -m1 'kCompiledVersionName' lib/build_info.dart | sed -E "s/.*'([^']+)'.*/\1/")
+if [[ "$COMPILED_BUILD" != "$BUILD_NUMBER" || "$COMPILED_VERSION" != "$VERSION" ]]; then
+  echo "❌ 停止: lib/build_info.dart が pubspec.yaml と不一致です。"
+  echo "   pubspec.yaml:    version=${VERSION} build=${BUILD_NUMBER}"
+  echo "   build_info.dart: version=${COMPILED_VERSION} build=${COMPILED_BUILD}"
+  echo "   lib/build_info.dart の kCompiledBuildNumber/kCompiledVersionName を"
+  echo "   更新してから再実行してください(Web版の更新お知らせバナーが"
+  echo "   消えなくなる重大な不具合の原因になります)。"
+  exit 1
+fi
+echo "✅ build_info.dart整合性チェックOK(version=${VERSION} build=${BUILD_NUMBER})"
 
 # 【重要】スキャン機能用Function Key(SCAN_PROXY_FUNCTION_KEY)は
 # Web版・APK版どちらも --dart-define で埋め込む必要がある。
@@ -131,7 +153,6 @@ gh release create "${TAG}" "${APK_PATH}" \
   || gh release upload "${TAG}" "${APK_PATH}" --clobber
 
 echo "▶ 7/7 app_config/settings の最新バージョン情報を更新します(更新通知バナー用)..."
-BUILD_NUMBER=$(grep -m1 '^version:' pubspec.yaml | sed 's/.*+//')
 python3 scripts/release_version_config.py "${VERSION}" "${BUILD_NUMBER}" \
   || echo "⚠️  警告: app_config/settings の更新に失敗しました。手動で release_version_config.py を実行してください。"
 
