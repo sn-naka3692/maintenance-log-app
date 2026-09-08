@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:archive/archive.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
@@ -227,6 +229,88 @@ class CsvExporter {
     }
 
     return buffer.toString();
+  }
+
+  /// 【2026-09追加・重要】複数カテゴリのCSVを1つのZIPファイルにまとめて
+  /// バイト列を返す。
+  ///
+  /// 【背景・バグ修正】従来は月次エクスポート機能(_runMonthlyExport)が
+  /// SE店舗分・プロワン案件分・社内業務分の3ファイルを同一操作の中で
+  /// 連続してダウンロード/共有していたが、Webブラウザ・Android端末は
+  /// 「ユーザー操作なしに連続発生するダウンロード」を2件目以降ブロック
+  /// する保護機能を持つため、実際には最後(または一部)のカテゴリしか
+  /// 保存されない不具合が発生していた。1回のダウンロード/共有操作で
+  /// 全カテゴリを受け取れるよう、ZIPに一括圧縮する方式に変更する。
+  ///
+  /// [categorizedReports]: カテゴリラベル(ファイル名の一部になる)ごとの
+  /// 日報リスト。空リストのカテゴリはZIPに含めない(0件のCSVを作らない)。
+  static Uint8List buildZipBytes(
+    Map<String, List<WorkReport>> categorizedReports,
+  ) {
+    final archive = Archive();
+    const bom = '\uFEFF';
+
+    for (final entry in categorizedReports.entries) {
+      if (entry.value.isEmpty) continue;
+      final csvBody = buildCsv(entry.value);
+      final bytes = utf8.encode(bom + csvBody);
+      final fileName = '${entry.key}.csv';
+      archive.addFile(ArchiveFile(fileName, bytes.length, bytes));
+    }
+
+    final encoded = ZipEncoder().encode(archive);
+    if (encoded == null) {
+      throw Exception('ZIP圧縮に失敗しました');
+    }
+    return Uint8List.fromList(encoded);
+  }
+
+  /// [categorizedReports]をまとめてZIP化し、share_plusで共有する。
+  static Future<void> exportCategoriesAsZipAndShare(
+    Map<String, List<WorkReport>> categorizedReports, {
+    required String zipFileNamePrefix,
+  }) async {
+    final zipBytes = buildZipBytes(categorizedReports);
+
+    final now = DateTime.now();
+    final stamp = DateFormat('yyyyMMdd_HHmm').format(now);
+    final fileName = '${zipFileNamePrefix}_$stamp.zip';
+
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [
+          XFile.fromData(
+            zipBytes,
+            name: fileName,
+            mimeType: 'application/zip',
+          ),
+        ],
+        fileNameOverrides: [fileName],
+        subject: zipFileNamePrefix,
+      ),
+    );
+  }
+
+  /// [categorizedReports]をまとめてZIP化し、端末のダウンロード/保存
+  /// フォルダへ直接保存する。
+  static Future<String> exportCategoriesAsZipToDevice(
+    Map<String, List<WorkReport>> categorizedReports, {
+    required String zipFileNamePrefix,
+  }) async {
+    final zipBytes = buildZipBytes(categorizedReports);
+
+    final now = DateTime.now();
+    final stamp = DateFormat('yyyyMMdd_HHmm').format(now);
+    final fileName = '${zipFileNamePrefix}_$stamp';
+
+    await FileSaver.instance.saveFile(
+      name: fileName,
+      bytes: zipBytes,
+      fileExtension: 'zip',
+      mimeType: MimeType.zip,
+    );
+
+    return '$fileName.zip';
   }
 
   /// CSVを生成し、share_plusでダウンロード/共有する。

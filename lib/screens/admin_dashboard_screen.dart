@@ -112,7 +112,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   /// 対象月(前月)の日報を3分類(SE/プロワン/社内業務)に振り分けたうえで、
-  /// それぞれCSVを生成・共有(または保存)し、実施結果をFirestoreに記録する。
+  /// 1つのZIPファイル(3ファイル同梱)としてまとめて共有(または保存)し、
+  /// 実施結果をFirestoreに記録する。
+  ///
+  /// 【2026-09重要バグ修正】従来はカテゴリごとに個別のダウンロード/共有を
+  /// 連続実行していたが、Webブラウザ・Android端末の「連続ダウンロード
+  /// ブロック」機能により、実際には一部カテゴリ(多くの場合、2番目以降)
+  /// しか受信できない不具合が発生していた。1回の操作で全カテゴリを確実に
+  /// 受け取れるよう、ZIPへ一括圧縮してから1回だけ出力する方式に変更した。
   Future<void> _runMonthlyExport(
     List<WorkReport> allReports, {
     required bool saveToDevice,
@@ -131,12 +138,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final resultCounts = <MonthlyExportCategory, int>{};
     final errors = <String>[];
 
+    // ZIPに含めるカテゴリ(0件のものは含めない)。
+    final zipTargets = <String, List<WorkReport>>{};
     for (final category in MonthlyExportCategory.values) {
       final reports = byCategory[category] ?? [];
       resultCounts[category] = reports.length;
-      if (reports.isEmpty) {
-        // 対象0件のカテゴリも「出力済み」として記録し、翌月以降
-        // 意味のないリマインドが出続けないようにする。
+      if (reports.isNotEmpty) {
+        zipTargets['日報データ_${_targetMonthKey}_${category.label}'] = reports;
+      }
+    }
+
+    if (zipTargets.isEmpty) {
+      // 全カテゴリ0件の場合はZIPを作らず、出力済み記録のみ行う。
+      for (final category in MonthlyExportCategory.values) {
         try {
           await _monthlyExportService.markExported(
             monthKey: _targetMonthKey,
@@ -147,26 +161,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         } catch (e) {
           errors.add('${category.label}: 記録に失敗しました($e)');
         }
-        continue;
       }
+    } else {
       try {
-        final prefix = '日報データ_${_targetMonthKey}_${category.label}';
+        final zipPrefix = '日報データ_$_targetMonthKey';
         if (saveToDevice) {
-          await CsvExporter.exportAndSaveToDevice(
-            reports,
-            fileNamePrefix: prefix,
+          await CsvExporter.exportCategoriesAsZipToDevice(
+            zipTargets,
+            zipFileNamePrefix: zipPrefix,
           );
         } else {
-          await CsvExporter.exportAndShare(reports, fileNamePrefix: prefix);
+          await CsvExporter.exportCategoriesAsZipAndShare(
+            zipTargets,
+            zipFileNamePrefix: zipPrefix,
+          );
         }
-        await _monthlyExportService.markExported(
-          monthKey: _targetMonthKey,
-          category: category.key,
-          count: reports.length,
-          exportedByName: authorName,
-        );
+        // ZIP出力(1回の操作)が成功した時点で、対象となった全カテゴリを
+        // まとめて出力済みとして記録する(0件のカテゴリも含む)。
+        for (final category in MonthlyExportCategory.values) {
+          try {
+            await _monthlyExportService.markExported(
+              monthKey: _targetMonthKey,
+              category: category.key,
+              count: resultCounts[category] ?? 0,
+              exportedByName: authorName,
+            );
+          } catch (e) {
+            errors.add('${category.label}: 記録に失敗しました($e)');
+          }
+        }
       } catch (e) {
-        errors.add('${category.label}: 出力に失敗しました($e)');
+        errors.add('ZIP出力に失敗しました($e)');
       }
     }
 
@@ -225,8 +250,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               const SizedBox(height: 10),
               Text(
                 saveToDevice
-                    ? 'このデバイスに保存しました。データが蓄積してきたら、保存されたCSVファイルを会社のNASへ移動してください。'
-                    : '共有シートから、保存・送信先を選んでください。データが蓄積してきたら会社のNASへ移動してください。',
+                    ? '3分類のCSVを1つのZIPファイルにまとめてこのデバイスに保存しました。'
+                          '解凍すると各カテゴリのCSVが取り出せます。データが蓄積してきたら'
+                          '会社のNASへ移動してください。'
+                    : '3分類のCSVを1つのZIPファイルにまとめました。共有シートから、'
+                          '保存・送信先を選んでください。データが蓄積してきたら会社のNASへ'
+                          '移動してください。',
                 style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
               ),
             ],
