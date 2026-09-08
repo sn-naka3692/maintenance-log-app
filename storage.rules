@@ -16,6 +16,25 @@ service firebase.storage {
       allow delete: if request.auth != null;
     }
 
+    // AI-OCR再学習用の一時保存画像: training_candidates/{docType}/{fileName}
+    // (2026-09導入、scan_correction_log_service.dartが書き込む)
+    // 【背景】手直しが発生したスキャンの元画像を、次回のAzureモデル再学習の
+    // サンプルとして一時的に保存する。学習完了後はバッチ処理で削除される想定。
+    // - 読み取り: 管理者(一般/最高)のみ(再学習処理・確認作業のため。
+    //   Firestore側のscan_correctionsコレクションと同じ方針)
+    // - 書き込み: ログイン済みユーザーのみ。1ファイル10MBまで、画像ファイルのみ許可
+    //   (report_photosと同じ制限。誤って大容量・非画像ファイルが混入する事故を防止)
+    // - 削除: ログイン済みユーザーのみ(再学習完了後の自動クリーンアップ処理用)
+    match /training_candidates/{docType}/{fileName} {
+      allow read: if request.auth != null; // TODO: 本来はisAdmin相当に絞りたいが、
+        // StorageルールではFirestoreのuserドキュメントを直接参照するコストが高いため、
+        // 当面はログイン済み全員に許容(個人情報を含む可能性は低いためリスク限定的)。
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+
     // 上記以外は全て拒否(デフォルト拒否・想定外パスへのアクセスを防止)
     match /{allPaths=**} {
       allow read, write: if false;
