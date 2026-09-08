@@ -158,6 +158,7 @@ class DocumentScanService {
       confidences: confidences,
       documentConfidence: docConfidence,
       docType: docType,
+      sourceImageBytes: imageBytes,
     );
   }
 
@@ -402,11 +403,21 @@ class ScanResult {
   /// SE用フィールド定義にフォールバックする。
   final String docType;
 
+  /// 解析に使った元画像のバイト列(単一画像スキャンの場合のみ保持)。
+  ///
+  /// 【目的・2026-09追加】AI-OCRモデルの手動再学習において、確認画面で
+  /// 実際に手直しされたフィールドがあった場合に限り、その元画像を
+  /// 学習候補としてFirebase Storageへ一時保存するために必要。
+  /// PDF一括解析(月末チェック等)はページ数が多く用途も異なるため対象外
+  /// (この場合は常にnull)。
+  final Uint8List? sourceImageBytes;
+
   ScanResult({
     required this.values,
     required this.confidences,
     required this.documentConfidence,
     this.docType = '',
+    this.sourceImageBytes,
   });
 
   /// プロワン作業報告書として判定されたかどうか。

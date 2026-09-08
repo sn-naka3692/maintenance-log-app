@@ -530,7 +530,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   ///   日報作成者と重複するため2026-08-28にOCR対象から除外)を、
   ///   CSV照合を介さず_applyProWanScanResult()で各フォーム欄へ直接反映する
   Future<void> _scanReport() async {
-    final confirmed = await DocumentScanFlow.run(context);
+    final confirmed = await DocumentScanFlow.run(context, reportId: _reportId);
     if (confirmed == null || !mounted) return;
 
     final docType = confirmed['_docType'] ?? '';

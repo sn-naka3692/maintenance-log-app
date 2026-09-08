@@ -24,7 +24,13 @@ import '../utils/web_pdf_picker.dart';
 ///
 /// どのステップでキャンセル・失敗しても null を返し、フォームには一切反映しない。
 class DocumentScanFlow {
-  static Future<Map<String, String>?> run(BuildContext context) async {
+  /// [reportId]: 呼び出し元(日報編集画面)が確定済みの日報IDを渡す。
+  /// 学習ログ(scan_corrections)に「どの日報のスキャンか」を記録するために
+  /// ScanConfirmScreenへそのまま引き渡す(2026-09追加)。
+  static Future<Map<String, String>?> run(
+    BuildContext context, {
+    required String reportId,
+  }) async {
     final source = await _pickSource(context);
     if (source == null || !context.mounted) return null;
 
@@ -150,7 +156,12 @@ class DocumentScanFlow {
 
     // 必須: 確認・修正画面を必ず経由する(AI一発登録は行わない)
     final confirmed = await Navigator.of(context).push<Map<String, String>>(
-      MaterialPageRoute(builder: (_) => ScanConfirmScreen(scanResult: result!)),
+      MaterialPageRoute(
+        builder: (_) => ScanConfirmScreen(
+          scanResult: result!,
+          reportId: reportId,
+        ),
+      ),
     );
     return confirmed;
   }

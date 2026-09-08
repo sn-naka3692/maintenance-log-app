@@ -24,7 +24,19 @@ import '../services/scan_correction_log_service.dart';
 class ScanConfirmScreen extends StatefulWidget {
   final ScanResult scanResult;
 
-  const ScanConfirmScreen({super.key, required this.scanResult});
+  /// この確認画面がどの日報のスキャンに紐づくかを示すID。
+  ///
+  /// 【目的・2026-09追加】学習ログ(scan_corrections)に記録することで、
+  /// 将来「どの日報のスキャンが学習サンプルの元データか」を辿れるように
+  /// する。日報編集画面はinitState時点で新規作成時もIDを確定させている
+  /// ため、新規/既存どちらの場合も必ず取得できる想定。
+  final String reportId;
+
+  const ScanConfirmScreen({
+    super.key,
+    required this.scanResult,
+    required this.reportId,
+  });
 
   @override
   State<ScanConfirmScreen> createState() => _ScanConfirmScreenState();
@@ -96,9 +108,11 @@ class _ScanConfirmScreenState extends State<ScanConfirmScreen> {
     unawaited(
       ScanCorrectionLogService.logCorrections(
         docType: widget.scanResult.docType,
+        reportId: widget.reportId,
         aiValues: widget.scanResult.values,
         confidences: widget.scanResult.confidences,
         finalValues: finalValues,
+        imageBytes: widget.scanResult.sourceImageBytes,
       ),
     );
 
