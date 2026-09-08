@@ -43,10 +43,35 @@ import 'package:flutter/foundation.dart';
 /// このログ記録・画像保存はあくまで補助機能であり、業務の主目的
 /// (日報の保存)を妨げてはならない。書き込み・アップロードに失敗しても
 /// 例外を外に伝播させず、デバッグログのみ出力する。
+///
+/// 【2026-09拡張:半自動再学習フロー用 training_samples コレクション】
+/// 従来の `scan_corrections` は「手直しされたフィールドの差分のみ」を
+/// 記録する設計だったため、実際にAzureへ再学習投入する際に必要な
+/// 「そのスキャンの全フィールドの最終確定値」がそのままでは分からず、
+/// 手直しが1件でもあった元画像を都度目視で全項目転記し直す必要があった。
+///
+/// この拡張では、手直しが1件以上あったスキャンについて、finalValues
+/// 全体(そのスキャンで確認・確定した全フィールド値)を新規コレクション
+/// `training_samples` にも保存する。既存の `scan_corrections`
+/// (フィールド単位の差分ログ)は運用・データ構造ともに変更しない
+/// (後方互換を保つため、削除・改修は行わない)。
+///
+/// 【運用方針・段階導入】
+/// - まずプロワン側(doc_type='ProWanDocType')を優先して半自動フロー
+///   (閾値到達で管理者に通知→人間がラベリング→Azure再学習投入)の
+///   運用対象とする。
+/// - SE側(doc_type='SEDocType')は、SE側の正解データ提供が月1回程度・
+///   手動Excelになる可能性がある(継続突合の頻度・形式がProWan側と
+///   異なる)ため、当面はサンプル収集のみ行い、実際の学習投入運用は
+///   後日順次進める。
+/// - `doc_type` フィールドで完全に分離されているため、ProWan側の運用を
+///   先に開始してもSE側のデータ収集自体は最初から並行して行われる
+///   (取りこぼしがない)。
 class ScanCorrectionLogService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseStorage _storage = FirebaseStorage.instance;
   static const String _collection = 'scan_corrections';
+  static const String _samplesCollection = 'training_samples';
 
   /// [aiValues]と[finalValues]を比較し、異なっているフィールドのみを
   /// まとめてバッチ書き込みする。手直しが1件以上あった場合は、元画像
@@ -107,6 +132,24 @@ class ScanCorrectionLogService {
           'created_at': FieldValue.serverTimestamp(),
         });
       }
+
+      // 【2026-09追加】半自動再学習フロー用に、そのスキャンの全フィールド
+      // 最終確定値(finalValues)を1件のドキュメントとしてまとめて保存する。
+      // (上記の scan_corrections への差分書き込みとは独立した別コレクション。
+      // 既存の scan_corrections 側の運用・件数には一切影響しない。)
+      final sampleDoc = _db.collection(_samplesCollection).doc();
+      batch.set(sampleDoc, {
+        'doc_type': docType,
+        'report_id': reportId,
+        'final_values': finalValues,
+        'corrected_field_keys': diffs.map((e) => e.key).toList(),
+        'training_image_path': trainingImagePath,
+        // 'pending' = 未処理(閾値カウント対象) / 'labeled' = ラベリング済み
+        // (座標特定完了・Azure投入待ち) / 'trained' = 再学習投入済み
+        'training_status': 'pending',
+        'created_at': FieldValue.serverTimestamp(),
+      });
+
       await batch.commit();
     } catch (e) {
       // 【重要】学習データ収集はあくまで補助機能。ここで例外を投げて

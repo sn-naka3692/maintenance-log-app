@@ -7,6 +7,7 @@ import '../models/work_report.dart';
 import '../providers/app_state.dart';
 import '../services/app_config_service.dart';
 import '../services/monthly_export_status_service.dart';
+import '../services/training_sample_status_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_card.dart';
 import '../utils/csv_exporter.dart';
@@ -50,6 +51,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _submissionCheckLoading = true;
   bool _submissionCheckToggling = false;
 
+  // ------------------------------------------------------------
+  // AI-OCR半自動再学習フロー(2026-09導入)関連
+  // 【運用方針】まずプロワン側(ProWanDocType)を優先運用する。SE側は
+  // 正解データ提供が月1回程度・手動Excelの可能性があり運用形態が
+  // 異なるため、件数カウントは両方行うが、通知の重み付け・案内文言は
+  // プロワン優先で表示する。
+  // ------------------------------------------------------------
+  static const int _trainingSampleThreshold = 20;
+  final TrainingSampleStatusService _trainingSampleService =
+      TrainingSampleStatusService.instance;
+  TrainingSampleCounts? _trainingSampleCounts;
+  bool _trainingSampleLoading = true;
+
   static DateTime _computePreviousMonth(DateTime now) {
     return now.month == 1
         ? DateTime(now.year - 1, 12)
@@ -65,6 +79,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadMonthlyStatus());
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _loadSubmissionCheckEnabled(),
+    );
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _loadTrainingSampleCounts(),
     );
   }
 
@@ -108,6 +125,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       if (mounted) setState(() => _monthlyStatus = status);
     } finally {
       if (mounted) setState(() => _monthlyStatusLoading = false);
+    }
+  }
+
+  Future<void> _loadTrainingSampleCounts() async {
+    setState(() => _trainingSampleLoading = true);
+    try {
+      final counts = await _trainingSampleService.fetchAllCounts();
+      if (mounted) setState(() => _trainingSampleCounts = counts);
+    } finally {
+      if (mounted) setState(() => _trainingSampleLoading = false);
     }
   }
 
@@ -595,6 +622,160 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// AI-OCR半自動再学習フロー(2026-09導入)の状況カード。
+  ///
+  /// 【運用方針】Azure Document Intelligenceのカスタムモデルは本番結果
+  /// からの自動継続学習ができず、座標付きラベル生成が人間の目視作業に
+  /// 依存するため「完全自動再学習」は行わない。代わりに、現場で手直しが
+  /// 発生したスキャン件数が一定数(閾値)たまったことをここで管理者に
+  /// 知らせ、実際のラベリング・Azure投入は人間が判断して手動実行する
+  /// (半自動フロー)。
+  ///
+  /// まずプロワン側(ProWanDocType)を優先して運用対象とする。SE側は
+  /// 正解データの提供が月1回程度・手動Excelになる可能性があり運用形態が
+  /// 異なるため、件数の収集自体は最初から両方行うが、案内文言は
+  /// 「まずプロワン側から」であることを明示する。
+  Widget _buildTrainingSampleCard() {
+    final counts = _trainingSampleCounts;
+    final prowanCount = counts?.prowanPending ?? 0;
+    final seCount = counts?.sePending ?? 0;
+    final prowanReady = prowanCount >= _trainingSampleThreshold;
+    final seReady = seCount >= _trainingSampleThreshold;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: (prowanReady || seReady)
+            ? AppColors.warning.withValues(alpha: 0.08)
+            : AppColors.primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: (prowanReady || seReady)
+              ? AppColors.warning.withValues(alpha: 0.35)
+              : AppColors.primary.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.model_training_outlined,
+                color: (prowanReady || seReady)
+                    ? AppColors.warning
+                    : AppColors.primary,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'AI-OCR再学習用サンプル(半自動フロー)',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                ),
+              ),
+              if (_trainingSampleLoading)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'スキャン確認画面で手直しされた項目を自動収集しています。'
+            '件数が一定数($_trainingSampleThreshold件)たまったら、'
+            '手動でのラベリング・Azure再学習投入をご検討ください'
+            '(自動での再学習は行いません)。まずはプロワン側から運用します。',
+            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+          ),
+          const SizedBox(height: 10),
+          _buildTrainingSampleRow(
+            label: 'プロワン側',
+            count: prowanCount,
+            ready: prowanReady,
+            emphasize: true,
+          ),
+          const SizedBox(height: 6),
+          _buildTrainingSampleRow(
+            label: 'SE(コンビニ)側',
+            count: seCount,
+            ready: seReady,
+            emphasize: false,
+          ),
+          if (seCount > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '※SE側は正解データの提供が月1回程度・手動Excelになる想定のため、'
+              '実際の再学習投入運用はプロワン側の後に順次進めます。',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrainingSampleRow({
+    required String label,
+    required int count,
+    required bool ready,
+    required bool emphasize,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: ready ? AppColors.warning : Colors.grey.shade400,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: emphasize ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '未処理 $count 件',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: ready ? AppColors.warning : Colors.grey.shade700,
+          ),
+        ),
+        if (ready) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.warning,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              '閾値到達',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1145,6 +1326,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           _buildSubmissionCheckCard(),
           const SizedBox(height: 12),
           _buildPartsReconciliationCard(),
+          const SizedBox(height: 12),
+          _buildTrainingSampleCard(),
           const SizedBox(height: 12),
           _buildRefrigerantMasterCard(),
           const SizedBox(height: 8),
