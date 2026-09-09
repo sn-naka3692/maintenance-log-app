@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../screens/scan_confirm_screen.dart';
 import '../services/document_scan_service.dart';
+import '../utils/blur_detector.dart';
 import '../utils/web_pdf_picker.dart';
 
 /// 「作業報告書をAIで読み取る」機能の一連の流れをまとめたヘルパー。
@@ -94,35 +95,65 @@ class DocumentScanFlow {
     } else {
       // カメラ撮影 or 端末内画像選択
       final picker = ImagePicker();
-      XFile? photo;
-      try {
-        photo = await picker.pickImage(
-          source: source == _ScanSource.camera
-              ? ImageSource.camera
-              : ImageSource.gallery,
-          imageQuality: 85,
-          maxWidth: 2400,
-        );
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                source == _ScanSource.camera
-                    ? 'カメラを起動できませんでした(Web環境では制限があります)'
-                    : '画像の選択に失敗しました: $e',
-              ),
-            ),
+      Uint8List? bytes;
+
+      // 【ブレ検出・2026-09追加】カメラ撮影のみが対象。撮影しなおせるのは
+      // カメラ撮影の場合だけなので、端末内の既存画像選択(ギャラリー)には
+      // このループを適用しない(既存挙動を変えないため)。
+      // 画像そのものは一切加工せず、判定のみ行う(判定不能時は安全側=
+      // ブレなし判定として素通りさせる)。
+      bool keepGoing = true;
+      while (keepGoing) {
+        keepGoing = false;
+        XFile? photo;
+        try {
+          photo = await picker.pickImage(
+            source: source == _ScanSource.camera
+                ? ImageSource.camera
+                : ImageSource.gallery,
+            imageQuality: 85,
+            maxWidth: 2400,
           );
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  source == _ScanSource.camera
+                      ? 'カメラを起動できませんでした(Web環境では制限があります)'
+                      : '画像の選択に失敗しました: $e',
+                ),
+              ),
+            );
+          }
+          return null;
         }
-        return null;
+        if (photo == null) return null; // ユーザーがキャンセル
+        if (!context.mounted) return null;
+
+        final pickedBytes = await photo.readAsBytes();
+
+        if (source == _ScanSource.camera) {
+          final blurResult = detectBlur(pickedBytes);
+          if (blurResult.isLikelyBlurry) {
+            if (!context.mounted) return null;
+            final retake = await _showBlurWarningDialog(context);
+            if (retake == true) {
+              keepGoing = true; // 撮影しなおす
+              continue;
+            }
+            // 「このまま続行」が選択された場合はそのまま次へ
+          }
+        }
+
+        bytes = pickedBytes;
       }
-      if (photo == null) return null; // ユーザーがキャンセル
+
+      if (bytes == null) return null;
       if (!context.mounted) return null;
 
       final dismiss = _showAnalyzingDialog(context);
       try {
-        final bytes = await photo.readAsBytes();
         result = await DocumentScanService.analyzeImage(bytes);
       } catch (e) {
         errorMessage = e is DocumentScanException
@@ -164,6 +195,34 @@ class DocumentScanFlow {
       ),
     );
     return confirmed;
+  }
+
+  /// ブレ検出時の確認ダイアログ。「再撮影する」を選ぶとtrueを返す。
+  /// 【ブレ検出・2026-09追加】画像を送信するかどうかの最終判断は必ず
+  /// ユーザーに委ね、自動でブロックはしない(判定のみ・無加工方針)。
+  static Future<bool?> _showBlurWarningDialog(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('画像がぼやけている可能性があります'),
+        content: const Text(
+          '撮影した画像がブレているか、ピントが合っていない可能性があります。'
+          'このまま読み取りに進むと文字が正しく認識されない場合があります。\n\n'
+          '再撮影しますか?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('このまま続行'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('再撮影する'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 解析中ダイアログを表示し、閉じるための関数を返す。
