@@ -137,6 +137,25 @@ class ScanCorrectionLogService {
       // 最終確定値(finalValues)を1件のドキュメントとしてまとめて保存する。
       // (上記の scan_corrections への差分書き込みとは独立した別コレクション。
       // 既存の scan_corrections 側の運用・件数には一切影響しない。)
+      //
+      // 【2026-09追加(2)】信頼度ベースの自動フィルタ導入に向けて、AIの
+      // 抽出信頼度(フィールドキー -> 0.0〜1.0)そのものと、その平均値・
+      // 最小値も合わせて保存する。人間のレビュー(review_cli.py)が
+      // 「AI全体の確信度が低かったサンプルを優先してレビューする」
+      // 「確信度が極端に低いフィールドがあるサンプルは要注意フラグを
+      // 立てる」といった判断材料として使うことを想定している。
+      // あくまで参考情報の記録に留め、この値だけで自動承認・自動却下は
+      // 行わない(最終判断は必ず人間のレビューに委ねる方針を維持)。
+      final confidenceValues = confidences.values
+          .where((v) => v.isFinite)
+          .toList();
+      final avgConfidence = confidenceValues.isEmpty
+          ? null
+          : confidenceValues.reduce((a, b) => a + b) / confidenceValues.length;
+      final minConfidence = confidenceValues.isEmpty
+          ? null
+          : confidenceValues.reduce((a, b) => a < b ? a : b);
+
       final sampleDoc = _db.collection(_samplesCollection).doc();
       batch.set(sampleDoc, {
         'doc_type': docType,
@@ -144,6 +163,9 @@ class ScanCorrectionLogService {
         'final_values': finalValues,
         'corrected_field_keys': diffs.map((e) => e.key).toList(),
         'training_image_path': trainingImagePath,
+        'ai_confidences': confidences,
+        'ai_avg_confidence': avgConfidence,
+        'ai_min_confidence': minConfidence,
         // 'pending' = 未処理(閾値カウント対象) / 'labeled' = ラベリング済み
         // (座標特定完了・Azure投入待ち) / 'trained' = 再学習投入済み
         'training_status': 'pending',

@@ -243,7 +243,14 @@ class DocumentScanFlow {
     };
   }
 
-  /// 読み取り元(カメラ撮影/端末内画像/PDFアップロード)を選ばせるボトムシート。
+  /// 読み取り元(PDFアップロード/カメラ撮影/端末内画像)を選ばせるボトムシート。
+  ///
+  /// 【表示順・2026-09見直し】
+  /// 各システム(プロワン・店舗カルテ等)から出力したPDFをそのまま取り込む
+  /// 方が、カメラ撮影に比べて文字認識精度が安定するため、PDFアップロードを
+  /// 最優先の選択肢として最上位に配置し、「推奨」バッジを付けて誘導する。
+  /// カメラ撮影は「PDF出力できない場合の補助的な手段」という位置づけに
+  /// 変更し、2番目に表示する(廃止はしない)。
   static Future<_ScanSource?> _pickSource(BuildContext context) {
     return showModalBottomSheet<_ScanSource>(
       context: context,
@@ -262,16 +269,50 @@ class DocumentScanFlow {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('カメラで撮影'),
-              subtitle: const Text('紙の作業報告書をその場で撮影します'),
-              onTap: () => Navigator.of(ctx).pop(_ScanSource.camera),
+              leading: const Icon(
+                Icons.picture_as_pdf_outlined,
+                color: Colors.indigo,
+              ),
+              title: Row(
+                children: [
+                  const Text('PDFファイルをアップロード'),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.indigo.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      '推奨',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.indigo,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: const Text(
+                'プロワン・店舗カルテ等から出力したPDFを取り込みます\n'
+                '文字が正確に読み取れるため、可能な場合はこちらをご利用ください',
+              ),
+              isThreeLine: true,
+              onTap: () => Navigator.of(ctx).pop(_ScanSource.pdf),
             ),
             ListTile(
-              leading: const Icon(Icons.picture_as_pdf_outlined),
-              title: const Text('PDFファイルをアップロード'),
-              subtitle: const Text('プロワン・店舗カルテ等から出力したPDFを取り込みます'),
-              onTap: () => Navigator.of(ctx).pop(_ScanSource.pdf),
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('カメラで撮影'),
+              subtitle: const Text(
+                'PDFが用意できない場合の補助的な読み取り方法です\n'
+                '紙の作業報告書をその場で撮影します',
+              ),
+              isThreeLine: true,
+              onTap: () => Navigator.of(ctx).pop(_ScanSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
