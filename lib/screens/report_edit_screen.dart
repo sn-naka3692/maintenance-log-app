@@ -307,7 +307,49 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         () => _markFieldEditedManually('pro_wan_report_detail.${entry.value}'),
       );
     }
+    // 【不具合修正・2026-XX】SE用コントローラー(_ssCtrls)についても、
+    // ProWan側・ProWanReportDetail側と同様にユーザーの手入力編集を検知し
+    // manual確定としてマークする。これにより、_scanReport()のSE用スキャン
+    // 反映処理で導入したapplyIfNotManualパターンが正しく機能する
+    // (すでにmanual確定済みの項目をスキャンで誤って上書きしない)。
+    for (final entry in _ssFieldKeyMap.entries) {
+      _ssCtrls[entry.key]!.addListener(
+        () => _markFieldEditedManually('store_system_report.${entry.value}'),
+      );
+    }
   }
+
+  /// _ssCtrlsのキー(camelCase) -> StoreSystemReport.toMap()のキー(snake_case)
+  /// の対応表。_scanReport()のSE用スキャン反映処理での自動反映・manual判定の
+  /// 両方で使う('store_system_report.'を前置してProWan側(_pwFieldKeyMap)と
+  /// 同じ命名規則に揃える)。
+  ///
+  /// 【不具合修正・2026-XX】従来、SE用スキャン反映処理は各項目を素朴な
+  /// if文で直接_ssCtrlsへ書き込むだけで、_fieldSourcesへの記録が一切
+  /// 行われていなかった。このため、ProWan側と異なりSE側では「スキャンで
+  /// 自動入力された件数」を正確に把握できず、AI-OCRの実運用手直し率を
+  /// 算出できないという計測基盤の欠陥があった。この対応表を用意し、
+  /// ProWan側と同様のapplyIfNotManualパターンをSE側にも導入する。
+  static const Map<String, String> _ssFieldKeyMap = {
+    'storeNumber': 'store_number',
+    'scannedAddress': 'scanned_address',
+    'scannedTel': 'scanned_tel',
+    'equipmentName': 'equipment_name',
+    'maker': 'maker',
+    'modelNumber': 'model_number',
+    'machineNo': 'machine_no',
+    'assetNo': 'asset_no',
+    'barcode': 'barcode',
+    'deliveryDate': 'delivery_date',
+    'part': 'part',
+    'detailPart': 'detail_part',
+    'phenomenon': 'phenomenon',
+    'phenomenonNote': 'phenomenon_note',
+    'cause': 'cause',
+    'treatmentContent': 'treatment_content',
+    'recoveryAmount': 'recovery_amount',
+    'refrigerantAmount': 'refrigerant_amount',
+  };
 
   /// _pwCtrlsのキー(camelCase) -> ProWanReportDetail.toMap()のキー(snake_case)
   /// の対応表。_applyProWanScanResult()での自動反映・manual判定の両方で使う。
@@ -529,6 +571,12 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   ///   含む17項目(kProWanScanFieldDefinitions参照。技術者氏名は
   ///   日報作成者と重複するため2026-08-28にOCR対象から除外)を、
   ///   CSV照合を介さず_applyProWanScanResult()で各フォーム欄へ直接反映する
+  ///
+  /// 【不具合修正・2026-XX】従来、SE用の反映処理は素朴なif文のみで、
+  /// (1)すでに手入力確定(manual)済みのフィールドを無条件に上書きしてしまう
+  /// 恐れがあり、(2)_fieldSourcesへの記録が一切行われずAI-OCRの実運用
+  /// 手直し率を計測できない、という2つの欠陥があった。ProWan側の
+  /// applyIfNotManualパターンをSE側にも導入し、両者の計測基盤を揃える。
   Future<void> _scanReport() async {
     final confirmed = await DocumentScanFlow.run(context, reportId: _reportId);
     if (confirmed == null || !mounted) return;
@@ -539,71 +587,57 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       return;
     }
 
+    int filledCount = 0;
+
+    void applyIfNotManual(String ssCtrlKey, String? value) {
+      final v = (value ?? '').trim();
+      if (v.isEmpty) return;
+      final fieldKey = 'store_system_report.${_ssFieldKeyMap[ssCtrlKey]}';
+      if (_fieldSources[fieldKey] == 'manual') return;
+      _ssCtrls[ssCtrlKey]!.text = v;
+      _fieldSources[fieldKey] = 'auto';
+      filledCount++;
+    }
+
     setState(() {
       // コンビニ側システム入力控えセクションへ反映
-      if ((confirmed['StoreNumber'] ?? '').isNotEmpty) {
-        _ssCtrls['storeNumber']!.text = confirmed['StoreNumber']!;
-      }
-      if ((confirmed['Address'] ?? '').isNotEmpty) {
-        _ssCtrls['scannedAddress']!.text = confirmed['Address']!;
-      }
-      if ((confirmed['Tel'] ?? '').isNotEmpty) {
-        _ssCtrls['scannedTel']!.text = confirmed['Tel']!;
-      }
-      if ((confirmed['EquipmentName'] ?? '').isNotEmpty) {
-        _ssCtrls['equipmentName']!.text = confirmed['EquipmentName']!;
-      }
-      if ((confirmed['MakerName'] ?? '').isNotEmpty) {
-        _ssCtrls['maker']!.text = confirmed['MakerName']!;
-      }
-      if ((confirmed['ModelNo'] ?? '').isNotEmpty) {
-        _ssCtrls['modelNumber']!.text = confirmed['ModelNo']!;
-      }
-      if ((confirmed['MachineNo'] ?? '').isNotEmpty) {
-        _ssCtrls['machineNo']!.text = confirmed['MachineNo']!;
-      }
-      if ((confirmed['AssetNo'] ?? '').isNotEmpty) {
-        _ssCtrls['assetNo']!.text = confirmed['AssetNo']!;
-      }
-      if ((confirmed['Barcode'] ?? '').isNotEmpty) {
-        _ssCtrls['barcode']!.text = confirmed['Barcode']!;
-      }
-      if ((confirmed['DeliveryDate'] ?? '').isNotEmpty) {
-        _ssCtrls['deliveryDate']!.text = confirmed['DeliveryDate']!;
-      }
-      if ((confirmed['PartCategory'] ?? '').isNotEmpty) {
-        _ssCtrls['part']!.text = confirmed['PartCategory']!;
-      }
-      if ((confirmed['PartDetail'] ?? '').isNotEmpty) {
-        _ssCtrls['detailPart']!.text = confirmed['PartDetail']!;
-      }
-      if ((confirmed['Symptom'] ?? '').isNotEmpty) {
-        _ssCtrls['phenomenon']!.text = confirmed['Symptom']!;
-      }
-      if ((confirmed['SymptomDetail'] ?? '').isNotEmpty) {
-        _ssCtrls['phenomenonNote']!.text = confirmed['SymptomDetail']!;
-      }
-      if ((confirmed['Cause'] ?? '').isNotEmpty) {
-        _ssCtrls['cause']!.text = confirmed['Cause']!;
-      }
-      if ((confirmed['ActionContent'] ?? '').isNotEmpty) {
-        _ssCtrls['treatmentContent']!.text = confirmed['ActionContent']!;
-      }
+      applyIfNotManual('storeNumber', confirmed['StoreNumber']);
+      applyIfNotManual('scannedAddress', confirmed['Address']);
+      applyIfNotManual('scannedTel', confirmed['Tel']);
+      applyIfNotManual('equipmentName', confirmed['EquipmentName']);
+      applyIfNotManual('maker', confirmed['MakerName']);
+      applyIfNotManual('modelNumber', confirmed['ModelNo']);
+      applyIfNotManual('machineNo', confirmed['MachineNo']);
+      applyIfNotManual('assetNo', confirmed['AssetNo']);
+      applyIfNotManual('barcode', confirmed['Barcode']);
+      applyIfNotManual('deliveryDate', confirmed['DeliveryDate']);
+      applyIfNotManual('part', confirmed['PartCategory']);
+      applyIfNotManual('detailPart', confirmed['PartDetail']);
+      applyIfNotManual('phenomenon', confirmed['Symptom']);
+      applyIfNotManual('phenomenonNote', confirmed['SymptomDetail']);
+      applyIfNotManual('cause', confirmed['Cause']);
+      applyIfNotManual('treatmentContent', confirmed['ActionContent']);
       // 【方針】作業者氏名はOCR対象外(kScanFieldDefinitionsから除外済み)。
       // 従業員マスタからの選択+手入力併用欄(_buildWorkerNameField)で管理する。
       // 冷媒回収量・充填量(半角英数のみ許可のバリデーション対象欄)
-      if ((confirmed['RecoveryAmountKg'] ?? '').isNotEmpty) {
-        _ssCtrls['recoveryAmount']!.text = confirmed['RecoveryAmountKg']!;
+      applyIfNotManual('recoveryAmount', confirmed['RecoveryAmountKg']);
+      applyIfNotManual('refrigerantAmount', confirmed['ChargeAmountKg']);
+      // 訪問日(パースできた場合のみ反映。ProWan側と共通の_visitDate/
+      // 'visit_date'キーを使うため、既にProWan側やユーザーの日付ピッカー
+      // 操作でmanual確定済みの場合は上書きしない)。
+      if (_fieldSources['visit_date'] != 'manual') {
+        final visitDateStr = confirmed['VisitDate'];
+        if (visitDateStr != null && visitDateStr.isNotEmpty) {
+          final parsed = _tryParseDate(visitDateStr);
+          if (parsed != null) {
+            _visitDate = parsed;
+            _fieldSources['visit_date'] = 'auto';
+            filledCount++;
+          }
+        }
       }
-      if ((confirmed['ChargeAmountKg'] ?? '').isNotEmpty) {
-        _ssCtrls['refrigerantAmount']!.text = confirmed['ChargeAmountKg']!;
-      }
-      // 訪問日・作業開始/終了時刻(パースできた場合のみ反映)
-      final visitDateStr = confirmed['VisitDate'];
-      if (visitDateStr != null && visitDateStr.isNotEmpty) {
-        final parsed = _tryParseDate(visitDateStr);
-        if (parsed != null) _visitDate = parsed;
-      }
+      // 作業開始/終了時刻(現時点では_fieldSources計測の対象外。ProWan側
+      // 報告書にはこの2項目が存在せず、SE専用項目のため既存設計を維持する)。
       final startTimeStr = confirmed['StartTime'];
       if (startTimeStr != null && startTimeStr.isNotEmpty) {
         final parsed = _tryParseTime(startTimeStr);
@@ -618,7 +652,13 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('スキャン内容をフォームへ反映しました。他の項目も確認してください。')),
+        SnackBar(
+          content: Text(
+            filledCount > 0
+                ? '作業報告書から$filledCount件の項目を自動入力しました。内容を確認してください。'
+                : '読み取れた項目がありませんでした。各項目を手入力してください。',
+          ),
+        ),
       );
     }
   }
@@ -1740,6 +1780,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 controller: _ssCtrls['storeNumber']!,
                 label: '店番(スキャン取り込み・任意)',
                 icon: Icons.store_outlined,
+                fieldKey: 'store_system_report.store_number',
               ),
               const SizedBox(height: 16),
               Row(
@@ -1774,6 +1815,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 inputFormatters: [_halfWidthAlphaNumFormatter],
                 formFieldKey: _seRefrigerantAmountFieldKey,
                 validator: _halfWidthAlphaNumValidator,
+                fieldKey: 'store_system_report.refrigerant_amount',
               ),
               _buildRefrigerantNotice(
                 '冷媒種類はリストから選択してください(リストにない場合は'
@@ -1802,18 +1844,21 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 controller: _ssCtrls['scannedAddress']!,
                 label: '住所(スキャン取り込み・任意)',
                 icon: Icons.location_on_outlined,
+                fieldKey: 'store_system_report.scanned_address',
               ),
               const SizedBox(height: 12),
               _buildField(
                 controller: _ssCtrls['scannedTel']!,
                 label: 'TEL(スキャン取り込み・任意)',
                 icon: Icons.call_outlined,
+                fieldKey: 'store_system_report.scanned_tel',
               ),
               const SizedBox(height: 12),
               _buildField(
                 controller: _ssCtrls['equipmentName']!,
                 label: '設備名称',
                 icon: Icons.kitchen,
+                fieldKey: 'store_system_report.equipment_name',
               ),
               const SizedBox(height: 12),
               Row(
@@ -1823,6 +1868,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['maker']!,
                       label: 'メーカー',
                       icon: Icons.factory_outlined,
+                      fieldKey: 'store_system_report.maker',
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1831,6 +1877,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['modelNumber']!,
                       label: '型式',
                       icon: Icons.qr_code_2,
+                      fieldKey: 'store_system_report.model_number',
                     ),
                   ),
                 ],
@@ -1843,6 +1890,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['machineNo']!,
                       label: '機番(任意)',
                       icon: Icons.confirmation_num_outlined,
+                      fieldKey: 'store_system_report.machine_no',
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1851,6 +1899,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['assetNo']!,
                       label: '資産管理No(任意)',
                       icon: Icons.badge_outlined,
+                      fieldKey: 'store_system_report.asset_no',
                     ),
                   ),
                 ],
@@ -1863,6 +1912,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['barcode']!,
                       label: 'ランダムバーコード(任意)',
                       icon: Icons.qr_code_scanner_outlined,
+                      fieldKey: 'store_system_report.barcode',
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1871,6 +1921,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['deliveryDate']!,
                       label: '納品日(任意)',
                       icon: Icons.local_shipping_outlined,
+                      fieldKey: 'store_system_report.delivery_date',
                     ),
                   ),
                 ],
@@ -1882,6 +1933,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 controller: _ssCtrls['recoveryAmount']!,
                 label: '冷媒回収量(kg・任意)',
                 icon: Icons.opacity,
+                fieldKey: 'store_system_report.recovery_amount',
               ),
               const SizedBox(height: 16),
               Text(
@@ -1900,6 +1952,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['part']!,
                       label: '部位',
                       icon: Icons.build_circle_outlined,
+                      fieldKey: 'store_system_report.part',
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1908,6 +1961,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                       controller: _ssCtrls['detailPart']!,
                       label: '詳細部位',
                       icon: Icons.build_circle_outlined,
+                      fieldKey: 'store_system_report.detail_part',
                     ),
                   ),
                 ],
@@ -1919,6 +1973,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 icon: Icons.report_gmailerrorred_outlined,
                 maxLines: 2,
                 enableVoice: true,
+                fieldKey: 'store_system_report.phenomenon',
               ),
               const SizedBox(height: 12),
               _buildField(
@@ -1927,6 +1982,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 icon: Icons.notes_outlined,
                 maxLines: 2,
                 enableVoice: true,
+                fieldKey: 'store_system_report.phenomenon_note',
               ),
               const SizedBox(height: 12),
               _buildField(
@@ -1935,6 +1991,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 icon: Icons.psychology_alt_outlined,
                 maxLines: 2,
                 enableVoice: true,
+                fieldKey: 'store_system_report.cause',
               ),
               const SizedBox(height: 12),
               _buildField(
@@ -1943,6 +2000,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
                 icon: Icons.handyman_outlined,
                 maxLines: 2,
                 enableVoice: true,
+                fieldKey: 'store_system_report.treatment_content',
               ),
               const SizedBox(height: 12),
               _buildField(
