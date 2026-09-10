@@ -247,6 +247,9 @@ const List<ExternalService> externalServices = [
       'カスタムテンプレートモデル「sdrs-repair-report-v1」を学習済み',
       'AIの抽出結果は必ず「確認・修正画面」を経由させる設計(AI一発登録は行わない)',
       'モデルの追加学習やAzure Portalでの管理はAzureサブスクリプションの管理者権限が必要',
+      '(v1.2.46)「原因」「部位」「事象」欄の読取結果に見出し文字が'
+          '混入する問題を、中継サーバー側(下記Azure Functions)の後処理で'
+          '補正するよう改善(実データ検証: 「原因」欄89%→96%)',
     ],
   ),
   ExternalService(
