@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../utils/field_heading_normalizer.dart';
 import '../utils/maker_name_normalizer.dart';
 
 /// Azure AI Document Intelligence カスタムテンプレートモデル
@@ -152,6 +153,11 @@ class DocumentScanService {
     if (values.containsKey('MakerName')) {
       values['MakerName'] = normalizeMakerName(values['MakerName']);
     }
+
+    // 「処置内容」ブロック(Cause/PartCategory/Symptom)の見出し文字混入補正
+    // (サーバー側でも正規化済みだが、念のためクライアント側でも冪等に
+    // 正規化しておく=MakerNameと同じ二重防御方針)
+    values.addAll(normalizeFieldHeadingsInValues(values));
 
     return ScanResult(
       values: values,
