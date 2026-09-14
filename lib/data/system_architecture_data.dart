@@ -35,11 +35,23 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.47',
+    buildNumber: 56,
+    releaseDate: '2026-09-11',
+    summary: '開始時刻・終了時刻の手入力対応(半角数字と「:」のみ許可)(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
+    versionName: '1.2.46',
+    buildNumber: 55,
+    releaseDate: '2026-09-10',
+    summary: 'AI読取「原因・部位・事象」欄の見出し文字混入補正(実データ検証で原因欄89%→96%)',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.45',
     buildNumber: 54,
     releaseDate: '2026-09-10',
     summary:
-        'WorkStartDateの複数日付・時刻混入への耐性強化(scan_date_parser、AI誤反映抑制)(★配布中の最新版)',
+        'WorkStartDateの複数日付・時刻混入への耐性強化(scan_date_parser、AI誤反映抑制)',
   ),
   VersionBuildRecord(
     versionName: '1.2.44',

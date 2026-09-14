@@ -75,6 +75,19 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   DateTime _visitDate = DateTime.now();
   TimeOfDay _startTime = TimeOfDay.now();
   TimeOfDay _endTime = TimeOfDay.now();
+  // 【2026-09追加・時刻手入力機能】従来はピッカー(showTimePicker)での
+  // 選択のみだったが、現場から「タップ操作より手入力の方が早い」との
+  // 要望があり、テキスト直接入力欄を追加した。
+  // 【設計】既存のTimeOfDay型(_startTime/_endTime)・保存処理(_combine、
+  // WorkReport.startTime/endTime)は一切変更しない。この2つのコントローラーは
+  // あくまで「_startTime/_endTimeを文字列として表示・編集するための鏡」であり、
+  // 保存時は必ず_startTime/_endTime(TimeOfDay)側を正とする。これにより
+  // 既存の日報データ・他画面(CSV/Excel出力、AIスキャン反映等)への影響はない。
+  // 【入力可能文字】半角数字(0-9)と半角コロン(:)のみ許可し、"HH:MM"
+  // (0:00〜23:59)の形式に限定する。全角数字・全角コロン・スペース等は
+  // 一切入力できない(_timeInputFormatterで機械的に除去)。
+  late TextEditingController _startTimeCtrl;
+  late TextEditingController _endTimeCtrl;
   ResponseType _responseType = ResponseType.regularInspection;
   final List<PartUsed> _parts = [];
   final List<String> _tags = [];
@@ -236,6 +249,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       _manualReviewNeeded = e.manualReviewNeeded;
       _matchedCacheJobNumber = e.matchedCacheJobNumber;
     }
+    // 【2026-09追加・時刻手入力機能】_startTime/_endTime確定後に、その値を
+    // 表示文字列としてコントローラーへ反映する(既存データ編集時は保存済みの
+    // 時刻がそのまま初期表示される)。
+    _startTimeCtrl = TextEditingController(text: _formatTime(_startTime));
+    _endTimeCtrl = TextEditingController(text: _formatTime(_endTime));
     // 既存データの「冷媒種類」(過去の自由入力・OCR取り込み分含む)を、
     // マスタ選択肢(固定リスト+管理者昇格分)と照合し、一致すれば
     // その選択肢を選択済み状態にする。一致しない場合(過去の表記ゆれ・
@@ -396,6 +414,8 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     }
     _tagInputCtrl.dispose();
     _caseRoleNoteCtrl.dispose();
+    _startTimeCtrl.dispose();
+    _endTimeCtrl.dispose();
     super.dispose();
   }
 
@@ -499,12 +519,80 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       setState(() {
         if (isStart) {
           _startTime = picked;
+          _startTimeCtrl.text = _formatTime(picked);
         } else {
           _endTime = picked;
+          _endTimeCtrl.text = _formatTime(picked);
         }
       });
     }
   }
+
+  /// 【2026-09追加・時刻手入力機能】TimeOfDayを"HH:MM"形式(24時間表記・
+  /// ゼロ埋め2桁)の半角文字列に変換する。手入力欄の表示・初期値に使用。
+  String _formatTime(TimeOfDay t) {
+    final h = t.hour.toString().padLeft(2, '0');
+    final m = t.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  /// 【2026-09追加・時刻手入力機能】手入力欄に入力された文字列を検証し、
+  /// 妥当な"H:MM"または"HH:MM"(0:00〜23:59)であればTimeOfDayを返す。
+  /// 不正な場合はnullを返す(呼び出し側でエラー表示・値の巻き戻しを行う)。
+  ///
+  /// 【入力可能文字】半角数字(0-9)と半角コロン(:)のみを対象とする
+  /// (呼び出し元のTextFieldに_timeInputFormatterを適用済みのため、
+  /// この時点で全角文字・記号等は既に除去されている前提だが、
+  /// 二重チェックとしてここでも厳密な形式を要求する)。
+  TimeOfDay? _parseManualTime(String text) {
+    final trimmed = text.trim();
+    final match = RegExp(r'^([0-9]{1,2}):([0-9]{2})$').firstMatch(trimmed);
+    if (match == null) return null;
+    final hour = int.tryParse(match.group(1)!);
+    final minute = int.tryParse(match.group(2)!);
+    if (hour == null || minute == null) return null;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  /// 【2026-09追加・時刻手入力機能】手入力欄からフォーカスが外れた際に呼ぶ。
+  /// 妥当な値ならTimeOfDayへ反映しつつ表示を"HH:MM"に正規化(例: "9:5"→
+  /// "09:05")、不正な値ならエラーを案内し元の値(_startTime/_endTime)の
+  /// 表示に巻き戻す。
+  void _commitManualTime(bool isStart) {
+    final ctrl = isStart ? _startTimeCtrl : _endTimeCtrl;
+    final parsed = _parseManualTime(ctrl.text);
+    if (parsed == null) {
+      if (ctrl.text.trim().isEmpty) {
+        // 空欄のまま確定させず、元の値に戻す(時刻は必須項目のため)。
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('時刻は 0:00〜23:59 の範囲で「時:分」の形式で入力してください(例: 9:05)'),
+          ),
+        );
+      }
+      setState(() {
+        ctrl.text = _formatTime(isStart ? _startTime : _endTime);
+      });
+      return;
+    }
+    setState(() {
+      if (isStart) {
+        _startTime = parsed;
+      } else {
+        _endTime = parsed;
+      }
+      ctrl.text = _formatTime(parsed);
+    });
+  }
+
+  /// 【2026-09追加・時刻手入力機能】時刻手入力欄で使える文字を
+  /// 半角数字(0-9)と半角コロン(:)のみに限定する入力フォーマッタ。
+  /// 全角数字・全角コロン・スペース・その他記号は入力時点で除去される。
+  static final _timeInputFormatter = FilteringTextInputFormatter.allow(
+    RegExp(r'[0-9:]'),
+  );
 
   void _addPart() {
     showDialog(
@@ -641,12 +729,20 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
       final startTimeStr = confirmed['StartTime'];
       if (startTimeStr != null && startTimeStr.isNotEmpty) {
         final parsed = _tryParseTime(startTimeStr);
-        if (parsed != null) _startTime = parsed;
+        if (parsed != null) {
+          _startTime = parsed;
+          // 【2026-09追加・時刻手入力機能】手入力欄(表示用の鏡)にも
+          // 反映しないと、スキャン反映直後の画面に古い表示が残り続ける。
+          _startTimeCtrl.text = _formatTime(parsed);
+        }
       }
       final endTimeStr = confirmed['EndTime'];
       if (endTimeStr != null && endTimeStr.isNotEmpty) {
         final parsed = _tryParseTime(endTimeStr);
-        if (parsed != null) _endTime = parsed;
+        if (parsed != null) {
+          _endTime = parsed;
+          _endTimeCtrl.text = _formatTime(parsed);
+        }
       }
     });
 
@@ -938,6 +1034,13 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
   Future<void> _save() async {
     if (_isSaving) return; // 多重押下防止
+
+    // 【2026-09追加・時刻手入力機能】開始/終了時刻欄にフォーカスが残った
+    // 状態のまま保存ボタンが押された場合、onTapOutside/onEditingCompleteが
+    // 発火せず手入力内容が_startTime/_endTimeへ反映されないまま保存されて
+    // しまう恐れがあるため、保存直前に必ず確定処理を行う。
+    _commitManualTime(true);
+    _commitManualTime(false);
 
     if (!_formKey.currentState!.validate()) {
       // 【不具合修正・2026-09】従来はここで無言のreturnとなり、
@@ -1351,36 +1454,72 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            // 【2026-09追加・時刻手入力機能】従来はタップしてピッカーを開く
+            // 方式のみだったが、直接キーボードから「H:MM」を打ち込みたいという
+            // 現場要望に対応し、手入力欄を追加した。右端の時計アイコンから
+            // 従来通りピッカーで選ぶことも引き続き可能(どちらの操作でも
+            // 同じ_startTime/_endTimeに反映される)。
+            // 入力可能文字は半角数字と半角コロンのみ(_timeInputFormatter)。
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: InkWell(
-                    onTap: () => _pickTime(true),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: '開始時刻',
-                        prefixIcon: Icon(Icons.play_arrow),
+                  child: TextFormField(
+                    controller: _startTimeCtrl,
+                    keyboardType: TextInputType.datetime,
+                    inputFormatters: [_timeInputFormatter],
+                    maxLength: 5,
+                    onEditingComplete: () {
+                      _commitManualTime(true);
+                      FocusScope.of(context).unfocus();
+                    },
+                    onTapOutside: (_) => _commitManualTime(true),
+                    decoration: InputDecoration(
+                      labelText: '開始時刻',
+                      hintText: '9:00',
+                      counterText: '',
+                      prefixIcon: const Icon(Icons.play_arrow),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.schedule),
+                        tooltip: 'ピッカーで選ぶ',
+                        onPressed: () => _pickTime(true),
                       ),
-                      child: Text(_startTime.format(context)),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: InkWell(
-                    onTap: () => _pickTime(false),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: '終了時刻',
-                        prefixIcon: Icon(Icons.stop),
+                  child: TextFormField(
+                    controller: _endTimeCtrl,
+                    keyboardType: TextInputType.datetime,
+                    inputFormatters: [_timeInputFormatter],
+                    maxLength: 5,
+                    onEditingComplete: () {
+                      _commitManualTime(false);
+                      FocusScope.of(context).unfocus();
+                    },
+                    onTapOutside: (_) => _commitManualTime(false),
+                    decoration: InputDecoration(
+                      labelText: '終了時刻',
+                      hintText: '18:00',
+                      counterText: '',
+                      prefixIcon: const Icon(Icons.stop),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.schedule),
+                        tooltip: 'ピッカーで選ぶ',
+                        onPressed: () => _pickTime(false),
                       ),
-                      child: Text(_endTime.format(context)),
                     ),
                   ),
                 ),
               ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 4, top: 2),
+              child: Text(
+                '入力できる文字は半角数字と「:」のみです(例: 9:05、18:30)',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
             ),
             const SizedBox(height: 12),
             _buildCoWorkerField(),
