@@ -72,10 +72,29 @@
 # APK版ともに「ログイン画面は表示されるがログイン後の全データ読み込みが
 # 失敗する」という重大障害を引き起こした。
 # 【絶対に守ること】firestore.rules を変更した回のリリースでは、
-# 必ず `firebase deploy --only firestore:rules` も実行し、本番の
+# 必ず firestore:rules のデプロイ(下記Step 5)も実行し、本番の
 # ルールが実際に更新されたことを(Firebase Rules APIやコンソール等で)
-# 確認すること。本スクリプトの Step 5/7 として組み込み済みなので、
-# 手動デプロイに切り替える場合も本ステップを省略しないこと。
+# 確認すること。
+#
+# 【構造修正・2026-09-15】従来 `firebase deploy --only firestore:rules`
+# を使っていたが、本サンドボックスのサービスアカウントには
+# serviceusage.googleapis.com への照会権限がなく、CLIの事前チェック
+# (「firestore.googleapis.com APIが有効か」の確認)が常に403で失敗する
+# ことが判明した(実際のルール変更権限自体は正しく持っている)。
+# この403によりスクリプトが `set -e` で停止し、その後段にあった
+# Step 6(GitHub Release公開)・Step 7(Firestore app_config/settings
+# 更新=更新通知バナーの生命線)が実行されないまま終わってしまう事故が
+# 2026-09-11・2026-09-15に連続発生した。
+# 【再発防止】
+#   (1) firestore:rules のデプロイは、CLIを経由せずFirebase Rules API
+#       を直接叩く scripts/deploy_firestore_rules.py に置き換えた
+#       (前記の403問題を完全に回避できる)。
+#   (2) それでもルールデプロイ自体が何らかの理由で失敗した場合に備え、
+#       このステップだけは `|| true` で失敗を許容し、後続のStep 6/7
+#       (GitHub Release公開・Firestore設定更新)は【何があっても必ず
+#       実行される】ようスクリプト全体の構成を変更した(下記参照)。
+#       firestore.rulesの反映有無は、失敗時に表示される警告メッセージで
+#       必ず目視確認すること。
 
 set -e
 cd "$(dirname "$0")/.."
@@ -143,20 +162,75 @@ echo "▶ 5/7 Firestoreセキュリティルールをデプロイします..."
 # デフォルト拒否)によりログイン後の全データ読み込みが失敗する重大障害が
 # 発生した。firestore.rules の変更を確実に本番へ反映するため、hosting と
 # 同時に必ずデプロイすること。
-GOOGLE_APPLICATION_CREDENTIALS=/opt/flutter/firebase-admin-sdk.json \
-  firebase deploy --only firestore:rules --project sn-report
+#
+# 【構造修正・2026-09-15】firebase CLIの `deploy --only firestore:rules`
+# はサービスアカウント権限の都合で常に403になるため使わず、Firebase
+# Rules APIを直接叩くPythonスクリプトを使う(冒頭コメント参照)。
+# このステップが万一失敗しても($RULES_DEPLOY_FAILEDに記録した上で)
+# 後続のStep 6/7は必ず実行する。firestore.rules自体に変更がないリリース
+# であればこのステップの失敗は実害がないが、変更がある回は下記の警告を
+# 必ず確認し、成功するまで手動で再実行すること。
+RULES_DEPLOY_FAILED=0
+python3 scripts/deploy_firestore_rules.py || RULES_DEPLOY_FAILED=1
+if [[ "$RULES_DEPLOY_FAILED" -eq 1 ]]; then
+  echo "⚠️  警告: firestore.rulesのデプロイに失敗しました。"
+  echo "   firestore.rulesに実際の変更がある回のリリースの場合、本番の"
+  echo "   ルールが古いままになっている可能性があります。"
+  echo "   手動で python3 scripts/deploy_firestore_rules.py を再実行してください。"
+fi
 
+# 【構造修正・2026-09-15・最重要】Step 6(GitHub Release公開)・
+# Step 7(Firestore app_config/settings更新=更新通知バナーの生命線)は、
+# 上記Step 5がどうなろうと(set -eで停止しようと)必ず実行されなければ
+# ならない。2026-09-11・2026-09-15と2回連続で「Step 5の403エラーで
+# スクリプトが停止し、Step 6/7が実行されないまま終わる」事故が発生し、
+# 手動補完が必要になったため、以降は明示的に `|| true` で個々の失敗を
+# 許容しつつ、最後に全ステップの成否をまとめて報告する構成に変更した。
 echo "▶ 6/7 APKをGitHub Releasesへ公開します(tag: ${TAG})..."
+RELEASE_FAILED=0
 gh release create "${TAG}" "${APK_PATH}" \
   --title "${TAG}" \
   --notes "自動生成リリース。詳細はアプリ内の更新履歴画面を参照してください。" \
-  || gh release upload "${TAG}" "${APK_PATH}" --clobber
+  || gh release upload "${TAG}" "${APK_PATH}" --clobber \
+  || RELEASE_FAILED=1
+if [[ "$RELEASE_FAILED" -eq 1 ]]; then
+  echo "❌ 警告: GitHub Releaseの公開に失敗しました。手動で確認してください。"
+fi
 
 echo "▶ 7/7 app_config/settings の最新バージョン情報を更新します(更新通知バナー用)..."
+CONFIG_UPDATE_FAILED=0
 python3 scripts/release_version_config.py "${VERSION}" "${BUILD_NUMBER}" \
-  || echo "⚠️  警告: app_config/settings の更新に失敗しました。手動で release_version_config.py を実行してください。"
+  || CONFIG_UPDATE_FAILED=1
+if [[ "$CONFIG_UPDATE_FAILED" -eq 1 ]]; then
+  echo "❌ 警告: app_config/settings の更新に失敗しました。手動で release_version_config.py を実行してください。"
+fi
 
 echo ""
-echo "✅ デプロイ完了"
+echo "========================================"
+echo "デプロイ結果サマリー(${TAG})"
+echo "========================================"
+echo "  1-4/7 APK/Web版ビルド・Hostingデプロイ: ✅ 成功(ここまで到達済み)"
+if [[ "$RULES_DEPLOY_FAILED" -eq 1 ]]; then
+  echo "  5/7   Firestoreルールデプロイ         : ❌ 失敗(要手動対応)"
+else
+  echo "  5/7   Firestoreルールデプロイ         : ✅ 成功"
+fi
+if [[ "$RELEASE_FAILED" -eq 1 ]]; then
+  echo "  6/7   GitHub Release公開             : ❌ 失敗(要手動対応)"
+else
+  echo "  6/7   GitHub Release公開             : ✅ 成功"
+fi
+if [[ "$CONFIG_UPDATE_FAILED" -eq 1 ]]; then
+  echo "  7/7   Firestore設定更新(更新通知)    : ❌ 失敗(要手動対応・最重要)"
+else
+  echo "  7/7   Firestore設定更新(更新通知)    : ✅ 成功"
+fi
+echo "----------------------------------------"
 echo "   Web版:  https://sn-report.web.app/"
 echo "   APK版:  https://github.com/sn-naka3692/maintenance-log-app/releases/latest/download/app-release.apk"
+
+if [[ "$RULES_DEPLOY_FAILED" -eq 1 || "$RELEASE_FAILED" -eq 1 || "$CONFIG_UPDATE_FAILED" -eq 1 ]]; then
+  echo ""
+  echo "⚠️  一部のステップが失敗しています。上記の「要手動対応」項目を確認してください。"
+  exit 1
+fi
