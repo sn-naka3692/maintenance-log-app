@@ -349,6 +349,14 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   /// 算出できないという計測基盤の欠陥があった。この対応表を用意し、
   /// ProWan側と同様のapplyIfNotManualパターンをSE側にも導入する。
   static const Map<String, String> _ssFieldKeyMap = {
+    // 【不具合修正・2026-09・案件番号(弊社受付No)が読取結果から反映されない
+    // 問題への対応】OCRモデル自体はCompanyReceiptNumberを高精度(回帰テストで
+    // 100%正解・確信度0.9565)で読み取れているにも関わらず、対応表に
+    // 'receiptNumber'が含まれていなかったため、下記_scanReport()の
+    // applyIfNotManual('receiptNumber', confirmed['CompanyReceiptNumber'])が
+    // 一度も呼ばれず、常に空欄のまま=毎回手入力になっていた。現場からの
+    // 「案件番号がほぼ読み取れていない」という報告の直接原因はここにあった。
+    'receiptNumber': 'receipt_number',
     'storeNumber': 'store_number',
     'scannedAddress': 'scanned_address',
     'scannedTel': 'scanned_tel',
@@ -688,6 +696,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
     }
 
     setState(() {
+      // 【不具合修正・2026-09】弊社受付No(コンビニ側発行の案件番号)。
+      // OCRモデルは高精度で読み取れているが、_ssFieldKeyMapへの登録漏れで
+      // これまで一度も自動反映されていなかった(現場報告「案件番号が
+      // ほぼ読み取れていない」の直接原因)。
+      applyIfNotManual('receiptNumber', confirmed['CompanyReceiptNumber']);
       // コンビニ側システム入力控えセクションへ反映
       applyIfNotManual('storeNumber', confirmed['StoreNumber']);
       applyIfNotManual('scannedAddress', confirmed['Address']);
