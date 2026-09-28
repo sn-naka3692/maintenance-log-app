@@ -28,6 +28,9 @@ final Map<String, RegExp> _fieldHeadingPatterns = {
   'Cause': _headingPattern(['原因', '因']),
   'PartCategory': _headingPattern(['部位', '位']),
   'Symptom': _headingPattern(['事象', '象']),
+  // 【2026-09-10追加】「kg充填量」欄の見出し文字が値の先頭に混入するケース
+  // (実データ検証: 202605a_p006, 202605b_p048 で確認済み)
+  'ChargeAmountKg': _headingPattern(['kg充填量', '充填量']),
 };
 
 // 見出し文字列そのもので始まる正当な値の保護リスト(誤って除去しない)
@@ -70,7 +73,8 @@ String normalizeFieldHeading(String fieldKey, String? rawValue) {
 }
 
 /// values辞書({fieldKey: 抽出値, ...})に対して、対象フィールド
-/// (Cause / PartCategory / Symptom)のみ見出し除去正規化を適用する。
+/// (Cause / PartCategory / Symptom / ChargeAmountKg)のみ
+/// 見出し除去正規化を適用する。
 Map<String, String> normalizeFieldHeadingsInValues(
   Map<String, String> values,
 ) {
@@ -81,4 +85,57 @@ Map<String, String> normalizeFieldHeadingsInValues(
     }
   }
   return result;
+}
+
+// ------------------------------------------------------------
+// 日付フィールドの末尾欠落補正。
+//
+// 紙面の日付欄(YYYY/M/D形式)の右隣に別の日付・時刻欄が隣接しているため、
+// OCRが値の終端境界を誤り、隣接する別の日付・時刻が連結して抽出される
+// ことがある(実データ検証: ProWan側 work_start_date で確認済み)。
+// 抽出テキストから「YYYY/M/D」または「YYYY M/D」形式の日付パターンを
+// 抜き出し、複数該当する場合は最後(=本来の日付欄に最も近い側)を採用する。
+// ------------------------------------------------------------
+final RegExp _datePattern = RegExp(r'\d{4}[\s/]\d{1,2}/\d{1,2}');
+
+const Set<String> dateLikeFields = {
+  'VisitDate',
+  'WorkStartDate',
+  'ReceiptDate',
+  'DeliveryDate',
+};
+
+String normalizeDateLike(String? rawValue) {
+  if (rawValue == null || rawValue.isEmpty) {
+    return rawValue ?? '';
+  }
+  final matches = _datePattern.allMatches(rawValue).toList();
+  if (matches.isEmpty) {
+    return rawValue;
+  }
+  final candidate = matches.last.group(0)!.replaceAll(' ', '/');
+  return candidate;
+}
+
+// ------------------------------------------------------------
+// バーコード(Barcode)欄の誤検出補正。
+//
+// 正しいバーコード値は英字2文字+数字10桁の固定形式(例: AA0001835399、
+// 計12文字)。紙面上、バーコード欄が空欄の場合に隣接する「kg充填量」欄
+// の単位文字(「kg」)や冷媒量の数値を誤って抜き出すことが実データ検証で
+// 確認された。固定形式に一致しない値は「読み取れなかった(空欄)」として
+// 扱う方が実運用上安全なため、形式チェックを行う。
+// ------------------------------------------------------------
+final RegExp _barcodePattern = RegExp(r'^[A-Za-z]{2}\d{10}$');
+
+String normalizeBarcode(String? rawValue) {
+  if (rawValue == null || rawValue.isEmpty) {
+    return rawValue ?? '';
+  }
+  final stripped = _stripWhitespace(rawValue);
+  if (_barcodePattern.hasMatch(stripped)) {
+    return stripped;
+  }
+  // 固定形式に一致しない場合は誤検出とみなし空欄を返す
+  return '';
 }

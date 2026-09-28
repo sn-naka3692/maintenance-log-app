@@ -154,10 +154,24 @@ class DocumentScanService {
       values['MakerName'] = normalizeMakerName(values['MakerName']);
     }
 
-    // 「処置内容」ブロック(Cause/PartCategory/Symptom)の見出し文字混入補正
-    // (サーバー側でも正規化済みだが、念のためクライアント側でも冪等に
-    // 正規化しておく=MakerNameと同じ二重防御方針)
+    // 「処置内容」ブロック(Cause/PartCategory/Symptom/ChargeAmountKg)の
+    // 見出し文字混入補正(サーバー側でも正規化済みだが、念のため
+    // クライアント側でも冪等に正規化しておく=MakerNameと同じ二重防御方針)
     values.addAll(normalizeFieldHeadingsInValues(values));
+
+    // 日付欄の隣接欠落・連結補正(サーバー側でも正規化済みだが、
+    // 二重防御として同様に適用する)
+    for (final key in dateLikeFields) {
+      if (values.containsKey(key)) {
+        values[key] = normalizeDateLike(values[key]);
+      }
+    }
+
+    // バーコード欄の誤検出補正(サーバー側でも正規化済みだが、
+    // 二重防御として同様に適用する)
+    if (values.containsKey('Barcode')) {
+      values['Barcode'] = normalizeBarcode(values['Barcode']);
+    }
 
     return ScanResult(
       values: values,
