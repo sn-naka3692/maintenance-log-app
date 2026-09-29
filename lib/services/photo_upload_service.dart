@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 /// 日報の写真をFirebase Storageへアップロードするサービス。
@@ -12,6 +15,15 @@ import 'package:image_picker/image_picker.dart';
 ///
 /// 保存先パス: report_photos/{reportId}/{uuid}.jpg
 /// (reportIdごとにフォルダを分けることで、日報削除時に一括削除しやすくする)
+///
+/// 【背景・2026-09】image_pickerが返す画像バイト列には、機種によって
+/// EXIF Orientationタグ(縦横判定情報)が付与されたまま、生ピクセルは
+/// 回転前の状態になっているケースがある(例: Galaxy A54等)。これを
+/// 未処理のままアップロードすると、Azure Document Intelligence等の
+/// 後続処理はEXIFを正しく解釈するのに対し、単純な正規化座標→ピクセル
+/// 変換だけを行う画面表示側ではズレが生じる。そのため、アップロード前に
+/// EXIF情報に従って画像を正立化(ベイク)し、以降の処理を全てEXIF非依存
+/// にする。
 class PhotoUploadService {
   PhotoUploadService._();
   static final PhotoUploadService instance = PhotoUploadService._();
@@ -25,8 +37,9 @@ class PhotoUploadService {
     required XFile file,
     required String reportId,
   }) async {
-    final bytes = await file.readAsBytes();
+    final rawBytes = await file.readAsBytes();
     final ext = _extensionFor(file.name);
+    final bytes = normalizeOrientation(rawBytes, ext);
     final fileName = '${DateTime.now().microsecondsSinceEpoch}$ext';
     final ref = _storage.ref().child('report_photos/$reportId/$fileName');
     await ref.putData(
@@ -45,6 +58,33 @@ class PhotoUploadService {
       await ref.delete();
     } catch (_) {
       // 既に削除済み・URL形式不正等は無視(削除操作は冪等であるべき)
+    }
+  }
+
+  /// EXIF Orientationタグに従って画像ピクセルを正立化(ベイク)する。
+  /// PNG等、そもそもEXIF回転を持たない形式や、デコードに失敗した場合は
+  /// 元のバイト列をそのまま返す(安全側フォールバック)。
+  ///
+  /// 【重要】ここで正立化しておくことで、Azure Document Intelligence
+  /// (EXIFを解釈して正立座標を返す)と、この後Flutter側で画像を表示・
+  /// 保存する際の座標系を一致させる。
+  static Uint8List normalizeOrientation(Uint8List rawBytes, String ext) {
+    try {
+      final decoded = img.decodeImage(rawBytes);
+      if (decoded == null) return rawBytes;
+
+      // decodeImageは通常EXIF Orientationを自動適用済みの場合もあるが、
+      // 念のためbakeOrientation相当の処理を明示的に通し、EXIF情報自体は
+      // 出力から除去する(以降EXIF非依存のバイト列にする)。
+      final baked = img.bakeOrientation(decoded);
+
+      if (ext == '.png') {
+        return Uint8List.fromList(img.encodePng(baked));
+      }
+      return Uint8List.fromList(img.encodeJpg(baked, quality: 90));
+    } catch (_) {
+      // デコード不可(未対応フォーマット等)の場合は元のバイト列を維持する。
+      return rawBytes;
     }
   }
 

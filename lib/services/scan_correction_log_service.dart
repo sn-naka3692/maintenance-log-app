@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 
 /// AI-OCR(Azure Document Intelligence)自動抽出結果を、ユーザーが
 /// 確認・修正画面(ScanConfirmScreen)で手直しした場合に、その差分を
@@ -189,11 +190,20 @@ class ScanCorrectionLogService {
   /// 【運用】再学習が完了した候補画像は、別途バッチ処理で削除される
   /// 想定のため、ここでは「一時保存」であることを前提にシンプルな
   /// パス構成にしている。
+  ///
+  /// 【2026-09追加:EXIF正立化】image_pickerが返す画像バイト列は、機種
+  /// によってEXIF Orientationタグ付きの回転前ピクセルのまま渡される
+  /// ことがある。Azure Document Intelligenceの解析結果(bbox座標)は
+  /// EXIF適用後の正立座標系で返るため、教師データ生成パイプライン
+  /// (generate_review_images_se.py等)がPIL側でEXIFを解釈しないまま
+  /// 座標を描画すると、実際のテキスト位置とズレてしまう。
+  /// これを防ぐため、学習候補画像として保存する前に正立化しておく。
   static Future<String?> _uploadTrainingCandidate({
     required String docType,
     required Uint8List imageBytes,
   }) async {
     try {
+      final normalizedBytes = _normalizeOrientation(imageBytes);
       final fileName = '${DateTime.now().microsecondsSinceEpoch}.jpg';
       final ref = _storage
           .ref()
@@ -201,7 +211,7 @@ class ScanCorrectionLogService {
           .child(docType)
           .child(fileName);
       await ref.putData(
-        imageBytes,
+        normalizedBytes,
         SettableMetadata(contentType: 'image/jpeg'),
       );
       return ref.fullPath;
@@ -212,6 +222,19 @@ class ScanCorrectionLogService {
         );
       }
       return null;
+    }
+  }
+
+  /// EXIF Orientationタグに従って画像ピクセルを正立化(ベイク)する。
+  /// デコードに失敗した場合は元のバイト列をそのまま返す(安全側フォールバック)。
+  static Uint8List _normalizeOrientation(Uint8List rawBytes) {
+    try {
+      final decoded = img.decodeImage(rawBytes);
+      if (decoded == null) return rawBytes;
+      final baked = img.bakeOrientation(decoded);
+      return Uint8List.fromList(img.encodeJpg(baked, quality: 90));
+    } catch (_) {
+      return rawBytes;
     }
   }
 }
