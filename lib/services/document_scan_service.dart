@@ -204,10 +204,16 @@ class DocumentScanService {
 
   /// PDFバイト列のうち [startPage]〜[endPage](1始まり・両端含む)の範囲を
   /// バッチ解析する。1回の呼び出しで最大 [maxPagesPerRequest] ページまで。
+  ///
+  /// [includeImage]: trueの場合、サーバー側(nakano-scan-proxy)が各ページを
+  /// JPEG画像化してレスポンスに含める(教師データ収集用、2026-09-29追加)。
+  /// 月末チェック(複数ページ一括処理)ではfalseのまま呼び出し、レスポンス
+  /// サイズ・処理時間の増加を避けること。
   static Future<BatchScanResult> analyzeBatch(
     Uint8List pdfBytes, {
     required int startPage,
     required int endPage,
+    bool includeImage = false,
   }) async {
     final pageCount = endPage - startPage + 1;
     if (pageCount > maxPagesPerRequest) {
@@ -217,7 +223,8 @@ class DocumentScanService {
     }
 
     final uri = Uri.parse(
-      '$_batchProxyEndpoint?code=$_functionKey&startPage=$startPage&endPage=$endPage',
+      '$_batchProxyEndpoint?code=$_functionKey&startPage=$startPage&endPage=$endPage'
+      '${includeImage ? '&includeImage=true' : ''}',
     );
 
     http.Response? resp;
@@ -297,7 +304,17 @@ class DocumentScanService {
   // PDFが複数ページの場合は「1ページ目のみ」を解析対象とする
   // (作業報告書アプリの出力は通常1案件=1ページのため)。
   static Future<ScanResult> analyzePdf(Uint8List pdfBytes) async {
-    final batch = await analyzeBatch(pdfBytes, startPage: 1, endPage: 1);
+    // 【2026-09-29修正】includeImage:true を指定し、サーバー側で
+    // レンダリングされたPDFページ画像を教師データ収集用に受け取る。
+    // これがないと ScanResult.sourceImageBytes が常にnullとなり、
+    // 確認画面での手直しが発生しても学習候補画像が保存されない
+    // (=ラベリング不能な教師データが溜まり続ける)不具合が生じる。
+    final batch = await analyzeBatch(
+      pdfBytes,
+      startPage: 1,
+      endPage: 1,
+      includeImage: true,
+    );
     if (batch.pageResults.isEmpty) {
       throw DocumentScanException('PDFの解析結果を取得できませんでした');
     }
@@ -319,6 +336,7 @@ class DocumentScanService {
       confidences: page.confidences,
       documentConfidence: page.documentConfidence,
       docType: page.docType,
+      sourceImageBytes: page.imageBytes,
     );
   }
 }
@@ -346,6 +364,14 @@ class PageScanResult {
   final Map<String, double> confidences;
   final String? error;
 
+  /// サーバー側がPDFページをJPEG画像化した結果(includeImage=trueで
+  /// リクエストし、かつ変換に成功した場合のみ非null)。
+  /// 【2026-09-29追加・教師データ収集用】PDFアップロード経由のスキャン
+  /// では元々「画像」が存在しないため、Azure解析対象のPDFページそのものを
+  /// サーバー側でレンダリングして返してもらい、ScanResult.sourceImageBytes
+  /// として教師データ収集(ScanCorrectionLogService)に利用する。
+  final Uint8List? imageBytes;
+
   const PageScanResult({
     required this.pageNumber,
     required this.status,
@@ -354,6 +380,7 @@ class PageScanResult {
     required this.values,
     required this.confidences,
     this.error,
+    this.imageBytes,
   });
 
   bool get isOk => status == 'ok';
@@ -406,6 +433,17 @@ class PageScanResult {
           e.key: (e.value as num?)?.toDouble() ?? 0.0,
       },
       error: map['error'] as String?,
+      imageBytes: () {
+        final b64 = map['imageBase64'] as String?;
+        if (b64 == null || b64.isEmpty) return null;
+        try {
+          return base64Decode(b64);
+        } catch (_) {
+          // 画像デコードに失敗してもOCR結果自体は使えるため、
+          // 教師データ用画像だけを諦める(nullのまま)。
+          return null;
+        }
+      }(),
     );
   }
 }
