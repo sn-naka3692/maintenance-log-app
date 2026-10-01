@@ -406,6 +406,31 @@ const List<FutureConsideration> futureConsiderations = [
 
 const List<AccountNote> accountStructureNotes = [
   AccountNote(
+    title: '【運用ルール】バージョンアップ時はlib/build_info.dartの更新を必須セットにする(2026-10-01追加)',
+    description:
+        'v1.2.48(フォント統一+AI-OCR再学習反映)のリリース時、'
+        'pubspec.yaml・changelog_data.dart・system_architecture_data.dartの'
+        'versionBuildHistory・Firestore(app_config/settings)は正しく'
+        '1.2.48/build57へ更新したにもかかわらず、lib/build_info.dartの'
+        '`kCompiledBuildNumber`/`kCompiledVersionName`の更新を失念した'
+        'まま`flutter build web --release`してしまう事故が発生した。'
+        'この定数はWeb版の「今動いているコード自身のビルド番号」として'
+        'コンパイル時にJSへ焼き込まれる値のため、更新漏れがあると'
+        '「新しいバージョンがあります」バナーの判定(Firestoreの'
+        'latest_build_numberとこの定数の比較)が永遠にズレたままになり、'
+        '利用者がバナーをクリックして再読み込みしても「表示が変わらない'
+        '(更新されたように見えない)」という不具合として表面化する'
+        '(実際にこの事象が発生し、2026-10-01に原因特定・修正・再デプロイ'
+        '済み)。以後、バージョンを上げる際は、以下を必ずセットで更新・'
+        '確認すること。①pubspec.yamlのversion、②lib/build_info.dartの'
+        'kCompiledBuildNumber・kCompiledVersionName、③changelog_data.dart、'
+        '④system_architecture_data.dartのversionBuildHistory、'
+        '⑤Firestore(app_config/settings)のlatest_version・'
+        'latest_build_number。Web版をデプロイした後は、'
+        'curl等で本番環境のmain.dart.jsに新バージョン文字列が含まれて'
+        'いるかを必ず確認してから作業完了とすること。',
+  ),
+  AccountNote(
     title: '【運用ルール】機能変更・不具合修正時は操作マニュアルの更新を必須セットにする(2026-09-14追加)',
     description:
         'changelog(更新履歴)には毎回記録していたが、アプリ内マニュアル'
