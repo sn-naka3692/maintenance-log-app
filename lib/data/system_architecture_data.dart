@@ -38,7 +38,7 @@ const List<VersionBuildRecord> versionBuildHistory = [
     versionName: '1.2.48',
     buildNumber: 57,
     releaseDate: '2026-09-15',
-    summary: '表示フォントをJIS企画ゴシック体(Noto Sans JP)に統一(★配布中の最新版)',
+    summary: '表示フォントをJIS企画ゴシック体(Noto Sans JP)に統一/AI-OCR(SE側・プロワン側)再学習による読取精度改善(★配布中の最新版)',
   ),
   VersionBuildRecord(
     versionName: '1.2.47',
