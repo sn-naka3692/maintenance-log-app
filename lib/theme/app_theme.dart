@@ -24,7 +24,11 @@ class AppTheme {
         surface: AppColors.surface,
       ),
       scaffoldBackgroundColor: AppColors.background,
-      fontFamily: 'Roboto',
+      // 日本工業規格(JIS)に準拠したゴシック体「Noto Sans JP」にアプリ全体の
+      // 表示フォントを統一する(2026-09追加)。端末依存のフォント切り替わりに
+      // よる表示崩れ・字体のばらつきを防ぐため、OSフォールバックに頼らず
+      // アプリにフォントを同梱する方式を採用している。
+      fontFamily: 'NotoSansJP',
     );
 
     return base.copyWith(
