@@ -400,6 +400,30 @@ const List<FutureConsideration> futureConsiderations = [
 
 const List<AccountNote> accountStructureNotes = [
   AccountNote(
+    title: '【運用ルール】機能変更・不具合修正時は操作マニュアルの更新を必須セットにする(2026-09-14追加)',
+    description:
+        'changelog(更新履歴)には毎回記録していたが、アプリ内マニュアル'
+        '(manual_data.dart)とWeb公開マニュアル(web/日報アプリ操作'
+        'マニュアル.md・manual.html・.pdf)への反映が長期間(v1.2.22〜'
+        'v1.2.47の約25件分)漏れ続けていたことが2026-09-14に発覚した。'
+        '月末チェック(日報記入率)機能のように、マニュアルに一度も'
+        '記載されないまま運用されていた機能もあった。以後、ユーザーの'
+        '操作・表示に変化が生じる機能追加・変更・修正を行った場合は、'
+        'changelogへの追記と同じタイミングで、必ず以下も実施すること。'
+        '①アプリ内マニュアル(manual_data.dart)の該当セクションへの'
+        '追記、または新規セクション追加。②Web公開マニュアルの原本'
+        '(web/日報アプリ操作マニュアル.md)への同内容の追記、'
+        '③.mdの変更をmanual.html・日報アプリ操作マニュアル.pdfにも'
+        '反映(PDFはmanual.htmlを/home/user/manual_for_pdf.htmlへコピー'
+        'し画像パスを絶対パス化した上でhtml_to_pdf.pyを実行して再生成'
+        'する)。④`flutter build web --release`後、'
+        '`firebase deploy --only hosting --project sn-report`で'
+        'Firebase Hostingへ反映すること(GOOGLE_APPLICATION_CREDENTIALS'
+        '環境変数にAdmin SDKキーのパスを設定すればログイン不要で'
+        'デプロイできる)。管理者・社内向けの機能(月末チェック等)も'
+        '例外なくマニュアル化の対象とする',
+  ),
+  AccountNote(
     title: '【設計原則】案件化の対象は「定期点検・故障対応・修理・新設設置」のみ(2026-09-01追加)',
     description:
         '案件管理は「お客様先での現場対応」を追跡する仕組みであり、事務・'

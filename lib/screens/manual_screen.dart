@@ -42,6 +42,10 @@ IconData _iconFor(String key) {
       return Icons.cleaning_services;
     case 'document_scanner':
       return Icons.document_scanner;
+    case 'sync_problem':
+      return Icons.sync_problem;
+    case 'fact_check':
+      return Icons.fact_check;
     default:
       return Icons.info_outline;
   }
