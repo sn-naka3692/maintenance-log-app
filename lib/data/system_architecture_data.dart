@@ -35,10 +35,16 @@ class VersionBuildRecord {
 /// 新しいバージョンほどリストの先頭に追加すること。
 const List<VersionBuildRecord> versionBuildHistory = [
   VersionBuildRecord(
+    versionName: '1.2.48',
+    buildNumber: 57,
+    releaseDate: '2026-09-15',
+    summary: '表示フォントをJIS企画ゴシック体(Noto Sans JP)に統一(★配布中の最新版)',
+  ),
+  VersionBuildRecord(
     versionName: '1.2.47',
     buildNumber: 56,
     releaseDate: '2026-09-11',
-    summary: '開始時刻・終了時刻の手入力対応(半角数字と「:」のみ許可)(★配布中の最新版)',
+    summary: '開始時刻・終了時刻の手入力対応(半角数字と「:」のみ許可)',
   ),
   VersionBuildRecord(
     versionName: '1.2.46',
