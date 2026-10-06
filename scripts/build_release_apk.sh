@@ -19,9 +19,28 @@
 # スキャン機能は必ず401エラーになる旨を警告表示する。
 #
 # 使い方: cd /home/user/flutter_app && bash scripts/build_release_apk.sh
+#
+# 【回帰テストゲート・2026-10-06追加】
+# このスクリプトは deploy_web_and_apk.sh から呼ばれる場合と、単体で
+# 直接実行される場合の両方がある。単体実行時にテストなしでAPKが
+# ビルドされてしまう抜け道を防ぐため、このスクリプト自身にも
+# 回帰テストゲートを持たせている(deploy_web_and_apk.sh経由では
+# 二重実行になるが、既存機能の動作保証を最優先し許容する)。
 
 set -e
 cd "$(dirname "$0")/.."
+
+echo "▶ 回帰テストを実行します(既存機能を壊していないか自動確認)..."
+if ! flutter test; then
+  echo ""
+  echo "❌ 停止: 回帰テストが失敗しました。APKビルドを中止します。"
+  echo "   既存の正常動作している機能が壊れている可能性があります。"
+  echo "   上記の失敗したテストを確認し、修正してから再実行してください。"
+  echo "   (テスト自体を無効化・削除して通すことは絶対に行わないこと)"
+  exit 1
+fi
+echo "✅ 回帰テスト全件通過(既存機能の動作保証OK)"
+echo ""
 
 SECRETS_FILE="scripts/secrets.env"
 if [[ -f "$SECRETS_FILE" ]]; then

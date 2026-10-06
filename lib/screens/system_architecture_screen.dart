@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../data/system_architecture_data.dart';
+import '../providers/app_state.dart';
 import '../services/app_config_service.dart';
 import '../theme/app_theme.dart';
 import 'design_diagrams_screen.dart';
@@ -57,6 +59,15 @@ class SystemArchitectureScreen extends StatelessWidget {
           const _ForceUpdateGateSection(),
           const SizedBox(height: 12),
           const _VersionBuildTable(),
+
+          const SizedBox(height: 24),
+          _SectionHeader(
+            icon: Icons.science_outlined,
+            title: 'ベータ版配布(段階的リリース)',
+            subtitle: '指定した社員だけに新しいビルドを先行配布し、問題なければ全社配布へ進む',
+          ),
+          const SizedBox(height: 10),
+          const _BetaDistributionSection(),
 
           const SizedBox(height: 24),
           _SectionHeader(
@@ -857,6 +868,297 @@ class _VersionBuildTable extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 【ベータ版配布(段階的リリース)・2026-10-06追加】
+///
+/// 全社向けの強制アップデートゲート/更新お知らせ(`_ForceUpdateGateSection`)
+/// とは完全に独立した設定。ここで指定したビルド番号・テスター一覧は
+/// `app_config/settings` ドキュメント内の beta_* フィールドに保存され、
+/// `beta_tester_uids` に含まれるユーザーのホーム画面にのみ
+/// 「ベータ版が利用可能です」バナーが表示される(他の社員には一切見えない)。
+class _BetaDistributionSection extends StatefulWidget {
+  const _BetaDistributionSection();
+
+  @override
+  State<_BetaDistributionSection> createState() =>
+      _BetaDistributionSectionState();
+}
+
+class _BetaDistributionSectionState extends State<_BetaDistributionSection> {
+  bool _loading = true;
+  String? _error;
+  AppMinVersionConfig _config = const AppMinVersionConfig(minSupportedBuild: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final fetched = await AppConfigService.instance.fetchConfig();
+      setState(() {
+        _config = fetched ?? const AppMinVersionConfig(minSupportedBuild: 0);
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'ベータ配布設定の読み込みに失敗しました: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _openEditDialog() async {
+    final appState = context.read<AppState>();
+    final allUsers = appState.users;
+    bool enabled = _config.betaEnabled;
+    final versionCtrl = TextEditingController(text: _config.betaVersion);
+    final buildCtrl = TextEditingController(
+      text: _config.betaBuildNumber > 0
+          ? _config.betaBuildNumber.toString()
+          : '',
+    );
+    final urlCtrl = TextEditingController(text: _config.betaDownloadUrl);
+    final selectedUids = {..._config.betaTesterUids};
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('ベータ版配布の設定'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '下記で選んだ社員のホーム画面にのみ「ベータ版が利用可能です」'
+                  'バナーが表示されます。全社向けの更新お知らせ・強制ブロックには'
+                  '影響しません。',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('ベータ配布を有効にする'),
+                  value: enabled,
+                  onChanged: (v) => setDialogState(() => enabled = v),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: versionCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'ベータ版バージョン名(例: 1.2.49-beta1)',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: buildCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'ベータ版ビルド番号 *',
+                    helperText: 'テスター配布用にビルドしたAPKのビルド番号',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: urlCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'ベータ版APKのダウンロードURL(任意)',
+                    helperText: '空欄の場合は通常の最新版URLを使用',
+                  ),
+                ),
+                const Divider(height: 24),
+                const Text(
+                  'ベータテスターを選択',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                if (allUsers.isEmpty)
+                  const Text('社員データがまだ読み込まれていません。')
+                else
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 260),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: allUsers.map((u) {
+                        final checked = selectedUids.contains(u.id);
+                        return CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(u.name),
+                          subtitle: Text(u.department),
+                          value: checked,
+                          onChanged: (v) {
+                            setDialogState(() {
+                              if (v == true) {
+                                selectedUids.add(u.id);
+                              } else {
+                                selectedUids.remove(u.id);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (enabled) {
+                  final parsed = int.tryParse(buildCtrl.text.trim());
+                  if (parsed == null || parsed <= 0) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('ベータ版ビルド番号は1以上の整数で入力してください。')),
+                    );
+                    return;
+                  }
+                  if (selectedUids.isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('ベータテスターを1人以上選択してください。')),
+                    );
+                    return;
+                  }
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('保存する'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != true) return;
+
+    final newConfig = _config.copyWith(
+      betaEnabled: enabled,
+      betaVersion: versionCtrl.text.trim(),
+      betaBuildNumber: int.tryParse(buildCtrl.text.trim()) ?? 0,
+      betaDownloadUrl: urlCtrl.text.trim(),
+      betaTesterUids: selectedUids.toList(),
+    );
+
+    try {
+      await AppConfigService.instance.updateBetaConfig(newConfig);
+      if (!mounted) return;
+      setState(() => _config = newConfig);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('ベータ配布の設定を更新しました。')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('設定の更新に失敗しました: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+    if (_error != null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_error!, style: const TextStyle(color: AppColors.danger)),
+              const SizedBox(height: 8),
+              OutlinedButton(onPressed: _load, child: const Text('再読み込み')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final isActive = _config.betaEnabled && _config.betaBuildNumber > 0;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isActive
+                      ? Icons.science_outlined
+                      : Icons.science_outlined,
+                  size: 18,
+                  color: isActive ? Colors.purple.shade700 : Colors.grey,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    isActive
+                        ? '有効(選ばれたテスターにのみ表示)'
+                        : '未設定(誰にも表示されません)',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: isActive
+                          ? Colors.purple.shade700
+                          : Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 18),
+            if (_config.betaVersion.isNotEmpty)
+              _InfoRow(label: 'ベータバージョン名', value: _config.betaVersion),
+            if (_config.betaBuildNumber > 0)
+              _InfoRow(label: 'ベータビルド番号', value: '${_config.betaBuildNumber}'),
+            _InfoRow(
+              label: 'テスター人数',
+              value: '${_config.betaTesterUids.length}人',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '※ 全社配布の前に、まずここで少人数のテスターだけに先行配布し、'
+              '問題がないことを確認してから「強制アップデートゲート・更新お知らせ」'
+              '側の最新ビルド番号を更新して全社配布してください。',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: _openEditDialog,
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: const Text('設定を変更する'),
               ),
             ),
           ],

@@ -32,7 +32,13 @@ const String kLatestApkDownloadUrl =
 /// するため、共通関数として切り出した。呼び出し元がどの画面でも
 /// 同じダウンロード進捗ダイアログ・失敗時のブラウザフォールバックが
 /// 得られる。
-Future<void> downloadAndInstallLatestApkWithDialog(BuildContext context) async {
+Future<void> downloadAndInstallLatestApkWithDialog(
+  BuildContext context, {
+  String? overrideUrl,
+}) async {
+  final targetUrl = (overrideUrl != null && overrideUrl.isNotEmpty)
+      ? overrideUrl
+      : kLatestApkDownloadUrl;
   final progress = ValueNotifier<double>(0);
   bool dialogShown = false;
   try {
@@ -61,7 +67,7 @@ Future<void> downloadAndInstallLatestApkWithDialog(BuildContext context) async {
     }
 
     await apk_installer.downloadAndInstallLatestApk(
-      url: kLatestApkDownloadUrl,
+      url: targetUrl,
       onProgress: (v) => progress.value = v,
     );
 
@@ -81,7 +87,7 @@ Future<void> downloadAndInstallLatestApkWithDialog(BuildContext context) async {
       Navigator.of(context, rootNavigator: true).pop();
     }
     // フォールバック: 従来通りブラウザでダウンロードさせる。
-    final uri = Uri.parse(kLatestApkDownloadUrl);
+    final uri = Uri.parse(targetUrl);
     bool launched = false;
     try {
       launched = await launchUrl(uri, mode: LaunchMode.externalApplication);

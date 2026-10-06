@@ -124,6 +124,32 @@ if [[ "$COMPILED_BUILD" != "$BUILD_NUMBER" || "$COMPILED_VERSION" != "$VERSION" 
 fi
 echo "✅ build_info.dart整合性チェックOK(version=${VERSION} build=${BUILD_NUMBER})"
 
+# 【回帰テストゲート・2026-10-06追加】
+#
+# 【目的】全社運用開始後、機能改善のたびに「既存の正常動作している
+# 機能を壊していないか」を自動確認せずに本番へデプロイしてしまう事故
+# (2026-09〜10に実際に複数回発生: ビルド番号不一致・スキャン機能の
+# 認証キー未設定など)を防ぐため、デプロイの入口で必ず
+# `flutter test`(全自動テスト)を実行し、1件でも失敗したら
+# デプロイ処理そのものを開始させない。
+#
+# 【運用ルール】ログイン・日報作成・スキャン(OCR)・更新通知・
+# 月末チェック等、既存の正常動作している機能に関わるコードを変更した
+# 場合は、必ず対応するテスト(test/配下)を追加・更新すること。
+# テストの無いコード変更は、本番で壊れて初めて気づく「無保証の変更」
+# になってしまう。
+echo "▶ 0/8 回帰テストを実行します(既存機能を壊していないか自動確認)..."
+if ! flutter test; then
+  echo ""
+  echo "❌ 停止: 回帰テストが失敗しました。デプロイを中止します。"
+  echo "   既存の正常動作している機能が壊れている可能性があります。"
+  echo "   上記の失敗したテストを確認し、修正してから再実行してください。"
+  echo "   (テスト自体を無効化・削除して通すことは絶対に行わないこと)"
+  exit 1
+fi
+echo "✅ 回帰テスト全件通過(既存機能の動作保証OK)"
+echo ""
+
 # 【重要】スキャン機能用Function Key(SCAN_PROXY_FUNCTION_KEY)は
 # Web版・APK版どちらも --dart-define で埋め込む必要がある。
 # 詳細は scripts/build_release_apk.sh の冒頭コメントを参照。
@@ -135,16 +161,16 @@ else
   echo "⚠️  警告: $SECRETS_FILE が見つかりません。スキャン機能は401エラーになります。"
 fi
 
-echo "▶ 1/7 配布用APK(arm64-v8a専用)をビルドします..."
+echo "▶ 1/8 配布用APK(arm64-v8a専用)をビルドします..."
 bash scripts/build_release_apk.sh
 APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
 
-echo "▶ 2/7 Web版をビルドします(Service Workerキャッシュ無効化 --pwa-strategy=none)..."
+echo "▶ 2/8 Web版をビルドします(Service Workerキャッシュ無効化 --pwa-strategy=none)..."
 flutter build web --release \
   --pwa-strategy=none \
   --dart-define=SCAN_PROXY_FUNCTION_KEY="${SCAN_PROXY_FUNCTION_KEY:-}"
 
-echo "▶ 3/7 Service Workerを無害な空ファイルに置き換えます(古いSW対策)..."
+echo "▶ 3/8 Service Workerを無害な空ファイルに置き換えます(古いSW対策)..."
 # 【重要】scripts/kill_switch_service_worker.js は現在「何もしない、
 # 完全に無害な空のService Worker」。過去に「自動で強制的に古いSWを
 # 一掃する」実装を試みたが無限リロードループの障害を起こしたため撤回
@@ -152,11 +178,11 @@ echo "▶ 3/7 Service Workerを無害な空ファイルに置き換えます(古
 # scripts/kill_switch_service_worker.js 内のコメントを参照)。
 cp scripts/kill_switch_service_worker.js build/web/flutter_service_worker.js
 
-echo "▶ 4/7 Web版をFirebase Hostingへデプロイします..."
+echo "▶ 4/8 Web版をFirebase Hostingへデプロイします..."
 GOOGLE_APPLICATION_CREDENTIALS=/opt/flutter/firebase-admin-sdk.json \
   firebase deploy --only hosting --project sn-report
 
-echo "▶ 5/7 Firestoreセキュリティルールをデプロイします..."
+echo "▶ 5/8 Firestoreセキュリティルールをデプロイします..."
 # 【重要・2026-09-01追加】v1.2.41で firestore.rules を更新したにも関わらず
 # 本ステップが欠落していたため、ルール未反映(refrigerant_types 未定義→
 # デフォルト拒否)によりログイン後の全データ読み込みが失敗する重大障害が
@@ -186,7 +212,7 @@ fi
 # スクリプトが停止し、Step 6/7が実行されないまま終わる」事故が発生し、
 # 手動補完が必要になったため、以降は明示的に `|| true` で個々の失敗を
 # 許容しつつ、最後に全ステップの成否をまとめて報告する構成に変更した。
-echo "▶ 6/7 APKをGitHub Releasesへ公開します(tag: ${TAG})..."
+echo "▶ 6/8 APKをGitHub Releasesへ公開します(tag: ${TAG})..."
 RELEASE_FAILED=0
 gh release create "${TAG}" "${APK_PATH}" \
   --title "${TAG}" \
@@ -197,7 +223,7 @@ if [[ "$RELEASE_FAILED" -eq 1 ]]; then
   echo "❌ 警告: GitHub Releaseの公開に失敗しました。手動で確認してください。"
 fi
 
-echo "▶ 7/7 app_config/settings の最新バージョン情報を更新します(更新通知バナー用)..."
+echo "▶ 7/8 app_config/settings の最新バージョン情報を更新します(更新通知バナー用)..."
 CONFIG_UPDATE_FAILED=0
 python3 scripts/release_version_config.py "${VERSION}" "${BUILD_NUMBER}" \
   || CONFIG_UPDATE_FAILED=1
@@ -209,21 +235,22 @@ echo ""
 echo "========================================"
 echo "デプロイ結果サマリー(${TAG})"
 echo "========================================"
-echo "  1-4/7 APK/Web版ビルド・Hostingデプロイ: ✅ 成功(ここまで到達済み)"
+echo "  0/8   回帰テスト(既存機能の動作保証)   : ✅ 成功"
+echo "  1-4/8 APK/Web版ビルド・Hostingデプロイ: ✅ 成功(ここまで到達済み)"
 if [[ "$RULES_DEPLOY_FAILED" -eq 1 ]]; then
-  echo "  5/7   Firestoreルールデプロイ         : ❌ 失敗(要手動対応)"
+  echo "  5/8   Firestoreルールデプロイ         : ❌ 失敗(要手動対応)"
 else
-  echo "  5/7   Firestoreルールデプロイ         : ✅ 成功"
+  echo "  5/8   Firestoreルールデプロイ         : ✅ 成功"
 fi
 if [[ "$RELEASE_FAILED" -eq 1 ]]; then
-  echo "  6/7   GitHub Release公開             : ❌ 失敗(要手動対応)"
+  echo "  6/8   GitHub Release公開             : ❌ 失敗(要手動対応)"
 else
-  echo "  6/7   GitHub Release公開             : ✅ 成功"
+  echo "  6/8   GitHub Release公開             : ✅ 成功"
 fi
 if [[ "$CONFIG_UPDATE_FAILED" -eq 1 ]]; then
-  echo "  7/7   Firestore設定更新(更新通知)    : ❌ 失敗(要手動対応・最重要)"
+  echo "  7/8   Firestore設定更新(更新通知)    : ❌ 失敗(要手動対応・最重要)"
 else
-  echo "  7/7   Firestore設定更新(更新通知)    : ✅ 成功"
+  echo "  7/8   Firestore設定更新(更新通知)    : ✅ 成功"
 fi
 echo "----------------------------------------"
 echo "   Web版:  https://sn-report.web.app/"

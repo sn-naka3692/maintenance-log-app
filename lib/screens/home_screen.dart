@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -33,6 +34,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasServerUpdate = false;
   String _serverLatestVersion = '';
 
+  // 【ベータ版配布・2026-10-06追加】自分がベータテスターに指定されて
+  // いる場合にのみ true になる(それ以外のユーザーには一切表示されない)。
+  bool _hasBetaUpdate = false;
+  String _betaVersion = '';
+  String _betaDownloadUrl = '';
+
   // 【権限拡張・2026-08】一般ユーザーも他ユーザーの日報・業務内容を
   // 閲覧できるようにするための表示切替(true=全員の日報、false=自分の日報)。
   // アクセス制御自体はFirestore側で既に全ユーザーに開放されているため、
@@ -44,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _checkUnseenUpdate();
     _checkServerUpdate();
+    _checkBetaUpdate();
   }
 
   Future<void> _checkUnseenUpdate() async {
@@ -61,6 +69,33 @@ class _HomeScreenState extends State<HomeScreen> {
         _hasServerUpdate = result.hasNewerVersion;
         _serverLatestVersion = result.latestVersion;
       });
+    }
+  }
+
+  /// 【ベータ版配布・2026-10-06追加】自分がベータテスターに指定されて
+  /// いるかどうかをFirestoreで確認し、未ダウンロードのベータビルドが
+  /// あればバナーを表示する。Web版・APK版どちらも対象(全社向け更新
+  /// お知らせと同じ判定パターン)。
+  Future<void> _checkBetaUpdate() async {
+    try {
+      final config = await AppConfigService.instance.fetchConfig();
+      final currentBuild = await AppConfigService.instance
+          .getCurrentBuildNumber();
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final result = evaluateBetaAvailability(
+        currentBuild: currentBuild,
+        currentUid: uid,
+        config: config,
+      );
+      if (mounted) {
+        setState(() {
+          _hasBetaUpdate = result.hasBetaUpdate;
+          _betaVersion = result.betaVersion;
+          _betaDownloadUrl = result.betaDownloadUrl;
+        });
+      }
+    } catch (_) {
+      // fail-open: チェック失敗時はベータバナーを表示しない
     }
   }
 
@@ -148,6 +183,22 @@ class _HomeScreenState extends State<HomeScreen> {
               )
             else if (_hasUnseenUpdate)
               SliverToBoxAdapter(child: _UpdateBanner(onTap: _openChangelog)),
+            // 【ベータ版配布・2026-10-06追加】ベータテスターに指定された
+            // ユーザーにのみ表示される、全社向け通知とは独立したバナー。
+            // 上記の全社向けバナーと同時に表示されても問題ないため、
+            // else if ではなく独立した条件にしている。
+            if (_hasBetaUpdate)
+              SliverToBoxAdapter(
+                child: _BetaVersionBanner(
+                  betaVersion: _betaVersion,
+                  onTap: () => kIsWeb
+                      ? app_update.reloadForLatestVersion()
+                      : downloadAndInstallLatestApkWithDialog(
+                          context,
+                          overrideUrl: _betaDownloadUrl,
+                        ),
+                ),
+              ),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -386,6 +437,79 @@ class _NewVersionBanner extends StatelessWidget {
               ),
             ),
             Icon(Icons.chevron_right, color: Colors.orange.shade400),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 【ベータ版配布・2026-10-06追加】ベータテスターに指定された一部の
+/// 社員にのみ表示される、先行配布ビルドのお知らせバナー。
+///
+/// 全社向け`_NewVersionBanner`とは意図的に異なる色(紫系)にして、
+/// 「これは全員向けの正式リリースではなく、ベータ版の先行試用」だと
+/// 一目で区別できるようにしている。
+class _BetaVersionBanner extends StatelessWidget {
+  final String betaVersion;
+  final VoidCallback onTap;
+  const _BetaVersionBanner({required this.betaVersion, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.purple.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.purple.withValues(alpha: 0.30)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.purple.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.science_outlined,
+                size: 18,
+                color: Colors.purple.shade700,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    betaVersion.isNotEmpty
+                        ? 'ベータ版(v$betaVersion)が利用可能です'
+                        : 'ベータ版が利用可能です',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      color: Colors.purple.shade900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'あなたはベータテスターに指定されています。'
+                    '${kIsWeb ? "タップしてページを再読み込み" : "タップして試用版をダウンロード"}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.purple.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.purple.shade300),
           ],
         ),
       ),

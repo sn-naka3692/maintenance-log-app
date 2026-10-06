@@ -127,16 +127,10 @@ class AppConfigService {
   Future<UpdateAvailability> checkUpdateAvailability() async {
     try {
       final config = await fetchConfig();
-      if (config == null || config.latestBuildNumber <= 0) {
-        return UpdateAvailability.none;
-      }
       final currentBuild = await getCurrentBuildNumber();
-      if (currentBuild >= config.latestBuildNumber) {
-        return UpdateAvailability.none;
-      }
-      return UpdateAvailability(
-        hasNewerVersion: true,
-        latestVersion: config.latestVersion,
+      return evaluateUpdateAvailability(
+        currentBuild: currentBuild,
+        config: config,
       );
     } catch (_) {
       return UpdateAvailability.none;
@@ -171,6 +165,144 @@ class AppConfigService {
       'submission_check_updated_at': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
+
+  // ------------------------------------------------------------
+  // 【ベータ版配布(段階的リリース)・2026-10-06追加】
+  //
+  // 【目的】全社運用開始後、機能改善をリリースする際に「全社員へ一斉
+  // 配布する前に、特定の数名(ベータテスター)だけに先行して新しい
+  // ビルドを試してもらい、問題なければ全社配布に進む」という段階的
+  // リリースを行うための仕組み。
+  //
+  // 【設計】既存の強制アップデートゲート/更新お知らせ(全社向け
+  // latest_version/latest_build_number)とは完全に独立したフィールド
+  // (beta_version/beta_build_number等)を同じ app_config/settings
+  // ドキュメントに持たせる。全社向けの値を一切変更しないため、既存の
+  // 正常動作している更新通知・強制ブロック機能には影響を与えない。
+  //
+  // 【安全策】beta_tester_uids に自分のuidが含まれていない社員には、
+  // ベータ版の存在そのものが一切見えない(通知されない)。
+  // ------------------------------------------------------------
+
+  /// 最高管理者がベータ配布設定を更新する。
+  Future<void> updateBetaConfig(AppMinVersionConfig config) async {
+    await _doc.set({
+      'beta_enabled': config.betaEnabled,
+      'beta_version': config.betaVersion,
+      'beta_build_number': config.betaBuildNumber,
+      'beta_download_url': config.betaDownloadUrl,
+      'beta_tester_uids': config.betaTesterUids,
+      'beta_updated_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+}
+
+/// 「サーバー側の最新ビルド番号」と「今動いている実機/ブラウザの
+/// ビルド番号」を比較し、更新お知らせバナーを出すべきか判定する純粋関数。
+///
+/// 【テスト容易性のために意図的に切り出した・2026-10-06追加】
+/// Firestore通信やプラットフォーム判定(kIsWeb等)を含まない、入力→出力が
+/// 決定的な比較ロジックのみをここに集約する。これにより、
+/// `test/app_config_service_test.dart` でFirebase初期化なしに
+/// このロジックを回帰テストできる。
+///
+/// 【背景・2026-10-01に実際発生した事故】Web版ビルド時、サーバー側の
+/// `latest_build_number`は正しく更新されていたのに、Web版の自己申告
+/// ビルド番号(`build_info.dart`のコンパイル時定数)の更新を忘れたまま
+/// デプロイしてしまい、「更新バナーをクリックしても表示が変わらない」
+/// という不具合が発生した。この関数の単体テストでは、
+/// 「サーバー値を更新したのにクライアント側の値を更新し忘れた」ような
+/// パラメータの組み合わせを明示的にケースとして固定し、将来also同種の
+/// 実装ミス(比較演算子の方向を間違える等)が入った場合に即座に
+/// テストが失敗して検知できるようにする。
+UpdateAvailability evaluateUpdateAvailability({
+  required int currentBuild,
+  required AppMinVersionConfig? config,
+}) {
+  if (config == null || config.latestBuildNumber <= 0) {
+    return UpdateAvailability.none;
+  }
+  if (currentBuild >= config.latestBuildNumber) {
+    return UpdateAvailability.none;
+  }
+  return UpdateAvailability(
+    hasNewerVersion: true,
+    latestVersion: config.latestVersion,
+  );
+}
+
+/// 強制アップデートゲート(auth_gate.dart)の「アプリを全面ブロックすべきか」
+/// を判定する純粋関数。[evaluateUpdateAvailability]と同じ理由
+/// (テスト容易性・比較ロジック崩れの検知)で切り出している。
+///
+/// `min_supported_build`が未設定(0以下)の場合は常にブロックしない
+/// (fail-open)。
+bool shouldBlockForOutdatedBuild({
+  required int currentBuild,
+  required AppMinVersionConfig? config,
+}) {
+  if (config == null || config.minSupportedBuild <= 0) {
+    return false;
+  }
+  return currentBuild < config.minSupportedBuild;
+}
+
+/// 【ベータ版配布・2026-10-06追加】現在ログイン中のユーザーが
+/// ベータテスターに指定されているかどうかと、サーバー側の
+/// ベータビルド番号を比較し、「ベータ版のお知らせバナーを表示すべきか」
+/// を判定する純粋関数。
+///
+/// 【テスト容易性のために意図的に切り出した】[evaluateUpdateAvailability]
+/// と同じ理由で、Firestore通信やFirebaseAuthの現在ユーザー取得を含まない
+/// 決定的な比較ロジックのみをここに集約する。
+///
+/// - `beta_enabled` が false、または `beta_build_number` が未設定(0)の
+///   場合は常に通知しない。
+/// - 現在のuidが `beta_tester_uids` に含まれていない場合は通知しない
+///   (ベータテスター以外には一切見えない)。
+/// - 実機のビルド番号が `beta_build_number` 以上の場合は、すでに
+///   そのベータビルドを使用中とみなし通知しない。
+BetaAvailability evaluateBetaAvailability({
+  required int currentBuild,
+  required String? currentUid,
+  required AppMinVersionConfig? config,
+}) {
+  if (config == null || !config.betaEnabled || config.betaBuildNumber <= 0) {
+    return BetaAvailability.none;
+  }
+  if (currentUid == null || !config.betaTesterUids.contains(currentUid)) {
+    return BetaAvailability.none;
+  }
+  if (currentBuild >= config.betaBuildNumber) {
+    return BetaAvailability.none;
+  }
+  return BetaAvailability(
+    hasBetaUpdate: true,
+    betaVersion: config.betaVersion,
+    betaDownloadUrl: config.betaDownloadUrl,
+  );
+}
+
+/// 【ベータ版配布・2026-10-06追加】ベータ版お知らせの判定結果。
+///
+/// [hasBetaUpdate] が true の場合のみ、ベータテスターのホーム画面に
+/// 「ベータ版が利用可能です」バナーを表示する。
+class BetaAvailability {
+  final bool hasBetaUpdate;
+  final String betaVersion;
+  final String betaDownloadUrl;
+
+  const BetaAvailability({
+    required this.hasBetaUpdate,
+    required this.betaVersion,
+    required this.betaDownloadUrl,
+  });
+
+  static const none = BetaAvailability(
+    hasBetaUpdate: false,
+    betaVersion: '',
+    betaDownloadUrl: '',
+  );
 }
 
 /// 「更新お知らせ(強制ではない)」の判定結果。
@@ -213,12 +345,36 @@ class AppMinVersionConfig {
   /// 0(未設定)の場合はこの機能を一切使用しない(fail-open)。
   final int latestBuildNumber;
 
+  /// 【ベータ版配布・2026-10-06追加】ベータ配布機能そのもののON/OFF。
+  /// false の場合、他のbeta_*フィールドの値に関わらず一切通知しない。
+  final bool betaEnabled;
+
+  /// ベータ版のバージョン名(表示用、例: "1.2.49-beta1")。
+  final String betaVersion;
+
+  /// ベータ版のビルド番号。ベータテスターの実機ビルド番号がこれ未満の
+  /// 場合、ベータ版お知らせバナーを表示する。
+  final int betaBuildNumber;
+
+  /// ベータ版APKのダウンロードURL(任意、空の場合はデフォルトの
+  /// 配布先を使用)。
+  final String betaDownloadUrl;
+
+  /// ベータテスターとして指定されたユーザーのuid一覧。
+  /// ここに含まれるユーザーのみ、ベータ版お知らせバナーが表示される。
+  final List<String> betaTesterUids;
+
   const AppMinVersionConfig({
     required this.minSupportedBuild,
     this.message = '',
     this.downloadUrl = '',
     this.latestVersion = '',
     this.latestBuildNumber = 0,
+    this.betaEnabled = false,
+    this.betaVersion = '',
+    this.betaBuildNumber = 0,
+    this.betaDownloadUrl = '',
+    this.betaTesterUids = const [],
   });
 
   factory AppMinVersionConfig.fromMap(Map<String, dynamic> map) {
@@ -228,6 +384,15 @@ class AppMinVersionConfig {
       downloadUrl: (map['download_url'] as String?) ?? '',
       latestVersion: (map['latest_version'] as String?) ?? '',
       latestBuildNumber: (map['latest_build_number'] as num?)?.toInt() ?? 0,
+      betaEnabled: (map['beta_enabled'] as bool?) ?? false,
+      betaVersion: (map['beta_version'] as String?) ?? '',
+      betaBuildNumber: (map['beta_build_number'] as num?)?.toInt() ?? 0,
+      betaDownloadUrl: (map['beta_download_url'] as String?) ?? '',
+      betaTesterUids:
+          (map['beta_tester_uids'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 
@@ -248,6 +413,11 @@ class AppMinVersionConfig {
     String? downloadUrl,
     String? latestVersion,
     int? latestBuildNumber,
+    bool? betaEnabled,
+    String? betaVersion,
+    int? betaBuildNumber,
+    String? betaDownloadUrl,
+    List<String>? betaTesterUids,
   }) {
     return AppMinVersionConfig(
       minSupportedBuild: minSupportedBuild ?? this.minSupportedBuild,
@@ -255,6 +425,11 @@ class AppMinVersionConfig {
       downloadUrl: downloadUrl ?? this.downloadUrl,
       latestVersion: latestVersion ?? this.latestVersion,
       latestBuildNumber: latestBuildNumber ?? this.latestBuildNumber,
+      betaEnabled: betaEnabled ?? this.betaEnabled,
+      betaVersion: betaVersion ?? this.betaVersion,
+      betaBuildNumber: betaBuildNumber ?? this.betaBuildNumber,
+      betaDownloadUrl: betaDownloadUrl ?? this.betaDownloadUrl,
+      betaTesterUids: betaTesterUids ?? this.betaTesterUids,
     );
   }
 }

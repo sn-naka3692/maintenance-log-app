@@ -130,54 +130,13 @@ class DocumentScanService {
       throw DocumentScanException('$errorMsg (HTTP ${resp.statusCode})');
     }
 
-    final valuesRaw = body['values'] as Map<String, dynamic>? ?? {};
-    final confidencesRaw = body['confidences'] as Map<String, dynamic>? ?? {};
-    final docConfidence =
-        (body['documentConfidence'] as num?)?.toDouble() ?? 0.0;
-    // サーバー側(function_app.py)が判定した書式種別。
-    // "SEDocType" | "ProWanDocType"。未対応の古いレスポンスの場合は
-    // 空文字となり、呼び出し元はSE用フィールド定義にフォールバックする。
-    final docType = body['docType'] as String? ?? '';
-
-    final values = <String, String>{
-      for (final entry in valuesRaw.entries)
-        entry.key: entry.value as String? ?? '',
-    };
-    final confidences = <String, double>{
-      for (final entry in confidencesRaw.entries)
-        entry.key: (entry.value as num?)?.toDouble() ?? 0.0,
-    };
-
-    // メーカー名の社名変更対応(サーバー側でも正規化済みだが、念のため
-    // クライアント側でも冪等に正規化しておく)
-    if (values.containsKey('MakerName')) {
-      values['MakerName'] = normalizeMakerName(values['MakerName']);
-    }
-
-    // 「処置内容」ブロック(Cause/PartCategory/Symptom/ChargeAmountKg)の
-    // 見出し文字混入補正(サーバー側でも正規化済みだが、念のため
-    // クライアント側でも冪等に正規化しておく=MakerNameと同じ二重防御方針)
-    values.addAll(normalizeFieldHeadingsInValues(values));
-
-    // 日付欄の隣接欠落・連結補正(サーバー側でも正規化済みだが、
-    // 二重防御として同様に適用する)
-    for (final key in dateLikeFields) {
-      if (values.containsKey(key)) {
-        values[key] = normalizeDateLike(values[key]);
-      }
-    }
-
-    // バーコード欄の誤検出補正(サーバー側でも正規化済みだが、
-    // 二重防御として同様に適用する)
-    if (values.containsKey('Barcode')) {
-      values['Barcode'] = normalizeBarcode(values['Barcode']);
-    }
+    final parsed = parseScanResultBody(body);
 
     return ScanResult(
-      values: values,
-      confidences: confidences,
-      documentConfidence: docConfidence,
-      docType: docType,
+      values: parsed.values,
+      confidences: parsed.confidences,
+      documentConfidence: parsed.documentConfidence,
+      docType: parsed.docType,
       sourceImageBytes: imageBytes,
     );
   }
@@ -446,6 +405,90 @@ class PageScanResult {
       }(),
     );
   }
+}
+
+/// サーバー(nakano-scan-proxy)から返ってきたJSONの `values`/`confidences`/
+/// `documentConfidence`/`docType` を解析し、クライアント側の正規化処理
+/// (メーカー名・見出し文字混入・日付・バーコード)まで適用した結果。
+class ParsedScanResultBody {
+  final Map<String, String> values;
+  final Map<String, double> confidences;
+  final double documentConfidence;
+  final String docType;
+
+  const ParsedScanResultBody({
+    required this.values,
+    required this.confidences,
+    required this.documentConfidence,
+    required this.docType,
+  });
+}
+
+/// サーバーのレスポンスJSON(`body`)から [ParsedScanResultBody] を組み立てる
+/// 純粋関数。
+///
+/// 【テスト容易性のために意図的に切り出した・2026-10-06追加】
+/// HTTP通信そのもの(リトライ・タイムアウト等)を含まず、
+/// 「サーバーが返したJSON構造」→「クライアントの正規化済みデータ」への
+/// 変換ロジックのみを切り出している。これにより
+/// `test/document_scan_service_test.dart` で、実際にAzure
+/// Document Intelligenceを呼ばずにこの変換ロジックの回帰テストができる。
+///
+/// 【このテストで守りたいもの】
+/// - フィールド欠落時に例外を出さず安全に空値/0.0へフォールバックすること
+/// - MakerName・見出し文字混入・日付・バーコードの正規化が確実に
+///   適用されること(サーバー側の正規化が何らかの理由で効かなかった場合の
+///   「二重防御」が機能しているかの検証)
+/// - docTypeが未対応の古いレスポンスでも空文字にフォールバックすること
+ParsedScanResultBody parseScanResultBody(Map<String, dynamic> body) {
+  final valuesRaw = body['values'] as Map<String, dynamic>? ?? {};
+  final confidencesRaw = body['confidences'] as Map<String, dynamic>? ?? {};
+  final docConfidence = (body['documentConfidence'] as num?)?.toDouble() ?? 0.0;
+  // サーバー側(function_app.py)が判定した書式種別。
+  // "SEDocType" | "ProWanDocType"。未対応の古いレスポンスの場合は
+  // 空文字となり、呼び出し元はSE用フィールド定義にフォールバックする。
+  final docType = body['docType'] as String? ?? '';
+
+  final values = <String, String>{
+    for (final entry in valuesRaw.entries)
+      entry.key: entry.value as String? ?? '',
+  };
+  final confidences = <String, double>{
+    for (final entry in confidencesRaw.entries)
+      entry.key: (entry.value as num?)?.toDouble() ?? 0.0,
+  };
+
+  // メーカー名の社名変更対応(サーバー側でも正規化済みだが、念のため
+  // クライアント側でも冪等に正規化しておく)
+  if (values.containsKey('MakerName')) {
+    values['MakerName'] = normalizeMakerName(values['MakerName']);
+  }
+
+  // 「処置内容」ブロック(Cause/PartCategory/Symptom/ChargeAmountKg)の
+  // 見出し文字混入補正(サーバー側でも正規化済みだが、念のため
+  // クライアント側でも冪等に正規化しておく=MakerNameと同じ二重防御方針)
+  values.addAll(normalizeFieldHeadingsInValues(values));
+
+  // 日付欄の隣接欠落・連結補正(サーバー側でも正規化済みだが、
+  // 二重防御として同様に適用する)
+  for (final key in dateLikeFields) {
+    if (values.containsKey(key)) {
+      values[key] = normalizeDateLike(values[key]);
+    }
+  }
+
+  // バーコード欄の誤検出補正(サーバー側でも正規化済みだが、
+  // 二重防御として同様に適用する)
+  if (values.containsKey('Barcode')) {
+    values['Barcode'] = normalizeBarcode(values['Barcode']);
+  }
+
+  return ParsedScanResultBody(
+    values: values,
+    confidences: confidences,
+    documentConfidence: docConfidence,
+    docType: docType,
+  );
 }
 
 /// スキャン解析結果

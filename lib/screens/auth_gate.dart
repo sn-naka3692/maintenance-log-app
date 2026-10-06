@@ -55,7 +55,10 @@ class _AuthGateState extends State<AuthGate> {
       final config = await AppConfigService.instance.fetchConfig();
       final currentBuild = await AppConfigService.instance
           .getCurrentBuildNumber();
-      if (config != null && currentBuild < config.minSupportedBuild) {
+      if (shouldBlockForOutdatedBuild(
+        currentBuild: currentBuild,
+        config: config,
+      )) {
         if (mounted) setState(() => _blockConfig = config);
       }
     } catch (_) {
