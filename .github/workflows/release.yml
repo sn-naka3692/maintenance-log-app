@@ -28,19 +28,20 @@ jobs:
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
       - name: Web build & Firebase deploy (秘密鍵未登録なら自動スキップ)
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
-          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" ]; then
+          if [ -z "$FIREBASE_KEY" ]; then
             echo "⚠️ FIREBASE_SERVICE_ACCOUNT_JSON 未登録のため Web版デプロイをスキップ"
             exit 0
           fi
           sudo mkdir -p /opt/flutter
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" | sudo tee /opt/flutter/firebase-admin-sdk.json > /dev/null
+          printf '%s' "$FIREBASE_KEY" | sudo tee /opt/flutter/firebase-admin-sdk.json > /dev/null
           flutter build web --release --pwa-strategy=none --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}"
           cp scripts/kill_switch_service_worker.js build/web/flutter_service_worker.js
-          npm install -g firebase-tools >/dev/null 2>&1
+          sudo npm install -g firebase-tools >/dev/null 2>&1
           GOOGLE_APPLICATION_CREDENTIALS=/opt/flutter/firebase-admin-sdk.json firebase deploy --only hosting --project sn-report
-          pip install firebase-admin >/dev/null 2>&1
-          python3 scripts/deploy_firestore_rules.py || true
+          python3 -m pip install --quiet firebase-admin
           VB=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
           BN=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
           python3 scripts/release_version_config.py "$VB" "$BN"
