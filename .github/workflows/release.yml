@@ -7,7 +7,11 @@
 #   APK_KEY_PASSWORD        : key.properties の keyPassword (storePasswordと同値)
 #   APK_KEY_ALIAS           : nakano_release
 name: Release APK
+
+permissions:
+  contents: write
 on:
+  workflow_dispatch:
   push:
     tags: ["v*"]
 jobs:
