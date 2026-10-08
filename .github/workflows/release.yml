@@ -18,6 +18,22 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
+      - name: Sync build_info.dart from pubspec (Web版バナー用・手動更新漏れ防止)
+        run: |
+          VB=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
+          BN=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+          python3 - "$VB" "$BN" <<'PYI'
+          import re, sys
+          vb, bn = sys.argv[1], sys.argv[2]
+          p = 'lib/build_info.dart'
+          s = open(p).read()
+          s = re.sub(r"const int kCompiledBuildNumber = \d+;", "const int kCompiledBuildNumber = %s;" % bn, s)
+          s = re.sub(r"const String kCompiledVersionName = '[^']*';", "const String kCompiledVersionName = '%s';" % vb, s)
+          assert "kCompiledBuildNumber = %s;" % bn in s and "'%s'" % vb in s, "sync failed"
+          open(p, 'w').write(s)
+          print('build_info.dart を %s+%s に同期しました' % (vb, bn))
+          PYI
+          grep -n 'kCompiled' lib/build_info.dart
       - name: Regression test gate
         run: flutter test
       - name: APK build (arm64)
