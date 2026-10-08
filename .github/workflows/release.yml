@@ -1,13 +1,4 @@
-# v1.2.49 リリース用: タグをpushするとGitHub Actions上でビルドし、ReleasesへAPKを公開する。
-# サンドボックス(2GB RAM)ではGradleがOOMでビルド不可のため、サーバー側でビルドする。
-# 必要なRepository Secrets(次回セッションでgh secret setにより登録):
-#   SCAN_PROXY_FUNCTION_KEY : Azure関数scanのキー (scripts/secrets.env 相当)
-#   APK_KEYSTORE_B64        : android/release-key-v2.jks を base64 -w0 した値
-#   APK_STORE_PASSWORD      : key.properties の storePassword
-#   APK_KEY_PASSWORD        : key.properties の keyPassword (storePasswordと同値)
-#   APK_KEY_ALIAS           : nakano_release
-name: Release APK
-
+name: Release APK & Web
 permissions:
   contents: write
 on:
@@ -26,17 +17,30 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Configure secrets
-        run: |
-          echo "${{ secrets.APK_KEYSTORE_B64 }}" | base64 -d > android/release-key-v2.jks
-          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=../release-key-v2.jks\n' \
-            "${{ secrets.APK_STORE_PASSWORD }}" "${{ secrets.APK_KEY_PASSWORD }}" "${{ secrets.APK_KEY_ALIAS }}" > android/key.properties
       - run: flutter pub get
       - name: Regression test gate
         run: flutter test
-      - name: Build APK (arm64)
+      - name: APK build (arm64)
         run: flutter build apk --release --target-platform android-arm64 --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}"
-      - name: Publish to GitHub Releases
+      - name: Publish APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
+      - name: Web build & Firebase deploy (秘密鍵未登録なら自動スキップ)
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" ]; then
+            echo "⚠️ FIREBASE_SERVICE_ACCOUNT_JSON 未登録のため Web版デプロイをスキップ"
+            exit 0
+          fi
+          sudo mkdir -p /opt/flutter
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" | sudo tee /opt/flutter/firebase-admin-sdk.json > /dev/null
+          flutter build web --release --pwa-strategy=none --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}"
+          cp scripts/kill_switch_service_worker.js build/web/flutter_service_worker.js
+          npm install -g firebase-tools >/dev/null 2>&1
+          GOOGLE_APPLICATION_CREDENTIALS=/opt/flutter/firebase-admin-sdk.json firebase deploy --only hosting --project sn-report
+          pip install firebase-admin >/dev/null 2>&1
+          python3 scripts/deploy_firestore_rules.py || true
+          VB=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
+          BN=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+          python3 scripts/release_version_config.py "$VB" "$BN"
+          echo "Web版デプロイ+バナー設定更新が完了しました"
