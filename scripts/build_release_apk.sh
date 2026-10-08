@@ -46,14 +46,30 @@ SECRETS_FILE="scripts/secrets.env"
 if [[ -f "$SECRETS_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$SECRETS_FILE"
-else
-  echo "⚠️  警告: $SECRETS_FILE が見つかりません。"
-  echo "   作業報告書のスキャン機能はビルドされたAPKで401エラーになります。"
 fi
 
 if [[ -z "${SCAN_PROXY_FUNCTION_KEY:-}" ]]; then
-  echo "⚠️  警告: SCAN_PROXY_FUNCTION_KEY が未設定です。スキャン機能は動作しません。"
+  # secrets.env が無い/キーが空の場合、Azure CLIから直接取得を試みる
+  # (v1.2.48 で「キー空のまま配布」となった再発を防ぐ。2026-10-08 対応)
+  if command -v az >/dev/null 2>&1 && az account show >/dev/null 2>&1; then
+    echo "▶ SCAN_PROXY_FUNCTION_KEY が未設定のため Azure CLI から取得します..."
+    SCAN_PROXY_FUNCTION_KEY="$(az functionapp function keys list --name nakano-scan-proxy --resource-group nakano-reikiken-rg --function-name scan --query 'default' -o tsv 2>/dev/null || true)"
+  fi
 fi
+
+if [[ -z "${SCAN_PROXY_FUNCTION_KEY:-}" ]]; then
+  echo ""
+  echo "❌ 停止: SCAN_PROXY_FUNCTION_KEY が取得できません。APKビルドを中止します。"
+  echo "   このまま続行すると、スキャン機能が必ず401エラーになるAPKが配布されます"
+  echo "   (v1.2.48 で実際に発生した不具合)。"
+  echo ""
+  echo "   対処: scripts/secrets.env に以下の1行を書いてから再実行してください:"
+  echo '     SCAN_PROXY_FUNCTION_KEY="<Azure関数scanのキー>"'
+  echo "   または Azure CLI でログイン済みなら、このスクリプトが自動取得します:"
+  echo "     az login"
+  exit 1
+fi
+echo "✅ スキャン機能用Function Keyの埋め込みを確認(キー未埋め込みの配布をブロック)"
 
 echo "▶ arm64-v8a専用の配布用APKをビルドします..."
 flutter build apk --release --target-platform android-arm64 \

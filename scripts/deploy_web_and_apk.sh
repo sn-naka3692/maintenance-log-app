@@ -157,9 +157,31 @@ SECRETS_FILE="scripts/secrets.env"
 if [[ -f "$SECRETS_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$SECRETS_FILE"
-else
-  echo "⚠️  警告: $SECRETS_FILE が見つかりません。スキャン機能は401エラーになります。"
 fi
+
+if [[ -z "${SCAN_PROXY_FUNCTION_KEY:-}" ]]; then
+  # Web版・APK版どちらのビルドでもキー空は401障害になるため、
+  # Azure CLIからの自動取得を試み、取れなければ配布物を作らせない
+  # (v1.2.48 で実際に発生した「キー空で配布」の再発防止。2026-10-08)
+  if command -v az >/dev/null 2>&1 && az account show >/dev/null 2>&1; then
+    echo "▶ SCAN_PROXY_FUNCTION_KEY が未設定のため Azure CLI から取得します..."
+    SCAN_PROXY_FUNCTION_KEY="$(az functionapp function keys list --name nakano-scan-proxy --resource-group nakano-reikiken-rg --function-name scan --query 'default' -o tsv 2>/dev/null || true)"
+  fi
+fi
+
+if [[ -z "${SCAN_PROXY_FUNCTION_KEY:-}" ]]; then
+  echo ""
+  echo "❌ 停止: SCAN_PROXY_FUNCTION_KEY が取得できません。デプロイを中止します。"
+  echo "   このまま続行すると、スキャン機能が必ず401エラーになるWeb版・APKを"
+  echo "   配布することになります(v1.2.48 で実際に発生した不具合)。"
+  echo ""
+  echo "   対処: scripts/secrets.env に以下の1行を書いてから再実行してください:"
+  echo '     SCAN_PROXY_FUNCTION_KEY="<Azure関数scanのキー>"'
+  echo "   または Azure CLI でログイン済みなら、このスクリプトが自動取得します:"
+  echo "     az login"
+  exit 1
+fi
+echo "✅ スキャン機能用Function Keyの埋め込みを確認(キー未埋め込みの配布をブロック)"
 
 echo "▶ 1/8 配布用APK(arm64-v8a専用)をビルドします..."
 bash scripts/build_release_apk.sh
