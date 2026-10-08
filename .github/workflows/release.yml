@@ -23,6 +23,7 @@ jobs:
       - name: APK build (arm64)
         run: flutter build apk --release --target-platform android-arm64 --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}"
       - name: Publish APK to GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
