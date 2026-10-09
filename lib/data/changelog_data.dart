@@ -27,6 +27,7 @@ const List<ChangelogEntry> changelogEntries = [
       '月末チェック(複数ページの一括スキャン)がエラー(401)になる問題を修正しました。'
           'スキャンサーバーの関数ごとに専用キーが必要な仕様に対応し、キーを使い分けました。',
     ],
+  ),
   ChangelogEntry(
     version: '1.2.52',
     date: '2026-10-10',
