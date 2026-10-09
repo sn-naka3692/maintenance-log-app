@@ -281,41 +281,13 @@ class DocumentScanService {
   // PDFが複数ページの場合は「1ページ目のみ」を解析対象とする
   // (作業報告書アプリの出力は通常1案件=1ページのため)。
   static Future<ScanResult> analyzePdf(Uint8List pdfBytes) async {
-    // 【2026-09-29修正】includeImage:true を指定し、サーバー側で
-    // レンダリングされたPDFページ画像を教師データ収集用に受け取る。
-    // これがないと ScanResult.sourceImageBytes が常にnullとなり、
-    // 確認画面での手直しが発生しても学習候補画像が保存されない
-    // (=ラベリング不能な教師データが溜まり続ける)不具合が生じる。
     // 【v1.2.52 緊急修正】scanBatch(関数キー不整合により401)を経由せず、
-    // 実証済みの単票エンドポイント /api/scan を直接呼ぶ(1案件=1ページのため)。
-    // PDFバイト列は Document Intelligence が直接解析可能(2026-10-10実測:
-    // PDF送信で認証・AI解析段階まで通過を確認)。
-    // ※ 教師データ収集用のページ画像(includeImage)は本経路では取得できない。
-    //    scanBatch の関数キーを Azure 側で修正後、元に戻す予定。
+    // 実証済みの単票エンドポイント /api/scan を直接呼ぶ。
+    // PDFバイト列はそのまま Document Intelligence に渡る
+    // (2026-10-10実測: PDF送信で認証・AI解析段階まで通過を確認)。
+    // ※ 教師データ収集用のページ画像(includeImage)は本経路では
+    //    取得できない。scanBatch の関数キー修正後に再評価する。
     return analyzeImage(pdfBytes);
-    if (batch.pageResults.isEmpty) {
-      throw DocumentScanException('PDFの解析結果を取得できませんでした');
-    }
-    final page = batch.pageResults.first;
-    if (page.isError) {
-      throw DocumentScanException(page.error ?? 'PDFの解析に失敗しました');
-    }
-    if (page.isLowConfidence) {
-      // 単発画像スキャン(/scan)と挙動を揃え、全体信頼度が閾値未満の場合は
-      // 確認画面へは進ませず、撮り直し(選び直し)を促す。
-      throw DocumentScanException(
-        '作業報告書のフォーマットを認識できませんでした。'
-        '別のPDFを選ぶか、カメラで撮影してお試しください'
-        '(信頼度: ${(page.documentConfidence * 100).toStringAsFixed(0)}%)',
-      );
-    }
-    return ScanResult(
-      values: page.values,
-      confidences: page.confidences,
-      documentConfidence: page.documentConfidence,
-      docType: page.docType,
-      sourceImageBytes: page.imageBytes,
-    );
   }
 }
 
