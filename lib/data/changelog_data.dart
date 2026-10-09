@@ -20,6 +20,20 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.50',
+    date: '2026-10-09',
+    title: '更新管理の改善(バージョン判別のしやすさ向上)',
+    details: [
+      '【改善】スキャン機能はv1.2.49で修正済みです。本バージョンからは'
+          'バージョン番号で新旧の判別が一目で分かり、更新の取りこぼしを防ぎやすく'
+          'なりました。',
+      '【お願い】v1.2.48以前からの入れ替えは、引き続き「アンインストール → '
+          '案内文のQRコードからダウンロード → インストール → 再ログイン」の'
+          '手順でお願いします。',
+    ],
+  ),
+const List<ChangelogEntry> changelogEntries = [
+  ChangelogEntry(
     version: '1.2.49',
     date: '2026-10-08',
     title: 'スキャン機能の緊急修正(HTTP 401エラー解消)',
