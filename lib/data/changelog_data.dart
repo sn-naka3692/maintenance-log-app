@@ -20,6 +20,17 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.52',
+    date: '2026-10-10',
+    title: 'スキャン機能の緊急修正(PDF読み取り経路の変更)',
+    details: [
+      '【緊急修正】PDFスキャンがエラーになるサーバー側設定の問題に対し、'
+          'アプリ側で単票解析エンドポイントを直接使う方式に変更しました。'
+          'これにより日報作成のスキャンが復旧します。',
+    ],
+  ),
+
+  ChangelogEntry(
     version: '1.2.51',
     date: '2026-10-09',
     title: 'スキャンエラーの診断表示(原因特定支援)',
