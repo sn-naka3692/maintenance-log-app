@@ -36,6 +36,13 @@ class DocumentScanService {
     'SCAN_PROXY_FUNCTION_KEY',
     defaultValue: '<<SCAN_PROXY_FUNCTION_KEY>>',
   );
+  // 【v1.2.53】月末チェック(scan_batch 関数)は専用の関数キーを持つ。
+  // scan 関数のキー(_functionKey)を流用すると401になる(2026-10-10 実測で確定)。
+  // キーはCI(build_release_apk.sh)が Azure から自動取得し --dart-define で渡す。
+  static const String _functionKeyBatch = String.fromEnvironment(
+    'SCAN_PROXY_FUNCTION_KEY_BATCH',
+    defaultValue: '<<SCAN_PROXY_FUNCTION_KEY_BATCH>>',
+  );
 
   /// 通信の最大リトライ回数。
   ///
@@ -200,7 +207,7 @@ class DocumentScanService {
     }
 
     final uri = Uri.parse(
-      '$_batchProxyEndpoint?code=$_functionKey&startPage=$startPage&endPage=$endPage'
+      '$_batchProxyEndpoint?code=$_functionKeyBatch&startPage=$startPage&endPage=$endPage'
       '${includeImage ? '&includeImage=true' : ''}',
     );
 

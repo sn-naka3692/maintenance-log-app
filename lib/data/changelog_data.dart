@@ -20,6 +20,14 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.53',
+    date: '2026-10-10',
+    title: '月末チェック(一括スキャン)の復旧',
+    details: [
+      '月末チェック(複数ページの一括スキャン)がエラー(401)になる問題を修正しました。'
+          'スキャンサーバーの関数ごとに専用キーが必要な仕様に対応し、キーを使い分けました。',
+    ],
+  ChangelogEntry(
     version: '1.2.52',
     date: '2026-10-10',
     title: 'スキャン機能の緊急修正(PDF読み取り経路の変更)',

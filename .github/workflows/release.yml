@@ -37,7 +37,7 @@ jobs:
       - name: Regression test gate
         run: flutter test
       - name: APK build (arm64)
-        run: flutter build apk --release --target-platform android-arm64 --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}"
+        run: flutter build apk --release --target-platform android-arm64 --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}" --dart-define=SCAN_PROXY_FUNCTION_KEY_BATCH="${{ secrets.SCAN_PROXY_FUNCTION_KEY_BATCH }}"
       - name: Publish APK to GitHub Releases
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -53,7 +53,7 @@ jobs:
           fi
           sudo mkdir -p /opt/flutter
           printf '%s' "$FIREBASE_KEY" | sudo tee /opt/flutter/firebase-admin-sdk.json > /dev/null
-          flutter build web --release --pwa-strategy=none --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}"
+          flutter build web --release --pwa-strategy=none --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}" --dart-define=SCAN_PROXY_FUNCTION_KEY_BATCH="${{ secrets.SCAN_PROXY_FUNCTION_KEY_BATCH }}"
           cp scripts/kill_switch_service_worker.js build/web/flutter_service_worker.js
           sudo npm install -g firebase-tools >/dev/null 2>&1
           GOOGLE_APPLICATION_CREDENTIALS=/opt/flutter/firebase-admin-sdk.json firebase deploy --only hosting --project sn-report
