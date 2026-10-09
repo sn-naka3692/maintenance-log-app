@@ -20,6 +20,16 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.51',
+    date: '2026-10-09',
+    title: 'スキャンエラーの診断表示(原因特定支援)',
+    details: [
+      '【診断】スキャンでエラーが出た際、画面に通信の詳細(埋め込まれたキーの状態・'
+          '接続先・応答本文)を表示するようにしました。原因特定のための一時的な強化です。',
+    ],
+  ),
+
+  ChangelogEntry(
     version: '1.2.50',
     date: '2026-10-09',
     title: '更新管理の改善(バージョン判別のしやすさ向上)',

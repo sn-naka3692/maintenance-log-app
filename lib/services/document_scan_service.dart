@@ -59,6 +59,24 @@ class DocumentScanService {
   /// 画像バイト列を渡して中継Function経由でAzureに解析させ、
   /// フィールド抽出結果を返す。
   /// 戻り値: フィールドキー(Pascal case) -> 値 のMap。未検出は空文字。
+  /// 【診断機能・v1.2.51】エラー時にキーの状態を表示(全キーは表示しない)。
+  static String _keyDiag() {
+    final k = _functionKey;
+    if (k.isEmpty) return '0文字(キー未埋め込み!)';
+    final head = k.length > 8 ? k.substring(0, 4) + '…' : k;
+    final tail = k.length > 8 ? '…' + k.substring(k.length - 4) : '';
+    return k.length.toString() + '文字(' + head + tail + ')';
+  }
+
+  static String _bodyDiag(dynamic resp) {
+    try {
+      final b = utf8.decode(resp.bodyBytes);
+      return b.length > 120 ? b.substring(0, 120) + '…' : b;
+    } catch (_) {
+      return '(本文なし)';
+    }
+  }
+
   static Future<ScanResult> analyzeImage(Uint8List imageBytes) async {
     final uri = Uri.parse('$_proxyEndpoint?code=$_functionKey');
 
@@ -121,13 +139,13 @@ class DocumentScanService {
       body = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
     } catch (_) {
       throw DocumentScanException(
-        'サーバーからの応答を解釈できませんでした (HTTP ${resp.statusCode})',
+        '応答を解析できませんでした (HTTP ${resp.statusCode}) / キー: ${_keyDiag()} / URL: $uri / 本文: ${_bodyDiag(resp)}',
       );
     }
 
     if (resp.statusCode != 200) {
       final errorMsg = body['error'] as String? ?? 'スキャン解析に失敗しました';
-      throw DocumentScanException('$errorMsg (HTTP ${resp.statusCode})');
+      throw DocumentScanException('$errorMsg (HTTP ${resp.statusCode}) / キー: ${_keyDiag()} / URL: $uri');
     }
 
     final parsed = parseScanResultBody(body);
@@ -227,13 +245,13 @@ class DocumentScanService {
       body = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
     } catch (_) {
       throw DocumentScanException(
-        'サーバーからの応答を解釈できませんでした (HTTP ${resp.statusCode})',
+        '応答を解析できませんでした (HTTP ${resp.statusCode}) / キー: ${_keyDiag()} / URL: $uri / 本文: ${_bodyDiag(resp)}',
       );
     }
 
     if (resp.statusCode != 200) {
       final errorMsg = body['error'] as String? ?? 'PDF一括解析に失敗しました';
-      throw DocumentScanException('$errorMsg (HTTP ${resp.statusCode})');
+      throw DocumentScanException('$errorMsg (HTTP ${resp.statusCode}) / キー: ${_keyDiag()} / URL: $uri');
     }
 
     final totalPages = (body['totalPages'] as num?)?.toInt() ?? 0;
