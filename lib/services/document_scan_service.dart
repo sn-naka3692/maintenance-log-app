@@ -288,13 +288,36 @@ class DocumentScanService {
   // PDFが複数ページの場合は「1ページ目のみ」を解析対象とする
   // (作業報告書アプリの出力は通常1案件=1ページのため)。
   static Future<ScanResult> analyzePdf(Uint8List pdfBytes) async {
-    // 【v1.2.52 緊急修正】scanBatch(関数キー不整合により401)を経由せず、
-    // 実証済みの単票エンドポイント /api/scan を直接呼ぶ。
-    // PDFバイト列はそのまま Document Intelligence に渡る
-    // (2026-10-10実測: PDF送信で認証・AI解析段階まで通過を確認)。
-    // ※ 教師データ収集用のページ画像(includeImage)は本経路では
-    //    取得できない。scanBatch の関数キー修正後に再評価する。
-    return analyzeImage(pdfBytes);
+    // 【v1.2.54】scan_batch 専用キー対応(v1.2.53)により batch 経路が復活。
+    // 教師データ収集用にページ画像(includeImage:true)を受け取るため、
+    // PDF1ページ分を scan_batch 経由で解析する方式に戻した。
+    final batch = await analyzeBatch(
+      pdfBytes,
+      startPage: 1,
+      endPage: 1,
+      includeImage: true,
+    );
+    if (batch.pageResults.isEmpty) {
+      throw DocumentScanException('PDFの解析結果を取得できませんでした');
+    }
+    final page = batch.pageResults.first;
+    if (page.isError) {
+      throw DocumentScanException(page.error ?? 'PDFの解析に失敗しました');
+    }
+    if (page.isLowConfidence) {
+      throw DocumentScanException(
+        '作業報告書のフォーマットを認識できませんでした。'
+        '別のPDFを選ぶか、カメラで撮影してお試しください'
+        '(信頼度: ${(page.documentConfidence * 100).toStringAsFixed(0)}%)',
+      );
+    }
+    return ScanResult(
+      values: page.values,
+      confidences: page.confidences,
+      documentConfidence: page.documentConfidence,
+      docType: page.docType,
+      sourceImageBytes: page.imageBytes,
+    );
   }
 }
 

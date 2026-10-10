@@ -20,6 +20,15 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.54',
+    date: '2026-10-10',
+    title: '教師データ収集の再開',
+    details: [
+      'PDFスキャン時に、確認・学習用のページ画像を再びサーバーとやりとりするようにしました。'
+          '月末チェックの復旧に続いて、内部データ収集も完全復旧です。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.53',
     date: '2026-10-10',
     title: '月末チェック(一括スキャン)の復旧',
