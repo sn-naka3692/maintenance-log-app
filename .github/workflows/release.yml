@@ -48,11 +48,32 @@ jobs:
 
       - name: APK build (arm64)
         run: flutter build apk --release --target-platform android-arm64 --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}" --dart-define=SCAN_PROXY_FUNCTION_KEY_BATCH="${{ secrets.SCAN_PROXY_FUNCTION_KEY_BATCH }}"
+      - name: Verify APK signature (デバッグ署名混入の防止)
+        run: |
+          if keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | grep -q "Android Debug"; then
+            echo "::error::デバッグ署名でビルドされています(リリースのたびにキーが変わり全端末で再インストールが必要になります)。key.properties の適用を確認してください"
+            exit 1
+          fi
+          echo "署名確認OK: 正規キーで署名されています"
+          keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | grep -E "Owner|所有者" | head -1
+
       - name: Publish APK to GitHub Releases
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
+      - name: Release smoke test (配布キーの死活確認)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          SCAN_KEY: ${{ secrets.SCAN_PROXY_FUNCTION_KEY }}
+          BATCH_KEY: ${{ secrets.SCAN_PROXY_FUNCTION_KEY_BATCH }}
+        run: |
+          S=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://nakano-scan-proxy.azurewebsites.net/api/scan?code=$SCAN_KEY&startPage=1&endPage=1" -H "Content-Type: application/pdf" --data-binary "" --max-time 60)
+          B=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://nakano-scan-proxy.azurewebsites.net/api/scanBatch?code=$BATCH_KEY&startPage=1&endPage=1" -H "Content-Type: application/pdf" --data-binary "" --max-time 60)
+          echo "scan=$S scanBatch=$B"
+          if [ "$S" = "401" ] || [ "$B" = "401" ]; then echo "::error::スキャンエンドポイントのキーが不一致(401)です。GitHubシークレットとAzure側のキーを確認してください"; exit 1; fi
+          echo "スモークテスト合格(両エンドポイントとも認証通過)"
+
       - name: Web build & Firebase deploy (秘密鍵未登録なら自動スキップ)
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
