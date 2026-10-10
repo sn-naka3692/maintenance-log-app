@@ -20,6 +20,15 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.55',
+    date: '2026-10-10',
+    title: 'アプリの署名を固定(今後の更新でアンインストール不要)',
+    details: [
+      '更新のたびに必要だった再インストールをなくすため、署名を固定しました。'
+          '今回のみ一度だけ再インストールすれば、次回以降は上書き更新だけで更新できます。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.54',
     date: '2026-10-10',
     title: '教師データ収集の再開',

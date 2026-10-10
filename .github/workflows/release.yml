@@ -36,6 +36,16 @@ jobs:
           grep -n 'kCompiled' lib/build_info.dart
       - name: Regression test gate
         run: flutter test
+      - name: Decode signing keystore
+        env:
+          APK_KEYSTORE_B64: ${{ secrets.APK_KEYSTORE_B64 }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+          APK_STORE_PASSWORD: ${{ secrets.APK_STORE_PASSWORD }}
+        run: |
+          echo "$APK_KEYSTORE_B64" | base64 -d > android/app/upload-keystore.jks
+          printf 'storeFile=upload-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$APK_STORE_PASSWORD" "$APK_KEY_ALIAS" "$APK_KEY_PASSWORD" > android/key.properties
+
       - name: APK build (arm64)
         run: flutter build apk --release --target-platform android-arm64 --dart-define=SCAN_PROXY_FUNCTION_KEY="${{ secrets.SCAN_PROXY_FUNCTION_KEY }}" --dart-define=SCAN_PROXY_FUNCTION_KEY_BATCH="${{ secrets.SCAN_PROXY_FUNCTION_KEY_BATCH }}"
       - name: Publish APK to GitHub Releases
