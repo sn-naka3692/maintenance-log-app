@@ -606,8 +606,10 @@ class AppState extends ChangeNotifier {
   Map<String, int> countByResponseType(List<WorkReport> reports) =>
       _service.countByResponseType(reports);
 
-  Map<String, int> countByAuthor(List<WorkReport> reports) =>
-      _service.countByAuthor(reports);
+  Map<String, int> countByAuthor(
+    List<WorkReport> reports, {
+    bool excludeRetired = false,
+  }) => _service.countByAuthor(reports, excludeRetired: excludeRetired);
 
   String newId() => _service.newId();
 }

@@ -20,6 +20,15 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.57',
+    date: '2026-10-19',
+    title: '管理ダッシュボードから退職者の名前を非表示',
+    details: [
+      '管理ダッシュボードの氏名別集計から、退職された方の名前を表示しないようにしました。'
+          '日報データ自体はこれまで通り残ったままです。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.56',
     date: '2026-10-19',
     title: '退職者削除機能の強化',

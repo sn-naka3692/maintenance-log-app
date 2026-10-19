@@ -948,7 +948,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         : allReports.where((r) => r.authorId == _selectedAuthorId).toList();
 
     final byType = appState.countByResponseType(allReports);
-    final byAuthor = appState.countByAuthor(allReports);
+    // 【v1.2.57】氏名別集計から退職者(社員一覧に存在しない氏名)を除外。
+    // 日報データ自体は残るため、全社集計(下記のsuccessCount等)には含まれたまま。
+    final byAuthor = appState.countByAuthor(allReports, excludeRetired: true);
 
     final successCount = allReports.where((r) => r.hasSuccess).length;
     final issuesCount = allReports.where((r) => r.hasIssues).length;

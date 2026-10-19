@@ -460,9 +460,22 @@ class ReportService {
     return map;
   }
 
-  Map<String, int> countByAuthor(List<WorkReport> reports) {
+  /// 氏名別の日報件数を集計する。
+  /// [excludeRetired]: true の場合、現在の社員一覧に存在しない氏名
+  /// (=退職者削除済み)を集計から除外する(ダッシュボード等の表示用)。
+  /// 日報データ自体は削除されず、この集計の表示だけが対象。
+  Map<String, int> countByAuthor(
+    List<WorkReport> reports, {
+    bool excludeRetired = false,
+  }) {
     final map = <String, int>{};
+    final currentNames = excludeRetired
+        ? getAllUsers().map((u) => u.name).toSet()
+        : null;
     for (final r in reports) {
+      if (currentNames != null && !currentNames.contains(r.authorName)) {
+        continue;
+      }
       map[r.authorName] = (map[r.authorName] ?? 0) + 1;
     }
     return map;
