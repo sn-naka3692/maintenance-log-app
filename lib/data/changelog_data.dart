@@ -20,6 +20,15 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.56',
+    date: '2026-10-19',
+    title: '退職者削除機能の強化',
+    details: [
+      '社員を削除すると、入力した案件・日報は残したまま、ログイン用アカウントの無効化も行うようにしました。'
+          '削除済みの方がログインしようとしても、アプリは拒否するようになります。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.55',
     date: '2026-10-10',
     title: 'アプリの署名を固定(今後の更新でアンインストール不要)',

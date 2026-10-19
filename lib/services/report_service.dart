@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -245,8 +247,47 @@ class ReportService {
         throw StateError('最後の最高管理者は削除できません。');
       }
     }
+    // 【v1.2.56】退職者削除時に Firebase Auth のログインも無効化(ベストエフォート)。
+    // プロキシサーバー(Azure Functions)の /api/disableUser を呼び出す。
+    // エンドポイント未配信等で失敗しても削除自体は続行する — ログイン拒否は
+    // 認証後の「ユーザー情報未検出」チェック(auth_gate)で二重にブロックされる。
+    final authDisabled = await _disableFirebaseAuthAccount(targetUserId);
+    // 【重要】案件・日報は削除しない。work_reports / cases は authorId/authorName
+    // (文字列)で保持されており、ユーザー情報と独立しているため、退職後も
+    // 案件・日報は全て残る。
     await _usersCol.doc(targetUserId).delete();
     await _refreshUsersCache();
+    if (!authDisabled) {
+      debugPrint(
+        'deleteUser: Firebase Authの無効化に失敗(プロキシ未配信の可能性)。'
+        'auth_gateの未検出チェックでログインはブロックされる。',
+      );
+    }
+  }
+
+  static const String _proxyFunctionKey = String.fromEnvironment(
+    'SCAN_PROXY_FUNCTION_KEY',
+    defaultValue: '<<SCAN_PROXY_FUNCTION_KEY>>',
+  );
+
+  /// 退職者処理: Firebase Auth アカウントを無効化する(サーバー側 Admin SDK 経由)。
+  /// プロキシサーバーに /api/disableUser が未配信の場合は false を返す(削除自体は続行)。
+  Future<bool> _disableFirebaseAuthAccount(String uid) async {
+    try {
+      final uri = Uri.parse(
+        'https://nakano-scan-proxy.azurewebsites.net/api/disableUser?code=$_proxyFunctionKey',
+      );
+      final resp = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'uid': uid}),
+          )
+          .timeout(const Duration(seconds: 20));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ------------ Report ------------

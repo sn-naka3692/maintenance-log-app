@@ -358,7 +358,7 @@ class UserManagementScreen extends StatelessWidget {
         title: const Text('社員を削除しますか?'),
         content: Text(
           '${user.name} さんのアカウント情報を削除します。この操作は取り消せません。\n'
-          '(※ログイン用のFirebaseアカウント自体は別途無効化が必要です)',
+          '(※入力された案件・日報は削除されず、氏名の記録として残ります。ログイン用のFirebaseアカウントはサーバー側で無効化します)',
         ),
         actions: [
           TextButton(
