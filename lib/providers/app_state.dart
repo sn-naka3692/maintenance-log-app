@@ -178,7 +178,20 @@ class AppState extends ChangeNotifier {
       }
       _error = null;
     } catch (e) {
-      _error = 'データの読み込みに失敗しました: $e';
+      // 【v1.2.58】Firestoreの生のエラーメッセージ(英語)をそのまま出さず、
+      // 従業員が次の一手を取れる日本語に変換して表示する。
+      final raw = e.toString();
+      if (raw.contains('permission-denied')) {
+        _error =
+            'サーバーへのアクセス権限でエラーが発生しました。\n'
+            '一度ログアウトして再度ログインしてください。\n'
+            '解決しない場合は管理者にお問い合わせください。';
+      } else {
+        _error =
+            'データの読み込みに失敗しました。\n'
+            'インターネット接続を確認し、「再試行」をお試しください。\n'
+            '(ログアウト→再ログインで回復する場合があります)';
+      }
     }
     _isLoading = false;
     notifyListeners();

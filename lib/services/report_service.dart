@@ -40,6 +40,12 @@ class ReportService {
   /// 従業員マスタ(実データ29名)がまだ登録されていない場合のみ自動投入する。
   /// 既存のユーザー(テストデータ等)は削除せず維持する(重複はidで防止)。
   Future<void> _seedEmployeeMasterIfNeeded() async {
+    // 【v1.2.58】社員マスタの自動投入は「コレクションが空のとき(=新規構築時)のみ」に限定。
+    // 従来は欠けているIDを都度補完していたため、(1)非管理者の端末では
+    // users作成権限がなく permission-denied でデータ読み込み全体が失敗する、
+    // (2)退職者を削除してもマスタ一覧のIDが次の起動で再投入されてしまう、
+    // という2つの事故を生んでいた。社員の追加は管理画面(社員を追加する)から行う。
+    if (_usersCache.isNotEmpty) return;
     final existingIds = _usersCache.map((u) => u.id).toSet();
     final missing = initialEmployeeMasterData
         .where((u) => !existingIds.contains(u.id))

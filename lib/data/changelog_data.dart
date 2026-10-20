@@ -20,6 +20,15 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.58',
+    date: '2026-10-20',
+    title: '一部の端末で出ていた起動時エラーの改善',
+    details: [
+      '新規インストール直後などで表示されていた「権限エラー」が起きにくくなるように、起動時の処理を改善しました。'
+          'エラー表示も日本語で分かりやすくなります。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.57',
     date: '2026-10-19',
     title: '管理ダッシュボードから退職者の名前を非表示',
