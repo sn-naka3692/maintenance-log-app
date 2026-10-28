@@ -20,6 +20,14 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.60',
+    date: '2026-10-28',
+    title: '全社展開向けマニュアルの配信',
+    details: [
+      'アプリ内のマニュアル画面からダウンロードできる操作マニュアル(PDF/Web版)を、全社展開向けの最新内容に更新して配信しました。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.59',
     date: '2026-10-28',
     title: '全社展開に合わせたマニュアルの更新',
