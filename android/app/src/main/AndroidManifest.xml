@@ -15,7 +15,7 @@
          ダイアログが自動表示される)。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
-        android:label="Maintenance Log"
+        android:label="札中日報"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

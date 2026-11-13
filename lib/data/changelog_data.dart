@@ -20,6 +20,16 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.61',
+    date: '2026-11-14',
+    title: 'ホーム画面のショートカット名を「札中日報」に変更',
+    details: [
+      'スマホのホーム画面で表示されるアプリの名前を「札中日報」に変更しました。'
+          'これまで英語名(Maintenance Log)で表示されていた端末でも、この更新後に「札中日報」に変わります。'
+          '操作方法・データへの影響はありません。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.60',
     date: '2026-10-28',
     title: '全社展開向けマニュアルの配信',
