@@ -896,7 +896,7 @@ class _AdminNotesCardState extends State<_AdminNotesCard> {
     final appState = context.read<AppState>();
     setState(() => _saving = true);
     try {
-      await appState.markAdminNotesResponded(widget.report.id, '': _replyCtrl.text);
+      await appState.markAdminNotesResponded(widget.report.id, response: _replyCtrl.text);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('対応済みとして報告しました')),
