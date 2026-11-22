@@ -85,6 +85,44 @@ class ReportCard extends StatelessWidget {
                   ),
                 ],
               ),
+              // 【管理者追記通知・v1.2.62】管理者からの追記タグ(色分け)。
+              if (report.showAdminNotesTag) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: report.isRequireAction
+                        ? Colors.orange.shade100
+                        : Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        report.isRequireAction ? Icons.assignment_late : Icons.rate_review,
+                        size: 13,
+                        color: report.isRequireAction
+                            ? Colors.orange.shade800
+                            : Colors.blue.shade700,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        report.isRequireAction
+                            ? '対応依頼あり'
+                            : '管理者確認あり',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: report.isRequireAction
+                              ? Colors.orange.shade800
+                              : Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 report.clientName.isNotEmpty

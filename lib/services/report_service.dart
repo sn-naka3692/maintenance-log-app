@@ -372,6 +372,52 @@ class ReportService {
     }
   }
 
+  /// 【管理者追記通知・v1.2.62】管理者の追記を保存し、記入者向けに「未読」にする。
+  /// 日報全体の上書き(updateReport)と競合しないよう、追記関連フィールドのみを
+  /// update() で書き換える。
+  Future<void> saveAdminNotes({
+    required String reportId,
+    required String notes,
+    required bool requireAction,
+  }) async {
+    await _reportsCol.doc(reportId).update({
+      'admin_notes': notes.trim(),
+      'admin_notes_type': requireAction ? 'require_action' : 'info',
+      'admin_notes_status': 'unread',
+      'admin_notes_responded_at': null,
+      'admin_notes_response': '',
+    });
+    await _refreshReportsCache();
+  }
+
+  /// 【管理者追記通知・v1.2.62】本人が詳細画面を開いたときに未読→確認済みへ。
+  /// (情報共有タイプはこれでタグが消える。二重書き込み防止に未読のときだけ書く)
+  Future<void> markAdminNotesRead(String reportId) async {
+    WorkReport? cached;
+    for (final r in _reportsCache) {
+      if (r.id == reportId) { cached = r; break; }
+    }
+    if (cached != null && cached.adminNotesStatus != 'unread') return;
+    await _reportsCol.doc(reportId).update({'admin_notes_status': 'read'});
+    await _refreshReportsCache();
+  }
+
+  /// 【管理者追記通知・v1.2.62】本人が「対応済み」を報告する。
+  Future<void> markAdminNotesResponded({
+    required String reportId,
+    String response = '',
+  }) async {
+    final update = <String, dynamic>{
+      'admin_notes_status': 'done',
+      'admin_notes_responded_at': DateTime.now(),
+    };
+    if (response.trim().isNotEmpty) {
+      update['admin_notes_response'] = response.trim();
+    }
+    await _reportsCol.doc(reportId).update(update);
+    await _refreshReportsCache();
+  }
+
   Future<void> deleteReport(String id) async {
     await _reportsCol.doc(id).delete();
     await _refreshReportsCache();

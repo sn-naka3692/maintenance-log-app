@@ -39,6 +39,16 @@ class ReportDetailScreen extends StatelessWidget {
     final canEdit = isOwnReport || appState.isAdmin;
     final canDelete = isOwnReport || appState.isAdmin;
     final typeColor = responseTypeColor(report.responseType.label);
+    // 【管理者追記通知・v1.2.62】本人が詳細を開いたら「未読」を確認済みにする。
+    // 情報共有タイプはこれでタグが消え、対応依頼タイプは対応済みまで表示が続く。
+    if (isOwnReport &&
+        report.hasAdminNotes &&
+        report.adminNotesStatus == 'unread') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        context.read<AppState>().markAdminNotesRead(reportId);
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -374,6 +384,9 @@ class ReportDetailScreen extends StatelessWidget {
               icon: Icons.notes,
               child: Text(report.notes),
             ),
+
+          // 【管理者追記通知・v1.2.62】管理者からの追記と対応依頼の表示。
+          if (report.hasAdminNotes) _AdminNotesCard(report: report),
 
           // 【案件グルーピング機能・2026-08導入】
           // 同じ案件(伝票No/受付No一致、または内容が近い)と判定された

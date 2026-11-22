@@ -956,7 +956,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final issuesCount = allReports.where((r) => r.hasIssues).length;
     // 【締切管理ルール・2026-09導入】作業報告書作成後(作業日基準)1週間を
     // 過ぎてもナレッジ未入力の日報件数(要対応の目安として管理者へ表示)。
-    final overdueCount = allReports.where((r) => r.isKnowledgeOverdue).length;
+    final overdueCount = allReports.where
+    // 【管理者追記通知・v1.2.62】対応依頼(管理者追記)の未完了件数。
+    final pendingActionCount = allReports.where((r) => r.isRequireAction && r.hasAdminNotes && r.adminNotesStatus != 'done').length;((r) => r.isKnowledgeOverdue).length;
 
     final currentUser = appState.currentUser;
     final isSuperAdmin = appState.isSuperAdmin;
@@ -1079,6 +1081,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             value: '$overdueCount件',
             color: overdueCount > 0 ? AppColors.warning : Colors.grey,
             icon: Icons.schedule,
+          ),
+
+          _MiniStat(
+            label: '対応依頼中(管理者からの追記)',
+            value: '$pendingActionCount件',
+            color: pendingActionCount > 0 ? AppColors.warning : Colors.grey,
+            icon: Icons.assignment_late,
           ),
 
           const SizedBox(height: 20),

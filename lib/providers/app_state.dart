@@ -327,6 +327,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 【管理者追記通知・v1.2.62】管理者の追記を保存する(report_serviceへ委譲)。
+  Future<void> saveAdminNotes({
+    required String reportId,
+    required String notes,
+    required bool requireAction,
+  }) =>
+      _service.saveAdminNotes(reportId: reportId, notes: notes, requireAction: requireAction);
+
+  /// 【管理者追記通知・v1.2.62】本人が管理者追記を確認した(未読→確認済み)。
+  Future<void> markAdminNotesRead(String reportId) => _service.markAdminNotesRead(reportId);
+
+  /// 【管理者追記通知・v1.2.62】本人が「対応済み」を報告する。
+  Future<void> markAdminNotesResponded({
+    required String reportId,
+    String response = '',
+  }) =>
+      _service.markAdminNotesResponded(reportId: reportId, response: response);
+
   /// 日報保存後、案件への自動グルーピングを行う。
   ///
   /// 【重要】これはあくまで「後から便利に検索・集計できるようにする」

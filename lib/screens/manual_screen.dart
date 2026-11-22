@@ -42,6 +42,8 @@ IconData _iconFor(String key) {
       return Icons.cleaning_services;
     case 'document_scanner':
       return Icons.document_scanner;
+    case 'rate_review':
+      return Icons.rate_review;
     case 'sync_problem':
       return Icons.sync_problem;
     case 'fact_check':

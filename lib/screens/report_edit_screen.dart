@@ -129,6 +129,11 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   bool _isUploadingPhoto = false;
   // 保存処理中の多重押下防止(Firestore書き込み中に連打されるのを防ぐ)。
   bool _isSaving = false;
+  // 【管理者追記通知・v1.2.62】管理者からの追記の入力状態。
+  late final TextEditingController _adminNotesCtrl;
+  bool _adminNotesRequireAction = false;
+  bool _isSavingAdminNotes = false;
+
 
   // 【不具合修正・2026-09】必須項目が未入力のまま保存ボタンが押された際、
   // 従来は`Form.validate()`がfalseを返すだけで画面上に何の通知もなく、
@@ -159,6 +164,9 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
   @override
   void initState() {
     super.initState();
+    // 【管理者追記通知・v1.2.62】既存の追記があれば初期値に反映。
+    _adminNotesCtrl = TextEditingController(text: widget.existing?.adminNotes ?? '');
+    _adminNotesRequireAction = widget.existing?.isRequireAction ?? false;
     _initSpeech();
     final e = widget.existing;
     _reportId = e?.id ?? context.read<AppState>().newId();
@@ -403,6 +411,7 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
 
   @override
   void dispose() {
+    _adminNotesCtrl.dispose();
     _speech.stop();
     _clientNameCtrl.dispose();
     _storeFreeTextCtrl.dispose();
@@ -1042,6 +1051,51 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
         FocusScope.of(state.context).requestFocus(FocusNode());
         return;
       }
+    }
+  }
+
+  /// 【管理者追記通知・v1.2.62】管理者の追記を保存し、記入者に通知する。
+  /// 日報本体の保存とは別ボタンで、追記関連フィールドのみを即時書き換える。
+  Future<void> _saveAdminNotes() async {
+    if (!isEditing) return;
+    final appState = context.read<AppState>();
+    setState(() => _isSavingAdminNotes = true);
+    try {
+      await appState.saveAdminNotes(
+        reportId: widget.existing!.id,
+        notes: _adminNotesCtrl.text,
+        requireAction: _adminNotesRequireAction,
+      );
+      widget.existing!
+        ..adminNotes = _adminNotesCtrl.text.trim()
+        ..adminNotesType = _adminNotesRequireAction ? 'require_action' : 'info'
+        ..adminNotesStatus = 'unread'
+        ..adminNotesRespondedAt = null
+        ..adminNotesResponse = '';
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('追記を保存しました。記入者に通知されます')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('保存に失敗しました: $e'), backgroundColor: Colors.red.shade700),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSavingAdminNotes = false);
+    }
+  }
+
+  String _adminNotesStatusText(WorkReport r) {
+    switch (r.adminNotesStatus) {
+      case 'done':
+        return r.adminNotesResponse.isNotEmpty ? '対応済み(返信あり)' : '対応済み';
+      case 'read':
+        return '確認済み(対応済みの報告はまだ)';
+      default:
+        return '未読(記入者に通知済み)';
     }
   }
 
@@ -2221,6 +2275,54 @@ class _ReportEditScreenState extends State<ReportEditScreen> {
               maxLines: 3,
             ),
 
+            // 【管理者追記通知・v1.2.62】管理者のみ表示。既存日報に追記して
+            // 記入者へ通知する。タイプ(情報共有/対応依頼)を選べる。
+            if (isEditing && appState.isAdmin) ...[
+              const SizedBox(height: 28),
+              _SectionTitle('管理者からの追記'),
+              const SizedBox(height: 8),
+              _buildField(
+                controller: _adminNotesCtrl,
+                label: '追記内容(注意事項・感想・疑問点など)',
+                icon: Icons.rate_review,
+                maxLines: 4,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Text('情報共有(確認で消える)'),
+                      selected: !_adminNotesRequireAction,
+                      onSelected: (_) => setState(() => _adminNotesRequireAction = false),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Text('対応依頼(対応済みまで消えない)'),
+                      selected: _adminNotesRequireAction,
+                      onSelected: (_) => setState(() => _adminNotesRequireAction = true),
+                    ),
+                  ),
+                ],
+              ),
+              if (widget.existing!.hasAdminNotes) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '現在のステータス: ${_adminNotesStatusText(widget.existing!)}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _isSavingAdminNotes ? null : _saveAdminNotes,
+                icon: _isSavingAdminNotes
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.notifications_active),
+                label: const Text('追記を保存して記入者に通知'),
+              ),
+            ],
             const SizedBox(height: 28),
             ElevatedButton.icon(
               onPressed: _isSaving ? null : _save,

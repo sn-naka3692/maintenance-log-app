@@ -284,6 +284,16 @@ class WorkReport {
   String? lastEditedByAdminName; // 代筆編集した管理者の氏名(表示用)
   DateTime? lastEditedByAdminAt; // 代筆編集した日時
 
+  // === 管理者からの追記(v1.2.62導入) =================================
+  // 管理者が日報に追記(注意事項・感想・疑問点など)した内容と、記入者の
+  // 確認・対応状況を保持する。情報共有タイプは記入者の確認でタグが消え、
+  // 対応依頼タイプは「対応済み」の報告まで表示が続く(押し忘れの見える化)。
+  String adminNotes; // 追記本文(空文字=追記なし)
+  String adminNotesType; // 'info'(情報共有) | 'require_action'(対応依頼)
+  String adminNotesStatus; // 'unread'(未読) | 'read'(確認済み) | 'done'(対応済み)
+  DateTime? adminNotesRespondedAt; // 対応済みを押した日時
+  String adminNotesResponse; // 記入者の任意の一言返信
+
   DateTime createdAt;
   DateTime updatedAt;
 
@@ -320,6 +330,11 @@ class WorkReport {
     this.lastEditedByAdminId,
     this.lastEditedByAdminName,
     this.lastEditedByAdminAt,
+    this.adminNotes = '',
+    this.adminNotesType = 'info',
+    this.adminNotesStatus = '',
+    this.adminNotesRespondedAt,
+    this.adminNotesResponse = '',
     required this.createdAt,
     required this.updatedAt,
   }) : partsUsed = partsUsed ?? [],
@@ -356,6 +371,21 @@ class WorkReport {
     if (responseType.isBackOffice) return false;
     if (hasSuccess || hasIssues) return false;
     return DateTime.now().isAfter(knowledgeDeadline);
+  }
+
+  /// 管理者追記があるか。
+  bool get hasAdminNotes => adminNotes.trim().isNotEmpty;
+
+  /// 対応依頼タイプか(info/require_action)。
+  bool get isRequireAction => adminNotesType == 'require_action';
+
+  /// 日報カードに「管理者からの追記」タグを表示すべきか。
+  /// 情報共有タイプ: 未読の間だけ表示(確認したら消える)。
+  /// 対応依頼タイプ: 「対応済み」の報告まで表示し続ける。
+  bool get showAdminNotesTag {
+    if (!hasAdminNotes) return false;
+    if (isRequireAction) return adminNotesStatus != 'done';
+    return adminNotesStatus == 'unread';
   }
 
   /// 「未充填」を意味する入力値の一覧(冷媒種類欄用)。
@@ -492,6 +522,11 @@ class WorkReport {
       'last_edited_by_admin_id': lastEditedByAdminId,
       'last_edited_by_admin_name': lastEditedByAdminName,
       'last_edited_by_admin_at': lastEditedByAdminAt,
+      'admin_notes': adminNotes,
+      'admin_notes_type': adminNotesType,
+      'admin_notes_status': adminNotesStatus,
+      'admin_notes_responded_at': adminNotesRespondedAt,
+      'admin_notes_response': adminNotesResponse,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
@@ -548,6 +583,12 @@ class WorkReport {
       lastEditedByAdminId: map['last_edited_by_admin_id'] as String?,
       lastEditedByAdminName: map['last_edited_by_admin_name'] as String?,
       lastEditedByAdminAt: _parseNullableDate(map['last_edited_by_admin_at']),
+      adminNotes: map['admin_notes'] as String? ?? '',
+      adminNotesType: map['admin_notes_type'] as String? ?? 'info',
+      adminNotesStatus: map['admin_notes_status'] as String? ??
+          ((map['admin_notes'] as String? ?? '').isNotEmpty ? 'unread' : ''),
+      adminNotesRespondedAt: _parseNullableDate(map['admin_notes_responded_at']),
+      adminNotesResponse: map['admin_notes_response'] as String? ?? '',
       createdAt: _parseDate(map['created_at']),
       updatedAt: _parseDate(map['updated_at']),
     );
