@@ -870,3 +870,130 @@ class _RelatedReportsSection extends StatelessWidget {
     );
   }
 }
+
+/// 【管理者追記通知・v1.2.62】管理者からの追記を表示するカード。
+/// 「情報共有」(青)は確認でタグが消える。「対応依頼」(オレンジ)は
+/// 「対応済み」を押すまで消えない。押し忘れはダッシュボードで見える化。
+class _AdminNotesCard extends StatefulWidget {
+  const _AdminNotesCard({required this.report});
+  final WorkReport report;
+
+  @override
+  State<_AdminNotesCard> createState() => _AdminNotesCardState();
+}
+
+class _AdminNotesCardState extends State<_AdminNotesCard> {
+  final TextEditingController _replyCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _replyCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _respond() async {
+    final appState = context.read<AppState>();
+    setState(() => _saving = true);
+    try {
+      await appState.markAdminNotesResponded(widget.report.id, '': _replyCtrl.text);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('対応済みとして報告しました')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('報告に失敗しました: $e'), backgroundColor: Colors.red.shade700),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    WorkReport r = widget.report;
+    for (final x in appState.reports) {
+      if (x.id == widget.report.id) {
+        r = x;
+        break;
+      }
+    }
+    final bool requireAction = r.isRequireAction;
+    final Color accent = requireAction ? Colors.orange.shade700 : Colors.blue.shade700;
+    final String tag = requireAction ? '対応依頼あり' : '管理者確認あり';
+    final bool done = r.adminNotesStatus == 'done';
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: accent.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.rate_review, size: 18, color: accent),
+                const SizedBox(width: 6),
+                Text('管理者からの追記',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: accent)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(tag,
+                      style: TextStyle(fontSize: 11, color: accent, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(r.adminNotes),
+            if (requireAction && !done) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _replyCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  hintText: '状況を一言(任意)',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _saving ? null : _respond,
+                  icon: _saving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.task_alt),
+                  label: const Text('対応済みにする'),
+                ),
+              ),
+            ],
+            if (requireAction && done) ...[
+              const SizedBox(height: 8),
+              Text('対応済み',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+              if (r.adminNotesResponse.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('返信: ${r.adminNotesResponse}', style: const TextStyle(fontSize: 12)),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
