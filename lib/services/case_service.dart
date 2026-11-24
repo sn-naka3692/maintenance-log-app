@@ -94,19 +94,21 @@ class CaseService {
         );
       } else {
         // 3. 番号なし -> 曖昧グルーピングを試みる
-        newCaseId = await _linkToSuggestedCase(report);
         // 【SE定期点検で発生した修理の自動案件登録・v1.2.64】
         // 点検で発生した修理は、別に作業報告書(SE側)が出力されるため、
         // 報告書の読み込み(手動の「案件として登録」)を待たずに、保存時に
         // 自動で単独案件として登録する。後から伝票No/受付Noが入力されれば
         // 通常の自動判定ロジックが正しい確定案件へ統合する(暫定的な足場)。
-        if (newCaseId.isEmpty && report.responseType == ResponseType.repair) {
+        String suggestedCaseId = await _linkToSuggestedCase(report);
+        if (suggestedCaseId.isEmpty &&
+            report.responseType == ResponseType.repair) {
           try {
-            newCaseId = await createStandaloneCase(report);
+            suggestedCaseId = await createStandaloneCase(report);
           } catch (_) {
             // ベストエフォート。失敗時は従来どおり未グルーピング一覧へ。
           }
         }
+        newCaseId = suggestedCaseId;
       }
     }
 
