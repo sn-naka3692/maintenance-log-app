@@ -35,7 +35,13 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isAdmin() &&
         (request.resource.data.role == 'staff' || isSuperAdmin());
-      allow update, delete: if isSuperAdmin();
+      // 【ログイン記録・v1.2.63】本人は自分のドキュメントの last_login キーの
+      // 更新のみ可能(email一致で本人確認)。
+      allow update: if isSuperAdmin() ||
+        (isSignedIn() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last_login']) &&
+          request.auth.token.email == resource.data.email);
+      allow delete: if isSuperAdmin();
     }
 
     // ------------------------------------------------------------

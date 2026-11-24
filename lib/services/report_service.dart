@@ -103,6 +103,8 @@ class ReportService {
       email: email.trim(),
       password: password,
     );
+    // 【ログイン記録・v1.2.63】最終ログインを記録(失敗は無視される)。
+    await recordLastLogin(email.trim());
     await _refreshUsersCache();
     return getCurrentUser();
   }
