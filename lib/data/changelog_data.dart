@@ -20,6 +20,15 @@ class ChangelogEntry {
 /// 新しい更新ほどリストの先頭に追加すること。
 const List<ChangelogEntry> changelogEntries = [
   ChangelogEntry(
+    version: '1.2.64',
+    date: '2026-11-24',
+    title: '点検で発生した修理の自動案件登録',
+    details: [
+      'SE定期点検で発生した修理は、別に作業報告書が出力されるため、日報の保存時に自動で案件として登録されるようになりました(「案件として登録」の手動操作は不要)。',
+      '後から伝票No・受付Noが入力されれば、自動的に正しい案件へ統合されます(従来どおり)。',
+    ],
+  ),
+  ChangelogEntry(
     version: '1.2.63',
     date: '2026-11-24',
     title: '社員メールの誤字チェックと要フォロー社員の見える化',
