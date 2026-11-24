@@ -9,6 +9,7 @@ import '../models/work_report.dart';
 import '../models/user.dart';
 import '../data/employee_master_data.dart';
 import 'report_outbox_service.dart';
+import '../utils/company_email.dart';
 
 /// 日報・ユーザーデータの永続化を担当するサービス(Firestore)
 ///
@@ -128,6 +129,23 @@ class ReportService {
   Future<void> sendPasswordResetEmail(String email) async {
     await _auth.sendPasswordResetEmail(email: email.trim());
   }
+  /// 【ログイン記録・v1.2.63】ログイン成功時に自ユーザーの最終ログインを記録する。
+  /// 対象ドキュメントは社員コード型IDのため email で検索する。書き込みは
+  /// ルールで「本人の last_login キーの更新のみ」許可。失敗してもログインは
+  /// 成功扱い(ベストエフォート)。
+  Future<void> recordLastLogin(String email) async {
+    try {
+      final snap = await _usersCol.where('email', isEqualTo: email.trim()).limit(1).get();
+      for (final d in snap.docs) {
+        await d.reference.set({
+          'last_login': DateTime.now().toIso8601String(),
+        }, SetOptions(merge: true));
+      }
+    } catch (_) {
+      // 記録失敗は無視(ログイン自体は成功)
+    }
+  }
+
 
   /// 社員を追加し、同時にFirebase Authenticationのログインアカウントも作成する。
   ///
@@ -148,6 +166,14 @@ class ReportService {
     required String initialPassword,
     required String phone,
   }) async {
+    // 【社員メール誤字チェック・v1.2.63】ドメインの綴りミスを防止する。
+    // 例: sappporo-nakano.com → sapporo-nakano.com に自動補正。
+    final correctedEmail = normalizeCompanyEmail(email);
+    if (correctedEmail == null) {
+      throw FirebaseAuthException(code: 'invalid-email',
+          message: 'メールアドレスのドメインを確認してください(例: name@sapporo-nakano.com)');
+    }
+    email = correctedEmail;
     final trimmedEmail = email.trim();
     if (trimmedEmail.isEmpty) {
       throw ArgumentError('メールアドレスは必須です');
